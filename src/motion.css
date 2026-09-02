@@ -1,0 +1,337 @@
+/* ==========================================================================
+   ASSEMBLY MOTION
+   Screens are BUILT, not faded in. A light sweeps across each card, then the
+   contents rise and the data grows into place. Borders are never highlighted —
+   the frame is simply present. The vocabulary is instrument-panel: fast, precise, layered, no bounce.
+
+   Orchestration is entirely CSS. `.view` is remounted with a React key on each
+   navigation, which replays the whole sequence. Each bento child gets one --d
+   delay, and everything inside it times off that single number, so a screen
+   reads as one machine assembling rather than a pile of independent fades.
+   ========================================================================== */
+
+@keyframes bld-fade   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bld-rise   { from { opacity: 0; transform: translate3d(0, 14px, 0); } to { opacity: 1; transform: none; } }
+@keyframes bld-scan   {
+  0%   { transform: translate3d(-120%, 0, 0); opacity: 0; }
+  14%  { opacity: 1; }
+  100% { transform: translate3d(120%, 0, 0); opacity: 0; }
+}
+@keyframes bld-wipe   { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes bld-grow   { from { transform: scaleY(0.03); } to { transform: scaleY(1); } }
+@keyframes bld-fill   { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes bld-pop    { from { opacity: 0; transform: scale(0.55); } to { opacity: 1; transform: scale(1); } }
+
+.view {
+  --e-arrive: cubic-bezier(0.16, 1, 0.3, 1);   /* expo-out, for arrivals */
+}
+
+/* --- per-card stagger ----------------------------------------------------- */
+.view.is-building .bento > * { --d: 0ms; }
+.view.is-building .bento > *:nth-child(1)  { --d: 0ms; }
+.view.is-building .bento > *:nth-child(2)  { --d: 70ms; }
+.view.is-building .bento > *:nth-child(3)  { --d: 140ms; }
+.view.is-building .bento > *:nth-child(4)  { --d: 200ms; }
+.view.is-building .bento > *:nth-child(5)  { --d: 250ms; }
+.view.is-building .bento > *:nth-child(6)  { --d: 300ms; }
+.view.is-building .bento > *:nth-child(7)  { --d: 345ms; }
+.view.is-building .bento > *:nth-child(8)  { --d: 385ms; }
+.view.is-building .bento > *:nth-child(9)  { --d: 420ms; }
+.view.is-building .bento > *:nth-child(10) { --d: 455ms; }
+.view.is-building .bento > *:nth-child(n + 11) { --d: 485ms; }
+
+/* --- the header lands first ---------------------------------------------- */
+.view.is-building .viewhead > * { animation: bld-rise 460ms var(--e-arrive) both; }
+.view.is-building .viewhead > *:nth-child(2) { animation-delay: 60ms; }
+.view.is-building .viewhead > *:nth-child(3) { animation-delay: 110ms; }
+
+/* --- 1. the card arrives -------------------------------------------------- */
+/* No border treatment. The frame is simply there; only its presence is staged,
+   so the stagger still reads without drawing attention to the outline. */
+.view.is-building .card { animation: bld-fade 300ms linear var(--d) both; }
+
+/* --- 2. a light sweeps the surface --------------------------------------- */
+.view.is-building .card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 42%, rgba(196,196,196,0.06) 50%, transparent 58%);
+  animation: bld-scan 780ms ease-out calc(var(--d) + 160ms) both;
+}
+
+/* --- 3. contents rise ---------------------------------------------------- */
+.view.is-building .card__head { animation: bld-rise 480ms var(--e-arrive) calc(var(--d) + 170ms) both; }
+.view.is-building .card__body { animation: bld-rise 520ms var(--e-arrive) calc(var(--d) + 240ms) both; }
+.view.is-building .card__foot { animation: bld-rise 480ms var(--e-arrive) calc(var(--d) + 320ms) both; }
+
+.view.is-building .subpanel { animation: bld-rise 480ms var(--e-arrive) calc(var(--d) + 260ms) both; }
+.view.is-building .subpanel:nth-child(2) { animation-delay: calc(var(--d) + 320ms); }
+.view.is-building .subpanel:nth-child(3) { animation-delay: calc(var(--d) + 380ms); }
+
+.view.is-building .tip { animation: bld-rise 460ms var(--e-arrive) calc(var(--d) + 300ms) both; }
+.view.is-building .tip:nth-child(2) { animation-delay: calc(var(--d) + 360ms); }
+.view.is-building .tip:nth-child(3) { animation-delay: calc(var(--d) + 415ms); }
+
+/* --- 4. the data grows into place ---------------------------------------- */
+/* Bars wipe left-to-right AND grow from their own baseline, so a chart reads
+   as being plotted rather than as a picture appearing. */
+.view.is-building .minibars { animation: bld-wipe 700ms var(--e-arrive) calc(var(--d) + 300ms) both; }
+.view.is-building .minibars__bar {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: bld-grow 560ms var(--e-arrive) calc(var(--d) + 330ms) both;
+}
+
+.view.is-building .dotmatrix__grid { animation: bld-wipe 1000ms var(--e-arrive) calc(var(--d) + 320ms) both; }
+
+.view.is-building .meter__fill {
+  transform-origin: left center;
+  animation: bld-fill 760ms var(--e-arrive) calc(var(--d) + 400ms) both;
+}
+
+.view.is-building .weektable__col { animation: bld-rise 420ms var(--e-arrive) both; }
+.view.is-building .weektable__col:nth-child(1) { animation-delay: calc(var(--d) + 300ms); }
+.view.is-building .weektable__col:nth-child(2) { animation-delay: calc(var(--d) + 335ms); }
+.view.is-building .weektable__col:nth-child(3) { animation-delay: calc(var(--d) + 370ms); }
+.view.is-building .weektable__col:nth-child(4) { animation-delay: calc(var(--d) + 405ms); }
+.view.is-building .weektable__col:nth-child(5) { animation-delay: calc(var(--d) + 440ms); }
+.view.is-building .weektable__col:nth-child(6) { animation-delay: calc(var(--d) + 475ms); }
+.view.is-building .weektable__col:nth-child(7) { animation-delay: calc(var(--d) + 510ms); }
+.view.is-building .weektable__rail { animation: bld-wipe 720ms var(--e-arrive) calc(var(--d) + 340ms) both; }
+
+.view.is-building .timelinedots__dot {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: bld-pop 380ms var(--e-arrive) both;
+}
+.view.is-building .timelinedots__dot:nth-child(1) { animation-delay: calc(var(--d) + 360ms); }
+.view.is-building .timelinedots__dot:nth-child(2) { animation-delay: calc(var(--d) + 405ms); }
+.view.is-building .timelinedots__dot:nth-child(3) { animation-delay: calc(var(--d) + 450ms); }
+.view.is-building .timelinedots__dot:nth-child(4) { animation-delay: calc(var(--d) + 495ms); }
+.view.is-building .timelinedots__dot:nth-child(5) { animation-delay: calc(var(--d) + 540ms); }
+.view.is-building .timelinedots__dot:nth-child(6) { animation-delay: calc(var(--d) + 585ms); }
+.view.is-building .timelinedots__rule { animation: bld-wipe 620ms var(--e-arrive) calc(var(--d) + 330ms) both; }
+
+/* --- 5. rows deal in ----------------------------------------------------- */
+.view.is-building .rtable__row,
+.view.is-building .entry { animation: bld-rise 400ms var(--e-arrive) both; }
+.view.is-building .rtable__row:nth-child(1), .view.is-building .entry:nth-child(1) { animation-delay: calc(var(--d) + 300ms); }
+.view.is-building .rtable__row:nth-child(2), .view.is-building .entry:nth-child(2) { animation-delay: calc(var(--d) + 335ms); }
+.view.is-building .rtable__row:nth-child(3), .view.is-building .entry:nth-child(3) { animation-delay: calc(var(--d) + 370ms); }
+.view.is-building .rtable__row:nth-child(4), .view.is-building .entry:nth-child(4) { animation-delay: calc(var(--d) + 400ms); }
+.view.is-building .rtable__row:nth-child(5), .view.is-building .entry:nth-child(5) { animation-delay: calc(var(--d) + 428ms); }
+.view.is-building .rtable__row:nth-child(6), .view.is-building .entry:nth-child(6) { animation-delay: calc(var(--d) + 452ms); }
+.view.is-building .rtable__row:nth-child(7), .view.is-building .entry:nth-child(7) { animation-delay: calc(var(--d) + 474ms); }
+.view.is-building .rtable__row:nth-child(n + 8),
+.view.is-building .entry:nth-child(n + 8) { animation-delay: calc(var(--d) + 494ms); }
+
+/* ==========================================================================
+   5. THE CASE SWITCH — nothing.
+   Changing the selected case used to remount every panel and replay a settle
+   over the top. Both are gone: the panels are no longer keyed on the case, so a
+   switch re-renders only what actually differs, and the Case-structure ground
+   morphs from one shape to the next inside IsoCase. There is nothing left for
+   CSS to do here, and that is the point — the screen holds still.
+   ========================================================================== */
+
+/* --- 6. the digit settle ------------------------------------------------- */
+/* Metric cycles its glyphs briefly on arrival, so a number reads as a readout
+   locking on instead of a value that was always simply there. */
+.metric__num.is-settling { color: var(--fg-mid); }
+
+/* ==========================================================================
+   INTERACTION EASING — distinct from the build: shorter, and never on layout.
+   ========================================================================== */
+
+.pill, .navlink, .segmented__btn, .iconmenu, .entry, .tip, .card,
+.toggle__track, .toggle__knob, .menu-pop__item, .datepop__day, .cal-day {
+  transition:
+    background-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Popovers arrive from their trigger rather than appearing. */
+.pop {
+  /* no backwards fill: if animations are suppressed the popover must still
+     render, and it mounts with zero delay so 0% applies immediately anyway. */
+  animation: bld-rise 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ==========================================================================
+   REDUCED MOTION — the screen simply IS built. No trace, no sweep, no rise.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .view.is-building .card::after { display: none; }
+}
+
+[data-motion="reduced"] .view.is-building .card::after { display: none; }
+
+/* ==========================================================================
+   SEGMENTED — one thumb that slides, instead of each option lighting its own
+   background. A single moving object reads as one control and gives the switch
+   its continuity. Also carries the drag-to-reorder states.
+   ========================================================================== */
+
+.segmented { position: relative; }
+
+/* The fill now lives on the thumb, so the active option must not paint its own
+   or you get two overlapping pills mid-slide. Its text still inverts. */
+.segmented__item--active,
+.segmented__item.is-active,
+.segmented__item[aria-selected='true'],
+.segmented__item[aria-pressed='true'] { background: transparent; }
+
+.segmented__thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  z-index: 0;
+  border-radius: var(--radius-pill);
+  background: var(--fg);
+  pointer-events: none;
+  will-change: transform, width;
+  transition:
+    transform 340ms cubic-bezier(0.16, 1, 0.3, 1),
+    width 340ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* While dragging, the thumb is glued to a moving option — it must track it
+   exactly rather than easing behind it. */
+.segmented__thumb.is-instant { transition: none; }
+
+.segmented__item {
+  position: relative;
+  z-index: 1;
+  transition:
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The one being dragged follows the pointer 1:1 — no easing, or it lags the
+   cursor and feels broken. */
+.segmented__item.is-dragging {
+  transition: none;
+  z-index: 3;
+}
+.segmented__item.is-dragging .segmented__btn { cursor: grabbing; }
+
+/* Hover keeps the ordinary cursor. `default` rather than just omitting it,
+   because the global reset gives every button `cursor: pointer`. The cursor
+   only changes once a drag is genuinely underway (see .is-dragging above). */
+.segmented[data-reorder='on'] .segmented__btn { cursor: default; }
+/* Must out-specify the rule above, which is otherwise an equal-specificity
+   later match and would win even mid-drag. */
+.segmented[data-reorder='on'] .segmented__item.is-dragging .segmented__btn { cursor: grabbing; }
+.segmented[data-reorder='on'] .segmented__item { touch-action: pan-y; }
+
+@media (prefers-reduced-motion: reduce) {
+  .segmented__thumb,
+  .segmented__item { transition: none !important; }
+}
+[data-motion='reduced'] .segmented__thumb,
+[data-motion='reduced'] .segmented__item { transition: none !important; }
+
+/* Dragging a label must not select its text. */
+.segmented[data-reorder='on'] .segmented__item { user-select: none; -webkit-user-select: none; }
+
+/* ==========================================================================
+   TOP BAR — a floating pill.
+   Sized to its contents rather than the viewport, centred, and sticky so
+   navigation stays reachable while a screen scrolls under it.
+   ========================================================================== */
+
+.topbar {
+  /* fixed, not sticky: it is hidden most of the time, so it must not reserve a
+     band of layout the content could be using. */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;              /* above content, below popovers (200) and modals */
+  height: auto;
+  flex: none;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0;
+  padding: 16px var(--shell-x) 10px;
+  background: linear-gradient(to bottom, var(--bg) 55%, transparent);
+  border-bottom: 0;
+  /* The gutter either side of the pill must not swallow clicks meant for the
+     content scrolling beneath it. */
+  pointer-events: none;
+
+  /* Out of the way until wanted. `.is-open` is toggled imperatively from a
+     window pointermove — see App.jsx — and :focus-within is the keyboard path,
+     so tabbing into the bar reveals it without any pointer involved. */
+  opacity: 0;
+  transform: translate3d(0, -16px, 0);
+  transition:
+    opacity 200ms ease,
+    transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.topbar.is-open,
+.topbar:has(:focus-visible) {
+  opacity: 1;
+  transform: none;
+}
+
+/* Invisible must also mean unclickable. */
+.topbar:not(.is-open):not(:has(:focus-visible)) .topbar__nav { pointer-events: none; }
+
+.topbar__nav {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px;
+  max-width: 100%;
+  background: rgba(16, 16, 16, 0.74);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.topbar__nav::-webkit-scrollbar { display: none; }
+
+.navlink {
+  padding: 7px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--fg-mid);
+  white-space: nowrap;
+  flex: none;
+  transition:
+    background-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.navlink:hover { color: var(--fg); background: var(--fill-hover); }
+
+/* Matches the Segmented control's active treatment, so "the thing you are on"
+   looks the same everywhere in the app. */
+.navlink--active,
+.navlink.is-active,
+.navlink[aria-current='page'] {
+  background: var(--fg);
+  color: var(--bg);
+}
+.navlink--active:hover,
+.navlink.is-active:hover,
+.navlink[aria-current='page']:hover { background: var(--fg); color: var(--bg); }
+
+
+@media (max-width: 560px) {
+  .topbar { padding: 10px 10px 8px; }
+  .navlink { padding: 7px 12px; }
+}

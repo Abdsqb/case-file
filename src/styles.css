@@ -2628,3 +2628,110 @@ button.entry__title:hover { color: var(--fg); }
   .courserow__time,
   .courserow__where { grid-column: 1 / -1; }
 }
+
+/* --------------------------------------------------------------------------
+   15. THE SCHEDULE HOVER READOUT
+   Portalled out of the lane, because the lane clips its own overflow. Fixed
+   position, placed beside whichever block is hovered or focused.
+   -------------------------------------------------------------------------- */
+
+.schedtip {
+  position: fixed;
+  z-index: 210;              /* above popovers (200) — it is transient and topmost */
+  width: 262px;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  padding: 13px 14px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card-hi);
+  /* The one place a shadow is used: this floats over content that is otherwise
+     the same value, and needs to read as detached rather than inline. */
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.66);
+  pointer-events: none;      /* never let the readout steal its own hover */
+  animation: schedtip-in 120ms ease both;
+}
+
+@keyframes schedtip-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.schedtip__title {
+  font-size: 13.5px;
+  line-height: 1.3;
+  color: var(--fg);
+}
+
+.schedtip__state {
+  margin-top: 3px;
+  font-family: var(--font-dot);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.schedtip__state--live { color: var(--hot); }
+.schedtip__state--soon { color: var(--fg); }
+.schedtip__state--later,
+.schedtip__state--past { color: var(--fg-dim); }
+
+.schedtip__rows {
+  margin: 11px 0 0;
+  padding: 11px 0 0;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.schedtip__row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  margin: 0;
+}
+
+.schedtip__row dt {
+  font-family: var(--font-dot);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.schedtip__row dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--fg-mid);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.schedtip__sub {
+  font-family: var(--font-dot);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  color: var(--fg-dim);
+}
+
+/* The hovered block lifts to match, so the pairing is unambiguous when two
+   blocks sit close together. */
+.sched__block.is-hot {
+  background: var(--line-soft);
+  border-color: var(--fg-dim);
+  border-left-color: var(--fg);
+}
+.sched__block.is-live.is-hot { border-color: var(--hot); }
+.sched__block:focus-visible {
+  outline: 1px solid var(--fg-mid);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .schedtip { animation: none; }
+}

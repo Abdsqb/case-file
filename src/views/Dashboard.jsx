@@ -13,7 +13,7 @@ import {
   Trend,
 } from '../ui/primitives.jsx'
 import { MiniBars, TimelineDots, WeekTable } from '../ui/charts.jsx'
-import IsoCase from '../ui/IsoCase.jsx'
+import IsoCase, { MAX_NODES as ISO_PIN_CAP } from '../ui/IsoCase.jsx'
 import {
   caseStats,
   completionTimeline,
@@ -206,9 +206,17 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase })
   )
   const active = useMemo(() => caseStats(activeCase, now), [activeCase, now])
 
+  /* Whether the structure card is showing one case or the whole workload.
+     Local to this screen on purpose: `activeCaseId` is shared with the Case
+     files screen and with openCase() navigation, so widening the diagram's
+     scope must not move the app's idea of which case is open. */
+  const [structureAll, setStructureAll] = useState(false)
+  const structureStats = structureAll ? stats : active
+
   const isoEntries = useMemo(() => {
-    if (!activeCase) return []
-    const all = flattenEntries([activeCase])
+    const source = structureAll ? cases : activeCase ? [activeCase] : []
+    if (!source.length) return []
+    const all = flattenEntries(source)
     const shown = focus ? all.filter((e) => !e.completed) : all
     return shown.map((e) => ({
       id: e.id,
@@ -224,7 +232,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase })
       completed: e.completed,
       isSub: e.isSub,
     }))
-  }, [activeCase, focus, now])
+  }, [structureAll, cases, activeCase, focus, now])
 
   const shownTips = urgentOnly
     ? tips.filter((t) => t.meta === 'Today recommendation')
@@ -240,22 +248,32 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase })
       : `All cases · ${stats.total} logged`
   const ratePct = Math.round(rateStats.completion * 100)
 
-  /* the case-status word next to the active case name */
+  /* the status word next to the structure card's title */
   let caseDot = 'idle'
   let caseWord = 'Idle'
-  if (!activeCase) {
+  if (!structureAll && !activeCase) {
     caseWord = 'No case'
-  } else if (active.overdue > 0) {
+  } else if (structureStats.overdue > 0) {
     caseDot = 'overdue'
-    caseWord = `${active.overdue} past due`
-  } else if (active.open > 0) {
+    caseWord = `${structureStats.overdue} past due`
+  } else if (structureStats.open > 0) {
     caseDot = 'live'
-    caseWord = `${active.open} open`
-  } else if (active.total > 0) {
+    caseWord = `${structureStats.open} open`
+  } else if (structureStats.total > 0) {
     caseWord = 'All closed'
   } else {
     caseWord = 'Empty'
   }
+
+  /* The diagram caps how many pins it will plant, so the honest count is two
+     numbers whenever the cap bites — otherwise the header would claim pins that
+     are not on the surface. IsoCase itself draws a "+N more" label to match. */
+  const pinTotal = isoEntries.length
+  const pinsDrawn = Math.min(pinTotal, ISO_PIN_CAP)
+  const pinLabel =
+    pinTotal === pinsDrawn
+      ? `${pinTotal} ${pinTotal === 1 ? 'pin' : 'pins'}`
+      : `${pinsDrawn} of ${pinTotal} pins`
 
   return (
     <div className="bento">
@@ -302,19 +320,33 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase })
       <Card className="span-4" aria-label="Case structure">
         <CardHead
           title="Case structure"
-          subtitle={focus ? 'Open entries only' : 'Every entry'}
+          subtitle={
+            (structureAll ? 'Every case · ' : '') + (focus ? 'Open entries only' : 'Every entry')
+          }
           right={
-            <IconMenu
-              label="Switch case"
-              items={cases.map((p) => ({
-                key: String(p.id),
-                label: p.name,
-                disabled: activeCase ? p.id === activeCase.id : false,
-                onClick: () => {
-                  if (onSelectCase) onSelectCase(p.id)
-                },
-              }))}
-            />
+            <span className="row" style={{ gap: '10px' }}>
+              <span className="micro dim nowrap">{pinLabel}</span>
+              <IconMenu
+                label="Switch case"
+                items={[
+                  {
+                    key: '__all',
+                    label: 'All cases',
+                    disabled: structureAll,
+                    onClick: () => setStructureAll(true),
+                  },
+                  ...cases.map((p) => ({
+                    key: String(p.id),
+                    label: p.name,
+                    disabled: !structureAll && activeCase ? p.id === activeCase.id : false,
+                    onClick: () => {
+                      setStructureAll(false)
+                      if (onSelectCase) onSelectCase(p.id)
+                    },
+                  })),
+                ]}
+              />
+            </span>
           }
         />
 
@@ -322,7 +354,13 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase })
           <div className="row row--between">
             <span className="row" style={{ gap: '8px', minWidth: 0 }}>
               <span className={`status-dot status-dot--${caseDot}`} aria-hidden="true" />
-              <span className="truncate">{activeCase ? activeCase.name : 'No case selected'}</span>
+              <span className="truncate">
+                {structureAll
+                  ? `All cases · ${cases.length}`
+                  : activeCase
+                    ? activeCase.name
+                    : 'No case selected'}
+              </span>
               <span className="section-label">{caseWord}</span>
             </span>
             <Toggle checked={focus} onChange={setFocus} label="Focus" />
@@ -341,14 +379,25 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase })
                   behaviour on the Case files screen. */}
               {/* No key: remounting rebuilt the diagram from nothing on every switch.
                   Passing the case as `seed` lets it morph instead. */}
-              <IsoCase entries={isoEntries} completion={active.completion} seed={active.id} />
+              <IsoCase
+                entries={isoEntries}
+                completion={structureStats.completion}
+                /* A fixed seed for the aggregate, so "All cases" always has the
+                   same landscape rather than borrowing whichever case happens
+                   to be selected underneath it. */
+                seed={structureAll ? '__all_cases__' : active.id}
+              />
             </div>
           </div>
         </div>
 
         <div className="card__foot">
           <span className="nowrap">Completion</span>
-          <Meter value={active.completion} label="Case completion" className="grow" />
+          <Meter
+            value={structureStats.completion}
+            label={structureAll ? 'Completion across all cases' : 'Case completion'}
+            className="grow"
+          />
         </div>
       </Card>
 

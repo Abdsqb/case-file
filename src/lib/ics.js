@@ -231,9 +231,20 @@ export function parseCalendar(text) {
         last: occurrences.length ? occurrences[occurrences.length - 1].end : e.end,
         count: occurrences.length,
       };
-      for (const o of occurrences) {
-        meetings.push({ seriesId: record.id, summary: record.summary, location: record.location, start: o.start, end: o.end });
-      }
+      occurrences.forEach((o, n) => {
+        meetings.push({
+          seriesId: record.id,
+          summary: record.summary,
+          location: record.location,
+          start: o.start,
+          end: o.end,
+          // Stamped here rather than derived later: the flat list is sorted
+          // across every series, so "which meeting of this course is this" is
+          // only cheap to know while the series is still in hand.
+          seriesIndex: n + 1,
+          seriesCount: occurrences.length,
+        });
+      });
       return record;
     });
 

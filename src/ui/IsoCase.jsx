@@ -342,7 +342,10 @@ function writeMorph(a, b, e, faceEls, meshEls, live, ramp) {
 
 /* --------------------------------------------------------------- the nodes */
 
-const MAX_NODES = 40;                    // hard cap — 200 entries must not choke
+/* Hard cap — 200 entries must not choke. Exported because a caller that reports
+   a pin count has to know when the cap bites, or it will claim pins that are not
+   on the surface. */
+export const MAX_NODES = 40;
 const GOLDEN = 2.399963229728653;        // golden angle, radians
 const MAX_R = S / 2 - 0.95;              // keeps every node on the plate
 const NODE_M = 0.3;                      // node half-size, units

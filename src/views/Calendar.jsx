@@ -11,7 +11,8 @@
  * screen follows — courses, rooms, holidays, term length.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 import { Card, CardHead, EmptyState, Meter, Metric, Pill } from '../ui/primitives.jsx'
@@ -44,6 +45,26 @@ function fmtDay(date) {
   return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 }
 
+/**
+ * Everything the hover readout shows, as one sentence.
+ *
+ * The visual tip is aria-hidden; this is what actually reaches assistive tech,
+ * so the two must not drift apart in content.
+ */
+function blockLabel(meeting, series, nowTs) {
+  const bits = [
+    meeting.summary,
+    meeting.start.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }),
+    `${fmtTime(meeting.start)} to ${fmtTime(meeting.end)}`,
+    fmtDuration(Math.round((meeting.end - meeting.start) / 60000)),
+    meeting.location || 'no room listed',
+    `session ${meeting.seriesIndex} of ${meeting.seriesCount}`,
+    standing(meeting, nowTs).text.replace(' · ', ', '),
+  ]
+  if (series) bits.splice(5, 0, `meets ${series.days.map((d) => DAY_LABEL[d]).join(' and ')}`)
+  return bits.join('. ')
+}
+
 /** `9:30am–10:45am`, the en dash tightened up so it fits a narrow block. */
 function fmtRange(a, b) {
   return `${fmtTime(a)}–${fmtTime(b)}`
@@ -70,6 +91,33 @@ function shortRoom(location) {
 function hourLabel(min) {
   const h = Math.floor(min / 60) % 24
   return String(h % 12 === 0 ? 12 : h % 12)
+}
+
+/** `75` → `1h 15m`, `180` → `3h`, `45` → `45m`. */
+function fmtDuration(min) {
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  if (!h) return `${m}m`
+  return m ? `${h}h ${m}m` : `${h}h`
+}
+
+/**
+ * Where this meeting sits relative to now, in words.
+ *
+ * Returned as a tone plus a phrase so the readout can colour the live case
+ * without the caller re-deriving which case it is.
+ */
+function standing(meeting, nowTs) {
+  const start = meeting.start.getTime()
+  const end = meeting.end.getTime()
+  if (nowTs >= end) return { tone: 'past', text: 'ended' }
+  if (nowTs >= start) return { tone: 'live', text: `in progress · ${fmtDuration(Math.max(1, Math.round((end - nowTs) / 60000)))} left` }
+
+  const mins = Math.round((start - nowTs) / 60000)
+  if (mins < 60) return { tone: 'soon', text: `starts in ${mins}m` }
+  if (mins < 24 * 60) return { tone: 'soon', text: `starts in ${fmtDuration(mins)}` }
+  const days = Math.round(mins / (24 * 60))
+  return { tone: 'later', text: `in ${days} ${days === 1 ? 'day' : 'days'}` }
 }
 
 /**
@@ -109,6 +157,102 @@ function packDay(list) {
   }
   flush()
   return out
+}
+
+/**
+ * The hover readout for one meeting.
+ *
+ * Portalled to the body because the lane it sits in is `overflow: hidden` — a
+ * tip rendered inside a block would be clipped to the block. Position is
+ * measured after a hidden first paint rather than assumed, so the tip can flip
+ * to the other side of a block near the right edge and still be clamped into
+ * the viewport vertically.
+ */
+function ScheduleTip({ meeting, series, anchor, nowTs }) {
+  const ref = useRef(null)
+  const [pos, setPos] = useState(null)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || !anchor) return
+    const GAP = 10
+    const EDGE = 8
+    const { width: w, height: h } = el.getBoundingClientRect()
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+
+    // Beside the block, on whichever side has room; never on top of it.
+    let left = anchor.right + GAP
+    if (left + w > vw - EDGE) left = anchor.left - GAP - w
+    if (left < EDGE) left = Math.min(Math.max(EDGE, anchor.left), vw - w - EDGE)
+
+    let top = anchor.top + anchor.height / 2 - h / 2
+    top = Math.min(Math.max(EDGE, top), vh - h - EDGE)
+    setPos({ top, left })
+  }, [meeting, anchor])
+
+  if (typeof document === 'undefined') return null
+
+  const state = standing(meeting, nowTs)
+  const dayLine = meeting.start.toLocaleDateString(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+  const durationMin = Math.round((meeting.end - meeting.start) / 60000)
+
+  return createPortal(
+    <div
+      ref={ref}
+      className="schedtip"
+      // The block carries the same content in its aria-label, so this is
+      // decoration for the pointer and must not be announced twice.
+      aria-hidden="true"
+      style={{ top: pos ? pos.top : -9999, left: pos ? pos.left : -9999 }}
+    >
+      <div className="schedtip__title">{meeting.summary}</div>
+      <div className={cx('schedtip__state', `schedtip__state--${state.tone}`)}>{state.text}</div>
+
+      <dl className="schedtip__rows">
+        <div className="schedtip__row">
+          <dt>When</dt>
+          <dd>
+            {dayLine}
+            <span className="schedtip__sub">
+              {fmtRange(meeting.start, meeting.end)} · {fmtDuration(durationMin)}
+            </span>
+          </dd>
+        </div>
+        <div className="schedtip__row">
+          <dt>Where</dt>
+          <dd>{meeting.location || 'No room listed'}</dd>
+        </div>
+        {series ? (
+          <>
+            <div className="schedtip__row">
+              <dt>Meets</dt>
+              <dd>
+                {series.days.map((d) => DAY_LABEL[d]).join(' · ')}
+                <span className="schedtip__sub">
+                  {fmtDay(series.first)} — {fmtDay(series.last)}
+                </span>
+              </dd>
+            </div>
+            <div className="schedtip__row">
+              <dt>Session</dt>
+              <dd>
+                {meeting.seriesIndex} of {meeting.seriesCount}
+                <span className="schedtip__sub">
+                  {meeting.seriesCount - meeting.seriesIndex} left after this
+                </span>
+              </dd>
+            </div>
+          </>
+        ) : null}
+      </dl>
+    </div>,
+    document.body
+  )
 }
 
 export default function Calendar({ now }) {
@@ -193,6 +337,33 @@ export default function Calendar({ now }) {
     })
     return { start, end, cols, count: inWeek.length }
   }, [weekTs, meetings, term, nowTs])
+
+  /* Which block the pointer (or keyboard focus) is on. Held as the meeting plus
+     the rect it was measured from, so the readout does not have to re-query the
+     DOM and cannot disagree with what is under the cursor. */
+  const [hot, setHot] = useState(null)
+
+  const showTip = useCallback((meeting, el) => {
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    setHot({ meeting, anchor: { top: r.top, left: r.left, right: r.right, height: r.height } })
+  }, [])
+
+  const hideTip = useCallback(() => setHot(null), [])
+
+  /* A fixed-position tip would drift away from its block on scroll, and the
+     pointer may well have left the block by then anyway. Cheaper to dismiss. */
+  useEffect(() => {
+    if (!hot) return undefined
+    window.addEventListener('scroll', hideTip, { passive: true, capture: true })
+    window.addEventListener('resize', hideTip, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', hideTip, { capture: true })
+      window.removeEventListener('resize', hideTip)
+    }
+  }, [hot, hideTip])
+
+  const seriesById = useMemo(() => new Map(series.map((x) => [x.id, x])), [series])
 
   const today = useMemo(
     () => meetings.filter((m) => sameDay(m.start, new Date(nowTs))),
@@ -403,7 +574,8 @@ export default function Calendar({ now }) {
                           className={cx(
                             'sched__block',
                             m.end.getTime() <= nowTs && 'is-past',
-                            live && m.start.getTime() === live.start.getTime() && m.seriesId === live.seriesId && 'is-live'
+                            live && m.start.getTime() === live.start.getTime() && m.seriesId === live.seriesId && 'is-live',
+                            hot && hot.meeting === m && 'is-hot'
                           )}
                           style={{
                             '--top': `${topOf(m)}%`,
@@ -411,6 +583,15 @@ export default function Calendar({ now }) {
                             '--lane': m.lane,
                             '--lanes': m.lanes,
                           }}
+                          /* Focusable, so the detail is reachable without a
+                             pointer, and labelled with the same content the tip
+                             shows so a screen reader never needs the hover. */
+                          tabIndex={0}
+                          aria-label={blockLabel(m, seriesById.get(m.seriesId), nowTs)}
+                          onMouseEnter={(e) => showTip(m, e.currentTarget)}
+                          onMouseLeave={hideTip}
+                          onFocus={(e) => showTip(m, e.currentTarget)}
+                          onBlur={hideTip}
                         >
                           <span className="sched__title">{m.summary}</span>
                           <span className="sched__when">{fmtRange(m.start, m.end)}</span>
@@ -456,6 +637,15 @@ export default function Calendar({ now }) {
           </div>
         </Card>
       </div>
+
+      {hot ? (
+        <ScheduleTip
+          meeting={hot.meeting}
+          series={seriesById.get(hot.meeting.seriesId)}
+          anchor={hot.anchor}
+          nowTs={nowTs}
+        />
+      ) : null}
     </>
   )
 }

@@ -21,6 +21,9 @@ export const DAY_MS = 86400000;
 /** an open entry due within this many days counts as 'soon'. */
 export const SOON_DAYS = 2;
 
+/** due today or tomorrow. Past this the deadline is not yet immediate. */
+export const URGENT_DAYS = 1;
+
 /** an open entry older than this reads as stalled in the commentary. */
 export const STALE_DAYS = 14;
 
@@ -151,6 +154,30 @@ export function statusTone(dueDate, now) {
   const diff = dayDiff(due, nowMs(now));
   if (!Number.isFinite(diff)) return 'none';
   if (diff < 0) return 'overdue';
+  if (diff <= SOON_DAYS) return 'soon';
+  return 'later';
+}
+
+/**
+ * The same reading, one band finer, for anything that colour-codes a deadline.
+ *
+ *   'overdue' — the due day is behind us
+ *   'urgent'  — due today or tomorrow
+ *   'soon'    — due inside the SOON_DAYS window but not yet immediate
+ *   'later'   — further out
+ *   'none'    — no due date
+ *
+ * Deliberately NOT folded into statusTone: Reporting buckets its queue on that
+ * function, and splitting 'soon' there would silently re-sort the whole screen.
+ * Two callers wanting different granularity is a reason for two functions.
+ */
+export function urgencyTone(dueDate, now) {
+  const due = toTime(dueDate);
+  if (!Number.isFinite(due)) return 'none';
+  const diff = dayDiff(due, nowMs(now));
+  if (!Number.isFinite(diff)) return 'none';
+  if (diff < 0) return 'overdue';
+  if (diff <= URGENT_DAYS) return 'urgent';
   if (diff <= SOON_DAYS) return 'soon';
   return 'later';
 }

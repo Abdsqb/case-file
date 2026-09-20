@@ -8,6 +8,8 @@ weekly class timetable read straight from a registrar `.ics` export.
 Everything runs on your own machine against a local SQLite file. There is no account, no
 sync and no telemetry.
 
+![The dashboard](docs/screenshots/dashboard.png)
+
 ---
 
 ## Screens
@@ -18,15 +20,57 @@ sync and no telemetry.
 | **Case files** | The working screen. Create, rename, reorder and delete cases; add sub-cases; log entries with dates and priorities; nest subtasks under an entry. |
 | **Reporting** | Every open entry bucketed by due day — Overdue / This week / Later — plus a world-news feed from public RSS. |
 | **Class calendar** | A weekly timetable parsed from `src/data/class-calendar.ics`, with next class, today's agenda and term progress. |
+| **Flashcards** | Import a deck from a `.json` file or pasted text, file it under a course, and review it on an SM-2 spaced schedule. No model is ever called — the decks are written elsewhere and only read here. |
 | **Settings** | Motion preferences, including a reduced-motion override. |
+
+A scratchpad sits behind a tab on the left edge of every screen: a page slides out with
+nothing on it but somewhere to type. It saves as you go and follows you between screens.
+
+![Case files](docs/screenshots/case-files.png)
+
+Entries come first on the Case files screen, with the diagram behind them — the two dots
+at the corner switch between them. **Dragging one entry onto another files it as a
+subtask**, and dragging it onto an entry in a different case moves it there. Subtasks stay
+one level deep, so an entry that already holds subtasks cannot itself become one.
 
 ### The case-structure diagram
 
-The centrepiece of the Dashboard and Case files screens is an isometric wireframe surface
-whose shape is derived deterministically from the case's id — so a given case always looks
-like itself. Entries stand on the surface as coloured pins: **amber** open, **red**
-overdue, **green** closed. Switching cases morphs the surface into the new shape rather
-than swapping it, and the whole thing tilts with the pointer.
+![The case structure](docs/screenshots/case-structure.png)
+
+A force-directed graph, and the centrepiece of the Dashboard and Case files screens. Every
+case, sub-case, entry and subtask is a node; inside a case, every node is joined to every
+other. No edge ever crosses a case — that is a property of how the graph is built rather
+than a rule applied afterwards — so the dashboard's *All cases* view separates into one
+cluster per case on its own.
+
+Nodes are guilloche rosettes, drawn as epitrochoids: a ring of closed loops, with a second
+band inside it on a case or a sub-case so a hub is findable without spending a colour on
+it. Colour is reserved for state — **white** open, **amber** due soon, **red** overdue,
+**green** closed — and hovering a node lights its whole case and opens a readout.
+
+Two things about it are worth knowing, because both were measured rather than assumed:
+
+- **The layout zooms as a whole**, one transform on one group, so a node's size and its
+  distance from its neighbours scale together. The proportion between them is what gives
+  the drawing its character, and this is what stops it drifting with how many cases happen
+  to be on screen. It also makes overlap scale-invariant, so separation is a fact about
+  the layout rather than something recomputed against the current zoom.
+- **The shape you get is the shape of your data.** A case whose entries all hang directly
+  off it is a star, every entry interchangeable, and a force simulation answers a
+  symmetric question symmetrically — you get a ring. Lobes and sub-clusters come from
+  depth: sub-cases grouping entries, or entries with subtasks of their own.
+
+### The scratchpad
+
+![The scratchpad](docs/screenshots/notes.png)
+
+### Reporting
+
+![Reporting](docs/screenshots/reporting.png)
+
+### Class calendar
+
+![The class calendar](docs/screenshots/calendar.png)
 
 ---
 
@@ -101,8 +145,8 @@ server/
   news.js       RSS fetch and place-name resolution for Reporting
 src/
   views/        one file per screen
-  ui/           primitives, charts, and the case-structure diagram
-  lib/          API client, metrics, reordering, .ics parsing
+  ui/           primitives, charts, the case graph, the scratchpad drawer
+  lib/          API client, metrics, the graph builder, SM-2, .ics parsing
   data/         the sample class-calendar .ics
   styles.css    the design system — every colour is a token here
   motion.css    the assembly and transition choreography
@@ -121,11 +165,14 @@ React 19 and Vite on the front, Express on the back, SQLite through Node's built
 Two conventions are load-bearing, and breaking either one shows immediately:
 
 - **`src/styles.css` is the only place a colour is written down.** Components reference
-  tokens; they never contain a hex value. The one deliberate exception is the case
-  diagram, which resolves `--fg` and `--bg` to an `rgb()` ramp once at mount — a
-  per-frame `color-mix()` across 576 cells cost exactly double the frame budget.
+  tokens; they never contain a hex value. The graph follows this too: each node group sets
+  one custom property and its dot, its rosette and its label all read from that, so they
+  cannot disagree about what state the entry is in.
 - **Animations must fail safe.** Every hidden-start animation is gated behind a class that
   is removed once the sequence is spent, so an animation that cannot run leaves content
   visible rather than stranded at `opacity: 0`.
 
-`prefers-reduced-motion` is honoured throughout, and can be forced on from Settings.
+`prefers-reduced-motion` is honoured throughout, and can be forced on from Settings. The
+graph honours it by running its simulation to convergence in one synchronous pass and
+painting the settled result — a reduced-motion reader gets the same graph, not an empty
+box.

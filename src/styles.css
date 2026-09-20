@@ -33,24 +33,50 @@
   --bar-dim:       #242424;   /* unfilled / trailing bars */
   --glow:          #9C9C9C;   /* the wireframe render glow, used sparingly */
   --glow-soft:     rgba(156, 156, 156, 0.14);
-  /* Case-structure pin states. Siblings by construction — one shared saturation
-     and lightness, only the hue turned — so the three read as one set rather
-     than three colours that happened to land together. Saturation carries these
-     rather than lightness: on a near-black screen whose only other ink is grey,
-     a pale tint is the loudest thing on the page, but a dark one just goes muddy
-     — so they sit mid-lightness and heavily saturated. --hot keeps its own
-     value, since it is used as text elsewhere and must carry contrast alone. */
+  /* Case-structure pin states, read as a traffic light with a neutral resting
+     state: white while there is nothing to worry about, yellow inside the
+     deadline window, red once it has passed, green when it is closed.
+
+     The three chromatic ones are siblings by construction — one shared
+     saturation and lightness, only the hue turned — so they read as one set
+     rather than three colours that happened to land together. Saturation
+     carries them rather than lightness: on a near-black screen whose only other
+     ink is grey, a pale tint would be the loudest thing on the page, while a
+     dark one just goes muddy.
+
+     --pin-open is the exception and is meant to be: an untroubled entry should
+     be plain, and plain here means brighter than the --fg mesh it stands on,
+     or it disappears into the wireframe. --hot keeps its own value, since it is
+     used as text elsewhere and must carry contrast alone. */
   --hot:           #E8705A;   /* overdue, as text — hsl(9 76% 63%) */
   --hot-soft:      rgba(232, 112, 90, 0.14);
-  --pin-open:      #C98F1D;   /* hsl(40 75% 45%) */
-  --pin-late:      #C53C20;   /* hsl(10 72% 45%) */
-  --pin-done:      #2BA166;   /* hsl(150 58% 40%) */
+
+  /* Course work on the timetable. The screen had exactly one accent before this
+     and it means "late"; a second thing competing in red would blunt it. Iris
+     sits far enough round the wheel to read as a different KIND of thing rather
+     than a different severity, and at these opacities it tints the chip without
+     lighting it up against the blocks it sits on. */
+  --iris:          #A79BF5;   /* hsl(247 82% 78%) */
+  --iris-soft:     rgba(167, 155, 245, 0.15);
+  --iris-hi:       rgba(167, 155, 245, 0.34);
+  --iris-deep:     rgba(167, 155, 245, 0.26);
+  --iris-faint:    rgba(167, 155, 245, 0.07);
+  --pin-open:      #F2F2F2;   /* open, nothing imminent */
+  --pin-soon:      #C98F1D;   /* inside the deadline window — hsl(40 75% 45%) */
+  --pin-late:      #C53C20;   /* past due — hsl(10 72% 45%) */
+  --pin-done:      #2BA166;   /* closed — hsl(150 58% 40%) */
 
   --radius:        16px;      /* cards */
   --radius-sm:     10px;      /* inner tiles */
   --radius-pill:   999px;
 
-  --font: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Northlake stays first so it wins the moment its file is supplied (see
+     public/fonts/README.md). Sono is the working face until then: soft, rounded
+     terminals, and — measured, not assumed — monospaced, so the week table, the
+     counts and every tabular readout keep their alignment. Every other rounded
+     family worth having (M PLUS Rounded 1c, Nunito, Quicksand, Rubik) is
+     proportional, and would have quietly broken those columns. */
+  --font: 'Northlake', 'Sono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* The dot-matrix display face — Nothing's Ndot, with a real dot-matrix
      fallback. Ndot is not on Google Fonts and cannot be bundled here, so it is
@@ -73,6 +99,40 @@
 
    To self-host instead, drop the file in public/fonts/ and add:
      src: local('Ndot 55'), url('/fonts/Ndot-55.woff2') format('woff2'); */
+/* Northlake is the global body face. It is not a Google font and not a system
+   font, so it has to come from one of two places, tried in this order:
+
+   1. installed on the machine   — local(), no download, instant
+   2. dropped into public/fonts  — url(), served with the app
+
+   If neither exists the stack simply falls through to IBM Plex Mono and the app
+   looks exactly as it did. That is deliberate: a missing font should degrade,
+   not blank the text. See public/fonts/README.md for the drop-in.
+
+   font-display: swap so text is never invisible while the file loads. */
+@font-face {
+  font-family: 'Northlake';
+  src: local('Northlake'), local('Northlake Regular'), local('Northlake-Regular'),
+       url('/fonts/Northlake.woff2') format('woff2'),
+       url('/fonts/Northlake.woff') format('woff'),
+       url('/fonts/Northlake.otf') format('opentype'),
+       url('/fonts/Northlake.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Northlake';
+  src: local('Northlake Bold'), local('Northlake-Bold'),
+       url('/fonts/Northlake-Bold.woff2') format('woff2'),
+       url('/fonts/Northlake-Bold.otf') format('opentype'),
+       url('/fonts/Northlake-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @font-face {
   font-family: 'Ndot';
   src: local('Ndot 55'), local('Ndot-55'), local('Ndot55'),
@@ -367,11 +427,13 @@ summary:focus-visible,
   width: 100%;
   max-width: 1560px;
   margin: 0 auto;
-  /* Top padding clears the nav's reveal band, not just the nav itself. Reaching
-     for the case strip used to summon the top bar, because the strip sat inside
-     the band that triggers it. App.jsx writes --nav-reveal from the same
-     constant it hit-tests against, so the two cannot drift apart. */
-  padding: calc(var(--nav-reveal, 96px) + 18px) var(--shell-x) 48px;
+  /* Top padding clears the nav, which is fixed and so contributes no height of
+     its own. This used to clear the nav's REVEAL BAND instead — a 96px strip
+     that was bigger than the bar, because reaching for the case strip inside it
+     would otherwise summon a bar nobody asked for. The bar is permanent now, so
+     the band is gone and this tracks the bar's measured height (--nav-h, written
+     by App.jsx) — which matters because the pill wraps on a narrow window. */
+  padding: calc(var(--nav-h, 66px) + 18px) var(--shell-x) 48px;
   min-width: 0;
 }
 
@@ -525,7 +587,14 @@ summary:focus-visible,
    Wrapping to a second line there pushed the room out of the bottom, so a tight
    block truncates sideways instead, which costs a few characters and never a
    whole line. Taller blocks keep wrapping. */
-@container schedblock (max-height: 88px) {
+/* Below this the block cannot hold a wrapped title plus the time and the room,
+   so the title gives up its second line rather than pushing the room out of the
+   bottom of the block. Measured against the type above: two 14px/1.35 lines
+   (38px) + two 11.5px rows (30px) + the gaps (6px) needs ~74px of content box,
+   and container-type: size measures the content box — so 70px is the last size
+   at which wrapping still fits. It was 88px when the blocks were 53px inside
+   and the threshold clamped every one of them. */
+@container schedblock (max-height: 70px) {
   .sched__title {
     white-space: nowrap;
     overflow: hidden;
@@ -1609,11 +1678,55 @@ summary:focus-visible,
    10. ENTRY LIST / CRUD SURFACE
    -------------------------------------------------------------------------- */
 
+/* Only ever used inside the deck's entries card, which is why the scroll lives
+   here: the card head, the sub-case bar and the composer stay put and the rows
+   move under them, rather than the whole card sliding away under its own head.
+   contain, so reaching the last entry does not then start scrolling the page. */
+/* --- dragging an entry onto another files it as a subtask ---------------- */
+
+.entry[draggable='true'] { cursor: grab; }
+.entry[draggable='true']:active { cursor: grabbing; }
+/* The controls inside a row keep their own cursors — the grab hand belongs to
+   the row, not to a button sitting on it. */
+.entry[draggable='true'] button,
+.entry[draggable='true'] input { cursor: auto; }
+
+/* The row being carried. Left in place rather than removed, so the list does
+   not reflow under the cursor mid-drag. */
+.entry--dragging { opacity: 0.4; }
+
+/* The row it would land in. A rule down the leading edge rather than a box:
+   the answer to "where does it go" is which row, and an inset line says that
+   without the list appearing to grow a new element. */
+.entry--drop {
+  background: var(--card-hi);
+  box-shadow: inset 2px 0 0 var(--fg);
+}
+.entry--drop * { pointer-events: none; }
+
 .entrylist {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+
+  /* The rows bleed 10px either side (see .entry) so a hover highlight and the
+     rule under it reach past the text. The moment this box scrolls, that bleed
+     counts as horizontal overflow — setting overflow-y alone makes the other
+     axis compute to auto — and Chrome drew a scrollbar along the bottom of the
+     card. Measured: 10px of it. Matching the bleed here keeps the rows inside
+     the padding box instead of clipping them back to the text width.
+
+     width: 100% had to go with it: a specified width does not grow with the
+     negative margins, so the row would have been pulled left and left a gap on
+     the right. Stretching as a flex item gives the full width either way. */
+  margin-inline: -10px;
+  padding-inline: 10px;
+
+  overflow-y: auto;
+  overflow-x: hidden;   /* a title too long to fit truncates rather than scrolls */
+  overscroll-behavior: contain;
 }
 
 .entry {
@@ -1651,12 +1764,23 @@ summary:focus-visible,
   background: var(--fg-dim);
 }
 
+/* The same four colours the case pins use, so a row and a pin never disagree
+   about the same entry. Overdue also blinks, exactly as its pin does. */
 .entry__status--none,
 .entry__status--later   { background: var(--fg-dim); }
-.entry__status--soon    { background: var(--glow); }
-.entry__status--overdue { background: var(--hot); }
-.entry__status--done    { background: var(--line); }
-.entry__status--open    { background: var(--fg); }
+.entry__status--soon    { background: var(--pin-soon); }
+.entry__status--urgent  { background: var(--pin-late); }
+.entry__status--overdue { background: var(--pin-late); }
+.entry__status--done    { background: var(--pin-done); }
+.entry__status--open    { background: var(--pin-open); }
+
+@keyframes status-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.entry__status--overdue { animation: status-blink 1500ms ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .entry__status--overdue { animation: none; opacity: 1; }
+}
+[data-motion="reduced"] .entry__status--overdue { animation: none; opacity: 1; }
 
 .entry__main {
   flex: 1 1 auto;
@@ -2336,16 +2460,26 @@ button.entry__title:hover { color: var(--fg); }
 
 .sched {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  /* Tall enough that a 75-minute class is a readable block rather than a sliver,
-     which at a ~10.5 hour span puts it around 60px. */
-  height: 640px;
+  /* The height of this box is what sizes every class on it: blocks are placed
+     in percentages of the lane, so the lane is the only dial. At 640px a
+     75-minute class came out 69px tall — under the 88px the container query
+     below used to clamp titles at, so nine of ten blocks showed a single
+     ellipsised line and the timetable could not be read at a glance. At 900px
+     the same class is ~99px and its title has room to wrap.
+
+     Raised again once classes started carrying their course work: a block with
+     a quiz AND a reading on it needs two more rows, and at 900px the chips were
+     pushing the room line out through the bottom. Measured, the tallest case
+     wants ~103px of content box, which a 75-minute class only reaches once the
+     lane is around 1040 — so 1140 here, the strip and day header included. */
+  height: 1140px;
 }
 
 .sched__axis {
   flex: none;
-  width: 22px;
+  width: 26px;
   display: flex;
   flex-direction: column;
 }
@@ -2353,7 +2487,7 @@ button.entry__title:hover { color: var(--fg); }
 /* Holds the axis level with the day headers so hour 09 lines up with 09:00. */
 .sched__axishead {
   flex: none;
-  height: 34px;
+  height: 38px;
 }
 
 .sched__ticks {
@@ -2367,7 +2501,7 @@ button.entry__title:hover { color: var(--fg); }
   right: 0;
   transform: translateY(-50%);
   font-family: var(--font-dot);
-  font-size: 11.5px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   color: var(--fg-mid);
   font-variant-numeric: tabular-nums;
@@ -2389,8 +2523,9 @@ button.entry__title:hover { color: var(--fg); }
 }
 
 .sched__colhead {
+  /* Kept level with .sched__axishead, or 09:00 stops lining up with hour 09. */
   flex: none;
-  height: 34px;
+  height: 38px;
   display: flex;
   align-items: baseline;
   gap: 6px;
@@ -2400,7 +2535,7 @@ button.entry__title:hover { color: var(--fg); }
 
 .sched__dow {
   font-family: var(--font-dot);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--fg-mid);
@@ -2408,7 +2543,7 @@ button.entry__title:hover { color: var(--fg); }
 
 .sched__date {
   font-family: var(--font-dot);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--fg-mid);
   font-variant-numeric: tabular-nums;
 }
@@ -2417,6 +2552,30 @@ button.entry__title:hover { color: var(--fg); }
 .sched__col.is-today .sched__dow,
 .sched__col.is-today .sched__date { color: var(--fg); }
 .sched__col.is-today .sched__lane { background: var(--card-hi); }
+
+/* --- what is due that day, under the day header --------------------------
+   A fixed height, and reserved on every column at once (the markup renders it
+   empty rather than omitting it) — this is a flex row above the lane, so a
+   strip on only the days that have something would start those lanes lower
+   than the rest and throw every hour out of line with the axis beside them.
+   The axis head grows by the same amount for the same reason. */
+.sched {
+  --due-h: 26px;
+}
+
+.sched__due {
+  flex: none;
+  height: var(--due-h);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;   /* under the day, to the right */
+  gap: 4px;
+  padding: 0 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sched[data-due='on'] .sched__axishead { height: calc(38px + var(--due-h)); }
 
 .sched__lane {
   position: relative;
@@ -2458,10 +2617,10 @@ button.entry__title:hover { color: var(--fg); }
   width: calc(100% / var(--lanes, 1));
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   overflow: hidden;
   box-sizing: border-box;
-  padding: 7px 8px;
+  padding: 9px 10px;
   /* So the title below can react to how tall THIS block is. The alternative was
      a minutes threshold in JS, which would silently be wrong the moment a term
      had a different daily span and every block changed height. */
@@ -2486,7 +2645,7 @@ button.entry__title:hover { color: var(--fg); }
    "Basic" read as "Rasic", "Operating" as "Ooeratino". Natural wrapping inside
    the block's own overflow does the same job without cutting glyphs. */
 .sched__title {
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.35;
   color: var(--fg);
   overflow-wrap: anywhere;
@@ -2494,14 +2653,14 @@ button.entry__title:hover { color: var(--fg); }
 
 .sched__when {
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.03em;
   color: var(--fg-mid);
   flex: none;
 }
 .sched__where {
   font-family: var(--font-dot);
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.03em;
   color: var(--fg-dim);
   flex: none;
@@ -2522,6 +2681,92 @@ button.entry__title:hover { color: var(--fg); }
   background: var(--hot-soft);
 }
 .sched__block.is-live .sched__title { color: var(--fg); }
+
+/* --- one piece of course work ---------------------------------------------
+   Same chip under a day header and on a class block, so "Quiz 3" reads as the
+   same kind of thing wherever it turns up. Outlined rather than filled: a row
+   of solid pills on top of the blocks would out-shout the timetable itself. */
+.duetag {
+  display: inline-block;
+  max-width: 100%;
+  flex: 0 1 auto;
+  /* No border; the fill alone does the work now. The padding takes back most of
+     the space the border held, which matters because the strip height and the
+     block content budget were measured with the old box: chips come out 20px
+     instead of 21px, and at that the lanes still sit level with the axis and no
+     block overflows. Dropping the full 2px would have eaten into both. */
+  padding: 2px 7px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  /* Filled rather than outlined. A tinted chip is legible against both the
+     lane and today's lighter lane, where a transparent one took whatever was
+     behind it and the border did all the work. */
+  background: var(--iris-soft);
+  font-family: var(--font-dot);
+  font-size: 10.5px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  color: var(--iris);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* One hue for all of it, so a chip reads as "course work" wherever it appears,
+   with weight inside that hue carrying the hierarchy: an exam is the densest
+   fill, the reading is the faintest, and quizzes and deadlines sit between. */
+.duetag--exam {
+  background: var(--iris-deep);
+  border-color: var(--iris);
+  color: var(--fg);
+}
+.duetag--quiz,
+.duetag--review,
+.duetag--lab,
+.duetag--hw { color: var(--fg); }
+/* The reading is context for the class, not a deadline — it recedes, but it
+   still carries the tint; going fully transparent made it the odd one out in a
+   row that is otherwise all filled. */
+.duetag--reading { background: var(--iris-faint); }
+/* Not a piece of work — a count of the ones the row could not fit. */
+/* Not a piece of work — a count of the ones the row could not fit. It used to
+   be told apart by a dashed outline; with no border left, the empty fill and the
+   dim "+2" are what separate it from the things it is counting. */
+.duetag--more {
+  background: transparent;
+  color: var(--fg-dim);
+  flex: none;
+}
+
+/* Closed work keeps its place on the day but gives up the colour — the point
+   of the tint is "this is still coming". */
+/* It answers a question rather than doing anything, so the cursor stays an
+   arrow — a pointer here would promise a click that goes nowhere. */
+.duetag {
+  cursor: default;
+  transition: background-color 140ms ease;
+}
+/* The hover lift is a denser fill now rather than a brighter edge. */
+.duetag:hover,
+.duetag:focus-visible { background: var(--iris-hi); }
+/* Kept: this is the keyboard focus ring, not decoration, and it only ever shows
+   for a keyboard user. */
+.duetag:focus-visible { outline: 1px solid var(--iris); outline-offset: 1px; }
+
+.duetag.is-done {
+  background: transparent;
+  color: var(--fg-dim);
+  text-decoration: line-through;
+}
+
+/* On a block, the chips wrap and sit under the time. */
+.sched__marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  min-width: 0;
+  flex: none;
+}
 
 /* Where the clock is, on today's column only. */
 .sched__now {
@@ -2735,3 +2980,1130 @@ button.entry__title:hover { color: var(--fg); }
 @media (prefers-reduced-motion: reduce) {
   .schedtip { animation: none; }
 }
+
+/* --------------------------------------------------------------------------
+   16. FLASHCARDS
+   A single narrow column rather than the bento. Studying is reading, and
+   reading wants a measure — the other screens are dashboards and want width.
+
+   Every animation here is transform + opacity only. The one exception is the
+   folder open/close, which animates grid-template-rows 0fr -> 1fr: it is the
+   only way to animate to "however tall the contents are" without measuring in
+   JS, and it runs once per click rather than every frame of a build.
+   -------------------------------------------------------------------------- */
+
+.fc-col {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.fc-col .viewhead { margin: 0; }
+
+.fc-stage { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* --- the panel ------------------------------------------------------------ */
+
+.fc-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  min-width: 0;
+  animation: fc-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.fc-panel__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 20px 0;
+}
+.fc-panel__titles { min-width: 0; flex: 1 1 auto; }
+.fc-panel__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--fg);
+  letter-spacing: 0.01em;
+}
+.fc-panel__sub {
+  margin: 3px 0 0;
+  font-family: var(--font-dot);
+  font-size: 11.5px;
+  color: var(--fg-dim);
+}
+.fc-panel__right { flex: none; }
+.fc-panel__body {
+  padding: 18px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* --- library -------------------------------------------------------------- */
+
+.fc-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.fc-newfolder {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card-hi);
+  animation: fc-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.fc-newfolder .field { flex: 1 1 auto; min-width: 0; }
+
+.fc-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  overflow: hidden;
+  animation: fc-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+.fc-group__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 16px;
+}
+
+.fc-group__toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+.fc-group__chev {
+  flex: none;
+  color: var(--fg-dim);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms ease;
+}
+.fc-group__chev.is-open { transform: rotate(90deg); }
+.fc-group__toggle:hover .fc-group__chev { color: var(--fg); }
+.fc-group__toggle:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: 3px; border-radius: 3px; }
+
+.fc-group__name { font-size: 14px; color: var(--fg); }
+
+/* The rename editor takes the whole header row: the counts are hidden while it
+   is open, so the field gets room rather than being squeezed beside them. */
+.fc-rename {
+  /* Spans the row because the counts and the action pills are both hidden while
+     it is open — the editor is the only thing in the header at that moment. */
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.fc-rename .field { flex: 1 1 auto; min-width: 0; }
+.fc-group__meta,
+.fc-group__due {
+  font-family: var(--font-dot);
+  font-size: 11.5px;
+  color: var(--fg-dim);
+}
+.fc-group__due.is-due { color: var(--fg); }
+.fc-group__acts { display: flex; align-items: center; gap: 6px; }
+
+.fc-group__wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.fc-group__wrap.is-shut { grid-template-rows: 0fr; }
+.fc-group__inner { overflow: hidden; min-height: 0; }
+.fc-group__wrap.is-shut .fc-group__inner { opacity: 0; transition: opacity 140ms ease; }
+.fc-group__empty { padding: 0 16px 14px; }
+
+/* --- a deck row ----------------------------------------------------------- */
+
+.fc-deck {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 82px 82px auto;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--line-soft);
+  transition: background-color 160ms ease;
+}
+.fc-deck:hover { background: var(--card-hi); }
+
+.fc-deck__name { font-size: 13.5px; color: var(--fg); }
+.fc-deck__meta,
+.fc-deck__due {
+  font-family: var(--font-dot);
+  font-size: 11.5px;
+  color: var(--fg-dim);
+}
+.fc-deck__due.is-due { color: var(--fg); }
+.fc-deck__acts { display: flex; align-items: center; gap: 6px; justify-self: end; }
+
+/* --- forms ---------------------------------------------------------------- */
+
+.fc-form { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.fc-form__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 14px;
+}
+.fc-form__file { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+.fc-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-family: var(--font-dot);
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--card-hi);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 160ms ease;
+}
+.fc-select:hover { border-color: var(--fg-dim); }
+.fc-select:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: 1px; }
+
+.fc-file { font-family: var(--font-dot); font-size: 11.5px; color: var(--fg-mid); }
+.fc-file::file-selector-button {
+  font-family: var(--font-dot);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg);
+  background: var(--card-hi);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  margin-right: 10px;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+.fc-file::file-selector-button:hover { border-color: var(--fg-dim); background: var(--line-soft); }
+
+.fc-paste {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 150px;
+  resize: vertical;
+  padding: 11px 12px;
+  font-family: var(--font-dot);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--fg);
+  background: var(--card-hi);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  transition: border-color 160ms ease;
+}
+.fc-paste::placeholder { color: var(--fg-dim); }
+.fc-paste:hover { border-color: var(--fg-dim); }
+.fc-paste:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: 1px; }
+
+/* Reserved height, so the layout does not jump as the message swaps between the
+   hint, a card count and an error while typing. */
+.fc-status { min-height: 34px; display: flex; align-items: center; }
+.fc-msg {
+  margin: 0;
+  font-family: var(--font-dot);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fg-dim);
+  animation: fc-fade 200ms ease both;
+}
+.fc-msg--bad { color: var(--hot); }
+.fc-msg--good { color: var(--fg-mid); }
+
+.fc-note {
+  margin: 0;
+  padding: 11px 13px;
+  border-left: 2px solid var(--pin-soon);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--card-hi);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--fg-mid);
+}
+.fc-note strong { color: var(--fg); font-weight: 400; }
+
+/* --- banners -------------------------------------------------------------- */
+
+.fc-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card-hi);
+  font-family: var(--font-dot);
+  font-size: 11.5px;
+  color: var(--fg-mid);
+  animation: fc-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.fc-banner--bad { border-color: var(--hot); color: var(--fg); }
+
+/* --- source --------------------------------------------------------------- */
+
+.fc-source {
+  margin: 0;
+  max-height: 340px;
+  overflow: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card-hi);
+  font-family: var(--font-dot);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--fg-mid);
+  white-space: pre;
+  tab-size: 2;
+}
+.fc-source:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: 1px; }
+.fc-replace { display: flex; flex-direction: column; gap: 14px; }
+
+/* --- study ---------------------------------------------------------------- */
+
+.fc-card { display: flex; flex-direction: column; gap: 12px; }
+
+.fc-face {
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card-hi);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: fc-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+/* The answer is what is being recalled, so it gets the brighter edge — and it
+   arrives rather than appearing, because the reveal is the moment of the whole
+   screen. */
+.fc-face--back {
+  border-color: var(--fg-dim);
+  animation: fc-reveal 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.fc-face__tag {
+  font-family: var(--font-dot);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.fc-face__text {
+  margin: 0;
+  font-size: 16.5px;
+  line-height: 1.55;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fc-reveal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: fc-fade 240ms ease both;
+}
+
+.fc-rate {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fc-rate__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card-hi);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: fc-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+.fc-rate__btn:hover {
+  background: var(--line-soft);
+  border-color: var(--fg-dim);
+  transform: translateY(-2px);
+}
+.fc-rate__btn:active { transform: translateY(0); }
+.fc-rate__btn:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: 1px; }
+
+.fc-rate__key { font-family: var(--font-dot); font-size: 10px; color: var(--fg-dim); }
+.fc-rate__label { font-size: 13px; color: var(--fg); }
+.fc-rate__when { font-family: var(--font-dot); font-size: 10.5px; color: var(--fg-dim); }
+
+/* The same four states the case pins use, so a rating reads the same way here
+   as a due date does there. */
+.fc-rate__btn--again { border-left: 2px solid var(--pin-late); }
+.fc-rate__btn--hard  { border-left: 2px solid var(--pin-soon); }
+.fc-rate__btn--good  { border-left: 2px solid var(--pin-open); }
+.fc-rate__btn--easy  { border-left: 2px solid var(--pin-done); }
+
+.fc-done { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.fc-done__n {
+  font-family: var(--font-dot);
+  font-size: 46px;
+  line-height: 1;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.fc-done__label {
+  font-family: var(--font-dot);
+  font-size: 11.5px;
+  color: var(--fg-dim);
+}
+
+/* --- motion --------------------------------------------------------------- */
+
+@keyframes fc-in     { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes fc-reveal { from { opacity: 0; transform: translateY(-6px) scale(0.995); } to { opacity: 1; transform: none; } }
+@keyframes fc-fade   { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .fc-panel, .fc-group, .fc-face, .fc-face--back, .fc-rate__btn,
+  .fc-banner, .fc-newfolder, .fc-msg, .fc-reveal {
+    animation: none !important;
+  }
+  .fc-group__wrap, .fc-group__chev, .fc-rate__btn { transition: none !important; }
+  .fc-rate__btn:hover { transform: none; }
+}
+
+@media (max-width: 900px) {
+  .fc-form__row { grid-template-columns: minmax(0, 1fr); }
+  .fc-rate { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fc-group__head { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+  .fc-group__meta { grid-column: 1; }
+  .fc-group__due  { grid-column: 1; }
+  .fc-deck { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+  .fc-deck__name { grid-column: 1; grid-row: 1; }
+  .fc-deck__acts { grid-column: 2; grid-row: 1 / span 3; }
+  .fc-deck__meta { grid-column: 1; grid-row: 2; }
+  .fc-deck__due  { grid-column: 1; grid-row: 3; }
+}
+
+/* --------------------------------------------------------------------------
+   THE CASE BAR — folders inline, collapsible
+   One bar, not two. A folder is a chip in the strip that opens to reveal its
+   cases beside it and shuts to hide them, so collapsing is what shortens the
+   bar. Each open folder holds its own Segmented, which is why the sliding thumb
+   and drag-to-reorder still work inside one: Segmented renders no thumb when
+   the active value is not among its own items, so several can sit side by side
+   and only the one holding the open case shows it.
+   -------------------------------------------------------------------------- */
+
+.casebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.casefold {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px;
+  /* Transparent rather than absent, so a hover cannot shift the row by a pixel.
+     The tinted background is what reads as "these belong together" — an outline
+     bright enough to group them was brighter than anything else in the bar. */
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--card-hi);
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+.casefold:hover { border-color: var(--line); }
+/* Holding the open case is carried by the folder's own label going bright (see
+   .holds-active .casefold__tab below), not by outlining the whole cluster. */
+
+.casefold__tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--fg-mid);
+  cursor: pointer;
+  font-family: var(--font-dot);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+.casefold__tab:hover { color: var(--fg); background: var(--line-soft); }
+.casefold__tab:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: -1px; }
+.casefold.holds-active .casefold__tab { color: var(--fg); }
+
+.casefold__chev {
+  flex: none;
+  color: var(--fg-dim);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms ease;
+}
+.casefold__chev.is-open { transform: rotate(90deg); }
+.casefold__tab:hover .casefold__chev { color: var(--fg); }
+
+.casefold__name { font-size: 12px; }
+
+/* The count only appears when shut — open, the cases speak for themselves. */
+.casefold__n {
+  flex: none;
+  min-width: 16px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--fg-mid);
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.casefold .iconmenu { flex: none; }
+
+/* The collapsing half. Animating grid-template-columns 1fr -> 0fr is the only
+   way to reach "however wide the contents are" without measuring in JS, and it
+   runs on a click rather than every frame, so the cost never shows. */
+.casefold__wrap {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-width: 0;
+  transition: grid-template-columns 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.casefold.is-shut .casefold__wrap { grid-template-columns: 0fr; }
+
+.casefold__inner {
+  overflow: hidden;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.casefold.is-shut .casefold__inner { opacity: 0; transition: opacity 140ms ease; }
+
+/* The nested strip loses its own frame — the folder already provides one. */
+.casefold .segmented {
+  border: 0;
+  background: none;
+  padding: 0;
+}
+
+.casefold__empty { padding: 0 8px; white-space: nowrap; }
+
+.casebar__add { flex: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .casefold__wrap,
+  .casefold__inner,
+  .casefold__chev { transition: none !important; }
+}
+[data-motion="reduced"] .casefold__wrap,
+[data-motion="reduced"] .casefold__inner,
+[data-motion="reduced"] .casefold__chev { transition: none !important; }
+
+/* --------------------------------------------------------------------------
+   THE DECK — case structure and entries sharing one slot
+   Two panels stacked in the same box. The wheel is read as a direction and
+   spent on a transition rather than on scrolling: down slides the structure up
+   and out and brings the entries up from below, up reverses it.
+
+   Both panels are always mounted and only transformed, so the diagram keeps its
+   state across a flip — remounting it would replay the whole build animation
+   every time you glanced at your entries.
+   -------------------------------------------------------------------------- */
+
+.deck {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  border-radius: var(--radius);
+  /* Without a floor the row would collapse to whichever panel is shorter, and
+     the height would jump on every flip. */
+  min-height: 560px;
+  /* The two panels are hinged at opposite edges of this box and fold through
+     each other, so the box needs depth for the fold to read as one. */
+  perspective: 1500px;
+  perspective-origin: 50% 50%;
+}
+
+.deck__panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* transform + opacity only — this runs on the compositor, and the diagram
+     inside is ~790 SVG nodes that must not be re-rastered mid-fold. */
+  transition:
+    transform 640ms cubic-bezier(0.22, 1, 0.30, 1),
+    opacity 380ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+/* Each panel keeps ONE transform-origin across both states — its own hinge.
+   Animating the origin instead would swing the panel along a path nobody
+   asked for, because the pivot moves while the rotation runs.
+
+   The entries lead, so they take the top hinge and fold away over their own top
+   edge; the structure is hinged at its bottom and folds up into place from
+   below. Two leaves of a flip board sharing one frame. The hinges swapped when
+   the panels did, or the second panel would have arrived from the same side the
+   first one left by. */
+.deck__panel--entries   { transform-origin: 50% 0%; }
+.deck__panel--structure { transform-origin: 50% 100%; }
+
+/* entries showing: the structure waits folded down out of sight */
+.deck[data-show='entries'] .deck__panel--entries {
+  transform: none;
+  opacity: 1;
+}
+.deck[data-show='entries'] .deck__panel--structure {
+  transform: translateY(28%) rotateX(-78deg) scale(0.92);
+  opacity: 0;
+}
+
+/* structure showing: the entries have folded up and away over their own top */
+.deck[data-show='structure'] .deck__panel--entries {
+  transform: translateY(-28%) rotateX(78deg) scale(0.92);
+  opacity: 0;
+}
+.deck[data-show='structure'] .deck__panel--structure {
+  transform: none;
+  opacity: 1;
+}
+
+/* A panel that is off screen must not be tabbable or hoverable. */
+.deck__panel[aria-hidden='true'] { pointer-events: none; }
+
+/* --- the structure panel: no frame --------------------------------------- */
+
+.deck__panel--structure {
+  border: 0;
+  background: none;
+  padding: 18px 20px 16px;
+  gap: 4px;
+}
+
+.deckhead {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2px;
+  padding: 0 96px;           /* room for the aside, so centring is true */
+  min-width: 0;
+}
+.deckhead__titles { min-width: 0; max-width: 100%; }
+.deckhead__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: var(--fg);
+}
+.deckhead__sub {
+  margin: 2px 0 0;
+  font-family: var(--font-dot);
+  font-size: 11.5px;
+  color: var(--fg-dim);
+}
+
+/* Out of the centring flow entirely, so a long case name cannot shove the
+   title off-centre. */
+.deckhead__aside {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.deck__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.deck__body--center { align-items: center; justify-content: center; }
+
+.deck__foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 12px;
+  font-family: var(--font-dot);
+  font-size: 11.5px;
+  color: var(--fg-dim);
+}
+
+/* --- the entries panel keeps its card ------------------------------------ */
+
+/* The panel itself does not scroll. It used to carry overflow-y: auto, but the
+   card inside is pinned to the slot by min-height: 100% and inherits the card
+   rule's overflow: hidden — so a long list was clipped INSIDE the card and the
+   panel never saw anything sticking out of it. Measured: panel 240/240 with the
+   card's own content at 476, and entries rendering 217px below the deck where
+   nothing could reach them. The scroll belongs on the list. */
+.deck__panel--entries { overflow: hidden; }
+
+.deck__card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  min-height: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+}
+/* A flex column only lets a child shrink below its content if the child is
+   allowed to — without this the body keeps its full content height and pushes
+   the list straight back out through the bottom of the card. */
+.deck__card .card__body { min-height: 0; }
+
+/* --- the dots ------------------------------------------------------------- */
+
+.deck__dots {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.deck__dot {
+  width: 6px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line);
+  cursor: pointer;
+  transition: background-color 200ms ease, height 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.deck__dot:hover { background: var(--fg-dim); }
+.deck__dot.is-on { background: var(--fg-mid); height: 26px; }
+.deck__dot:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .deck__panel, .deck__dot { transition: none !important; }
+}
+[data-motion='reduced'] .deck__panel,
+[data-motion='reduced'] .deck__dot { transition: none !important; }
+
+@media (max-width: 1100px) {
+  /* Stacked at this width the slot is much shorter, and a 560px floor would
+     leave the diagram swimming in empty space. */
+  .deck { min-height: 480px; }
+  .deckhead { padding: 0 76px; }
+}
+
+/* The case bar wrapping to a second line used to teleport everything below it
+   down by a row. The height here is written from a ResizeObserver on the head
+   inside, which is the only way to transition between two auto heights — there
+   is no CSS that can interpolate auto to auto. Runs on a click, not per frame. */
+.headshift {
+  overflow: hidden;
+  /* The gap below the case bar has to live out here. Inside, .viewhead's own
+     margin-bottom sits within a box that is clipped and given an explicit
+     measured height, so it was being swallowed whole and the bar ended up
+     sitting almost on top of the cards. Out here it is also held steady while
+     the height eases, instead of easing along with it. */
+  margin-bottom: 26px;
+  transition: height 300ms cubic-bezier(0.22, 1, 0.30, 1);
+}
+.headshift > .viewhead { margin-bottom: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .headshift { transition: none; }
+}
+[data-motion='reduced'] .headshift { transition: none; }
+
+/* ==========================================================================
+   CASE GRAPH — the Case structure, as nodes and links.
+
+   Replaces the isometric terrain. A node per case, per sub-case, per entry and
+   per subtask; edges run parent to child and never cross a case, so the
+   dashboard's "every case, links only within a case" falls out of the data
+   rather than being enforced here (see lib/graph.js).
+
+   Colour carries the same five states the pins did, from the same tokens — a
+   white node is open and untroubled, and it is the brightest thing on the
+   graph on purpose. Cases and sub-cases are structure, not work, so they wear
+   iris instead of a state colour.
+   ========================================================================== */
+
+.cg {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* Labels sit below their node and the outermost can sit near the edge; the
+     layout already reserves a margin, and this is the belt to that braces. */
+  overflow: visible;
+  cursor: default;
+  touch-action: pan-y;
+}
+
+.cg--empty {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+}
+.cg__empty {
+  font-family: var(--font-dot);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  opacity: 0.55;
+}
+
+/* --- links ---------------------------------------------------------------- */
+
+/* Every link is drawn the same: one colour, one weight, one opacity, whether it
+   is the spine of a case or one strand of the mesh. There was a tiered scheme
+   here once — the spine solid, sub-case links brighter, subtask links dashed,
+   the mesh at a third of everything else — and the effect of encoding four
+   things in the line was simply that most of the lines looked switched off.
+   Uniform reads as one drawing.
+
+   The consequence is worth knowing: the mesh is O(n) links per node, so a case
+   with thirty-five entries draws ~600 strands, and at a shared weight they sum
+   into a dense body rather than a haze. That is the honest picture of "every
+   entry joined to every other" — density IS the information. */
+.cg__link,
+.cg__mesh {
+  stroke: var(--fg-dim);
+  stroke-width: 1;
+  opacity: 0.55;
+  /* The whole drawing is scaled from a 1000x1000 viewBox to whatever the card
+     gives it, and without this the hairlines would scale with it and go fat in
+     a wide card, thin in a narrow one. */
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  transition: stroke 160ms ease, opacity 160ms ease;
+}
+
+.cg__mesh { fill: none; }
+
+/* Just the segments meeting the hovered node: the spider of links from it to
+   everything else in its case. */
+.cg__mesh--lit {
+  opacity: 0;
+  stroke: var(--fg);
+  transition: opacity 160ms ease;
+}
+
+/* --- nodes ---------------------------------------------------------------- */
+
+.cg__node { transition: opacity 160ms ease; }
+
+.cg__dot {
+  fill: var(--node);
+  /* Held back from full strength. At full white a card full of dots is the
+     loudest thing on the screen, which is the wrong weight for a diagram that
+     sits beside the numbers rather than leading them — and it leaves hover with
+     nowhere brighter to go. Resting is quiet; hover is what lights up. */
+  opacity: 0.66;
+  transition: fill 160ms ease, opacity 160ms ease;
+}
+
+/* The rosette. Every node is one: a ring of closed loops in its own colour,
+   with a second band inside on a case and a sub-case. Drawn as a hairline that
+   does not thicken with the zoom, which is what keeps the loops legible as
+   loops rather than closing into a blot. */
+.cg__rose {
+  fill: none;
+  stroke: var(--node);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.8;
+  transition: stroke 160ms ease, opacity 160ms ease;
+}
+.cg__rose--inner { opacity: 0.55; }
+
+/* One custom property per node group, so the dot, its label and its halo all
+   read from a single declaration and can never disagree. */
+.cg__node              { --node: var(--pin-open); }
+/* Structure is white like an untroubled entry — shape and size carry the
+   hierarchy instead, so nothing on the graph has to be purple to be a case. */
+.cg__node--structure   { --node: var(--pin-open); }
+.cg__node--normal      { --node: var(--pin-open); }
+.cg__node--soon        { --node: var(--pin-soon); }
+.cg__node--urgent      { --node: var(--pin-late); }
+.cg__node--overdue     { --node: var(--pin-late); }
+.cg__node--done        { --node: var(--pin-done); }
+
+/* A subtask is a smaller, quieter version of its entry. */
+.cg__node--subtask .cg__dot { opacity: 0.46; }
+
+/* An overdue entry is the one thing allowed to keep its full voice — it is the
+   only state on this graph anyone needs to spot without looking for it. */
+.cg__node--overdue .cg__dot { opacity: 0.92; }
+
+/* A hub sits on top of every link that meets it, so it is knocked out of them
+   with a background-coloured edge rather than letting the lines run under it. */
+.cg__node--case .cg__dot,
+.cg__node--subcase .cg__dot {
+  stroke: var(--bg);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+/* A hovered node's rosette comes up to full strength with its dot. */
+.cg__node[data-lit='hot'] .cg__rose { opacity: 1; }
+.cg__node[data-lit='near'] .cg__rose { opacity: 0.9; }
+
+.cg__label {
+  text-anchor: middle;
+  font-family: var(--font-dot);
+  font-size: 19px;      /* in viewBox units, so it scales with the drawing */
+  fill: var(--fg-mid);
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--bg);
+  /* A knockout. It has to clear whole nodes now, not just a link passing behind
+     — a tight layout puts a neighbour's dot under the name often enough. */
+  stroke-width: 7;
+}
+.cg__label--case { fill: var(--fg); }
+
+/* --- overdue blinks, exactly as the pins did ------------------------------ */
+
+@keyframes cg-blink { 0%, 100% { opacity: 1 } 50% { opacity: 0.32 } }
+
+.cg__node--overdue .cg__dot { animation: cg-blink 1500ms ease-in-out infinite; }
+
+/* --- hover: light the neighbourhood, dim the rest ------------------------- */
+
+/* data-lit, not a class: React owns className on these elements and rewrites it
+   wholesale whenever an entry's tone changes, which would wipe an imperative
+   class mid-hover. It does not touch data-lit. */
+.cg[data-hot] .cg__node { opacity: 0.2; }
+/* The label layer sits outside the node groups, so it does not inherit their
+   dimming and has to be told separately. */
+.cg[data-hot] .cg__labels { opacity: 0.3; }
+.cg[data-hot] .cg__link { opacity: 0.1; }
+.cg[data-hot] .cg__mesh { opacity: 0.06; }
+.cg[data-hot] .cg__mesh--lit[data-lit] { opacity: 0.9; }
+.cg[data-hot] .cg__node[data-lit='near'] { opacity: 0.92; }
+.cg[data-hot] .cg__node[data-lit='hot'] { opacity: 1; }
+.cg[data-hot] .cg__link[data-lit='near'] { opacity: 1; stroke: var(--fg); }
+
+/* Hovering restores a node to full strength — the resting graph is deliberately
+   held back so that this has somewhere to go. */
+.cg__node[data-lit='hot'] .cg__dot { opacity: 1; }
+.cg__node[data-lit='near'] .cg__dot { opacity: 0.85; }
+
+.cg__node[data-lit='hot'] .cg__dot {
+  stroke: var(--node);
+  stroke-width: 3;
+  stroke-opacity: 0.4;
+  vector-effect: non-scaling-stroke;
+}
+.cg__labels { transition: opacity 160ms ease; }
+
+/* --- reduced motion ------------------------------------------------------- */
+/* The simulation still RUNS when motion is off — it just runs to convergence in
+   one synchronous pass and paints the settled result. A reduced-motion user
+   gets the same graph, not an empty box. All that is suppressed is the blink
+   and the transitions. */
+
+@media (prefers-reduced-motion: reduce) {
+  .cg__node--overdue .cg__dot { animation: none; }
+  .cg__node, .cg__link, .cg__dot { transition: none; }
+}
+[data-motion='reduced'] .cg__node--overdue .cg__dot { animation: none; }
+[data-motion='reduced'] .cg__node,
+[data-motion='reduced'] .cg__link,
+[data-motion='reduced'] .cg__dot { transition: none; }
+
+/* ==========================================================================
+   THE SCRATCHPAD — a tab on the left edge, and a page that slides out of it.
+
+   Deliberately bare: no heading, no toolbar, no save button. Everything in the
+   panel is somewhere to type, because that is all it is for.
+   ========================================================================== */
+
+/* The tab and the panel are siblings that have to move as one thing, so the
+   width, the inset and the timing live on their shared ancestor rather than on
+   either of them. They were set on .notes before, which the tab could not see —
+   it was quietly falling back to its own copy of the width, and running 220ms
+   against the panel's 260ms, so the two drifted apart mid-slide. */
+.app {
+  --notes-w: 620px;
+  /* How far both of them stand off the edges of the window. Nothing here
+     touches a screen edge: the panel is a page lying on the app, not a drawer
+     built into the side of it. */
+  --notes-gap: 18px;
+  --notes-slide: 440ms;
+  --notes-ease: cubic-bezier(0.22, 1, 0.3, 1);
+}
+
+.notab {
+  position: fixed;
+  left: var(--notes-gap, 18px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 190;
+
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 56px;
+  padding: 0;
+
+  /* Bordered and rounded the whole way round, because it is floating rather
+     than attached to anything. */
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card-hi);
+  color: var(--fg-dim);
+  cursor: pointer;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    transform var(--notes-slide, 440ms) var(--notes-ease, ease);
+}
+
+.notab:hover,
+.notab:focus-visible { color: var(--fg); background: var(--card); }
+
+.notab svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Rides out to sit just off the panel's trailing edge, travelling on the same
+   clock so the two move as one. */
+.notab[aria-expanded='true'] {
+  transform: translateY(-50%) translateX(calc(var(--notes-w, 620px) + 12px));
+}
+
+/* --- the page ------------------------------------------------------------ */
+
+.notes {
+  position: fixed;
+  left: var(--notes-gap, 18px);
+  top: var(--notes-gap, 18px);
+  bottom: var(--notes-gap, 18px);
+  z-index: 189;
+
+  width: var(--notes-w, 620px);
+  /* Never wider than the window can hold with its margins intact — the whole
+     point is that the edges stay clear. */
+  max-width: calc(100vw - (var(--notes-gap, 18px) * 2));
+  box-sizing: border-box;
+  padding: 22px 24px;
+
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.66);
+
+  /* transform and opacity only, so the slide is compositor work and the screen
+     behind it is not re-laid-out on every frame. Far enough left to clear its
+     own margin and shadow when closed. */
+  transform: translateX(calc(-100% - var(--notes-gap, 18px) - 24px));
+  opacity: 0;
+  pointer-events: none;
+  /* Slow enough to watch. The panel and the tab share one duration so they
+     arrive together, and the fade is shorter than the slide so the page is
+     fully there before it finishes travelling rather than easing in at the
+     very end. */
+  transition:
+    transform var(--notes-slide, 440ms) var(--notes-ease, ease),
+    opacity calc(var(--notes-slide, 440ms) * 0.62) ease;
+  will-change: transform;
+}
+
+.notes.is-open {
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The app rings a focused control, and rightly so — but this control is the
+   whole panel, so the ring reads as a second border drawn inside the card
+   rather than as focus on something in it. The page having slid out with a
+   caret blinking in it says where the keyboard is going. */
+.notes .notes__pad:focus,
+.notes .notes__pad:focus-visible { outline: none; box-shadow: none; }
+
+.notes__pad {
+  display: block;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+
+  border: 0;
+  outline: 0;
+  background: none;
+  resize: none;
+
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 13.5px;
+  line-height: 1.7;
+  /* Wrapping long lines rather than scrolling sideways: this is a pad, not a
+     document with a page width. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Catches the click that closes the pad. Invisible on purpose — dimming the
+   screen would make this feel like a dialog, and it is a page you opened. */
+.notescrim {
+  position: fixed;
+  inset: 0;
+  z-index: 188;
+  opacity: 0;
+  pointer-events: none;
+}
+.notescrim.is-open { pointer-events: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .notes, .notab { transition: none; }
+}
+[data-motion='reduced'] .notes,
+[data-motion='reduced'] .notab { transition: none; }

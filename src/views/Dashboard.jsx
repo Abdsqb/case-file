@@ -13,7 +13,8 @@ import {
   Trend,
 } from '../ui/primitives.jsx'
 import { MiniBars, TimelineDots, WeekTable } from '../ui/charts.jsx'
-import IsoCase, { MAX_NODES as ISO_PIN_CAP } from '../ui/IsoCase.jsx'
+import CaseGraph from '../ui/CaseGraph.jsx'
+import { buildGraph } from '../lib/graph.js'
 import {
   caseStats,
   completionTimeline,
@@ -207,32 +208,26 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase })
   const active = useMemo(() => caseStats(activeCase, now), [activeCase, now])
 
   /* Whether the structure card is showing one case or the whole workload.
+     Opens on the whole workload: this is the dashboard, and the question it
+     answers on arrival is what everything looks like, not what one case does.
+
      Local to this screen on purpose: `activeCaseId` is shared with the Case
      files screen and with openCase() navigation, so widening the diagram's
      scope must not move the app's idea of which case is open. */
-  const [structureAll, setStructureAll] = useState(false)
+  const [structureAll, setStructureAll] = useState(true)
   const structureStats = structureAll ? stats : active
 
-  const isoEntries = useMemo(() => {
-    const source = structureAll ? cases : activeCase ? [activeCase] : []
-    if (!source.length) return []
-    const all = flattenEntries(source)
-    const shown = focus ? all.filter((e) => !e.completed) : all
-    return shown.map((e) => ({
-      id: e.id,
-      title: e.title,
-      tone: e.completed
-        ? 'done'
-        : statusTone(e.dueDate, now) === 'overdue'
-          ? 'overdue'
-          : 'normal',
-      // Carried so a node can identify itself on hover. IsoCase formats it.
-      dueDate: e.dueDate,
-      priority: e.priority,
-      completed: e.completed,
-      isSub: e.isSub,
-    }))
-  }, [structureAll, cases, activeCase, focus, now])
+  /* rootId null means every case, each its own cluster — and because no edge
+     ever crosses a case (see lib/graph.js), the clusters separate themselves
+     rather than needing the link rule enforced at draw time. */
+  const graph = useMemo(
+    () => buildGraph(cases, {
+      rootId: structureAll ? null : activeCase ? activeCase.id : null,
+      now,
+      focus,
+    }),
+    [cases, structureAll, activeCase, now, focus]
+  )
 
   const shownTips = urgentOnly
     ? tips.filter((t) => t.meta === 'Today recommendation')
@@ -265,15 +260,11 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase })
     caseWord = 'Empty'
   }
 
-  /* The diagram caps how many pins it will plant, so the honest count is two
-     numbers whenever the cap bites — otherwise the header would claim pins that
-     are not on the surface. IsoCase itself draws a "+N more" label to match. */
-  const pinTotal = isoEntries.length
-  const pinsDrawn = Math.min(pinTotal, ISO_PIN_CAP)
-  const pinLabel =
-    pinTotal === pinsDrawn
-      ? `${pinTotal} ${pinTotal === 1 ? 'pin' : 'pins'}`
-      : `${pinsDrawn} of ${pinTotal} pins`
+  /* No cap any more, so no two-number hedge. The old diagram planted at most 40
+     pins and had to say so; the graph draws every node — measured flat 60fps to
+     2000 of them, sixteen times this data's load. */
+  const pinTotal = graph.nodes.length
+  const pinLabel = `${pinTotal} ${pinTotal === 1 ? 'node' : 'nodes'}`
 
   return (
     <div className="bento">
@@ -379,12 +370,12 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase })
                   behaviour on the Case files screen. */}
               {/* No key: remounting rebuilt the diagram from nothing on every switch.
                   Passing the case as `seed` lets it morph instead. */}
-              <IsoCase
-                entries={isoEntries}
-                completion={structureStats.completion}
-                /* A fixed seed for the aggregate, so "All cases" always has the
-                   same landscape rather than borrowing whichever case happens
-                   to be selected underneath it. */
+              <CaseGraph
+                graph={graph}
+                now={now}
+                /* A fixed seed for the aggregate, so "All cases" always lays out
+                   the same way rather than borrowing whichever case happens to
+                   be selected underneath it. */
                 seed={structureAll ? '__all_cases__' : active.id}
               />
             </div>

@@ -41,6 +41,86 @@ function cx(...parts) {
   return parts.filter(Boolean).join(' ')
 }
 
+/* ---- course work, hung off the timetable ---------------------------------
+   The entries on a case are a title and a date and nothing else, so which
+   column of the course schedule an entry came from has to be read back off its
+   title. A field would mean a migration for a distinction only this screen
+   cares about, and the titles are the user's own words either way.
+
+   Unrecognised falls through to 'due', which is the safe default: an entry
+   nobody classified lands under the day header rather than vanishing. */
+const KINDS = [
+  /* Before the exam rule, and deliberately narrow: it wants "Midterm review"
+     and "Final exam review", not a bare "Review" on some other course, which
+     has no reason to be treated as sitting an exam. */
+  [/\b(midterm|final)\b.*\breview\b|\breview\b.*\b(midterm|final)\b/i, 'review'],
+  [/\b(exam|midterm|final)\b/i, 'exam'],
+  [/^\s*quiz\b/i, 'quiz'],
+  [/^\s*readings?\b|^\s*pre[-\s]?class\b/i, 'reading'],
+  [/^\s*lab\b/i, 'lab'],
+  [/^\s*(hw|homework)\b/i, 'hw'],
+]
+
+function kindOf(title) {
+  for (const [re, kind] of KINDS) if (re.test(title)) return kind
+  return 'due'
+}
+
+/* Exams, quizzes and the reading happen AT a class, so they ride its block.
+   Labs and homework are 11:59 PM deadlines with no class attached, so they go
+   under the day header where they read as "today, whenever". */
+const ON_CLASS = new Set(['exam', 'review', 'quiz', 'reading'])
+
+const KIND_LABEL = {
+  exam: 'Exam',
+  review: 'Review session',
+  quiz: 'Quiz',
+  reading: 'Reading, before class',
+  lab: 'Lab',
+  hw: 'Homework',
+  due: 'Entry',
+}
+
+/* The same shape standing() returns for a meeting, so both readouts can wear
+   the same state line. Measured in whole days rather than hours: an entry is
+   dated, not timed, and "in 19 hours" would be inventing a precision the data
+   does not have. */
+/* What the chip says to a screen reader. The visual readout is aria-hidden like
+   ScheduleTip's, so this is the only version that actually reaches assistive
+   tech and the two must not drift apart in content. */
+function workLabel(item, nowTs) {
+  const when = item.due.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
+  const kind = KIND_LABEL[item.kind] || 'Entry'
+  return `${kind}: ${item.title}. ${item.course}, ${when} — ${workStanding(item, nowTs).text}`
+}
+
+function workStanding(item, nowTs) {
+  if (item.done) return { tone: 'past', text: 'closed' }
+  const days = Math.round((startOfDay(item.due) - startOfDay(nowTs)) / 86400000)
+  if (days < 0) {
+    const late = -days
+    return { tone: 'live', text: `${late} ${late === 1 ? 'day' : 'days'} overdue` }
+  }
+  if (days === 0) return { tone: 'soon', text: 'today' }
+  if (days === 1) return { tone: 'soon', text: 'tomorrow' }
+  return { tone: 'later', text: `in ${days} days` }
+}
+
+function norm(value) {
+  return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+/* Chips are narrow. The parenthetical is the first thing that can go — it is
+   always the qualifier, never the name — and the full title stays in the
+   tooltip and the aria-label. */
+function chipLabel(title) {
+  return String(title).replace(/\s*\([^)]*\)\s*$/, '').trim() || String(title)
+}
+
+function dayKeyOf(date) {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+}
+
 function fmtDay(date) {
   return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 }
@@ -58,6 +138,9 @@ function blockLabel(meeting, series, nowTs) {
     `${fmtTime(meeting.start)} to ${fmtTime(meeting.end)}`,
     fmtDuration(Math.round((meeting.end - meeting.start) / 60000)),
     meeting.location || 'no room listed',
+    /* The chips on the block are decoration to a screen reader unless they are
+       said here — this label is what actually reaches assistive tech. */
+    ...(meeting.marks || []).map((k) => (k.done ? `${k.title} (done)` : k.title)),
     `session ${meeting.seriesIndex} of ${meeting.seriesCount}`,
     standing(meeting, nowTs).text.replace(' · ', ', '),
   ]
@@ -168,7 +251,7 @@ function packDay(list) {
  * to the other side of a block near the right edge and still be clamped into
  * the viewport vertically.
  */
-function ScheduleTip({ meeting, series, anchor, nowTs }) {
+function useTipPosition(anchor, subject) {
   const ref = useRef(null)
   const [pos, setPos] = useState(null)
 
@@ -181,7 +264,7 @@ function ScheduleTip({ meeting, series, anchor, nowTs }) {
     const vw = window.innerWidth
     const vh = window.innerHeight
 
-    // Beside the block, on whichever side has room; never on top of it.
+    // Beside the anchor, on whichever side has room; never on top of it.
     let left = anchor.right + GAP
     if (left + w > vw - EDGE) left = anchor.left - GAP - w
     if (left < EDGE) left = Math.min(Math.max(EDGE, anchor.left), vw - w - EDGE)
@@ -189,7 +272,69 @@ function ScheduleTip({ meeting, series, anchor, nowTs }) {
     let top = anchor.top + anchor.height / 2 - h / 2
     top = Math.min(Math.max(EDGE, top), vh - h - EDGE)
     setPos({ top, left })
-  }, [meeting, anchor])
+  }, [subject, anchor])
+
+  return [ref, pos]
+}
+
+/**
+ * The hover readout for one piece of course work — the same object the chip
+ * under a day header or on a class block stands for.
+ *
+ * Shares ScheduleTip's furniture and its positioning deliberately: a chip and a
+ * block are both things on this grid you point at to ask "what is this", and
+ * two readouts that looked different would imply a distinction that is not
+ * there.
+ */
+function WorkTip({ item, anchor, nowTs }) {
+  const [ref, pos] = useTipPosition(anchor, item)
+  if (typeof document === 'undefined') return null
+
+  const state = workStanding(item, nowTs)
+  const dayLine = item.due.toLocaleDateString(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+
+  return createPortal(
+    <div
+      ref={ref}
+      className="schedtip"
+      aria-hidden="true"
+      style={{ top: pos ? pos.top : -9999, left: pos ? pos.left : -9999 }}
+    >
+      <div className="schedtip__title">{item.title}</div>
+      <div className={cx('schedtip__state', `schedtip__state--${state.tone}`)}>{state.text}</div>
+
+      <dl className="schedtip__rows">
+        <div className="schedtip__row">
+          <dt>What</dt>
+          <dd>{KIND_LABEL[item.kind] || 'Entry'}</dd>
+        </div>
+        <div className="schedtip__row">
+          <dt>Course</dt>
+          <dd>{item.course}</dd>
+        </div>
+        <div className="schedtip__row">
+          <dt>{ON_CLASS.has(item.kind) ? 'On' : 'Due'}</dt>
+          <dd>
+            {dayLine}
+            <span className="schedtip__sub">
+              {ON_CLASS.has(item.kind)
+                ? 'at the class that day'
+                : 'by the end of the day'}
+            </span>
+          </dd>
+        </div>
+      </dl>
+    </div>,
+    document.body
+  )
+}
+
+function ScheduleTip({ meeting, series, anchor, nowTs }) {
+  const [ref, pos] = useTipPosition(anchor, meeting)
 
   if (typeof document === 'undefined') return null
 
@@ -255,7 +400,7 @@ function ScheduleTip({ meeting, series, anchor, nowTs }) {
   )
 }
 
-export default function Calendar({ now }) {
+export default function Calendar({ now, projects }) {
   const nowTs = Number.isFinite(now) ? now : Date.now()
   const usingSample = Object.keys(overrides).length === 0
 
@@ -268,6 +413,41 @@ export default function Calendar({ now }) {
     () => (calendarName || '').replace(/^\s*class\s*calendar\s*[-–—:]?\s*/i, '').trim(),
     [calendarName]
   )
+
+  /* Every dated entry from a case that shares a course's name, bucketed by the
+     day it falls on. Only those cases: this is the class calendar, and a
+     personal case's deadlines on it would be noise rather than context. */
+  const work = useMemo(() => {
+    const courses = new Set(series.map((x) => norm(x.summary)))
+    const map = new Map()
+    for (const project of projects || []) {
+      const course = norm(project.name)
+      if (!courses.has(course)) continue
+      for (const task of project.tasks || []) {
+        if (!task.dueDate) continue
+        const key = dayKeyOf(new Date(task.dueDate))
+        let slot = map.get(key)
+        if (!slot) { slot = { onClass: new Map(), due: [] }; map.set(key, slot) }
+        const kind = kindOf(task.title)
+        const item = {
+          id: task.id,
+          title: task.title,
+          kind,
+          done: !!task.completed,
+          course: project.name,
+          due: new Date(task.dueDate),
+        }
+        if (ON_CLASS.has(kind)) {
+          const list = slot.onClass.get(course)
+          if (list) list.push(item)
+          else slot.onClass.set(course, [item])
+        } else {
+          slot.due.push(item)
+        }
+      }
+    }
+    return map
+  }, [projects, series])
 
   const term = useMemo(() => {
     if (!meetings.length) return null
@@ -325,6 +505,33 @@ export default function Calendar({ now }) {
     const cols = (term ? term.cols : WEEK_ORDER.slice(0, 5)).map((dow) => {
       const date = addDays(start, (dow + 6) % 7)
       const dayList = inWeek.filter((m) => sameDay(m.start, date))
+      const packed = packDay(dayList)
+
+      /* Hang each course's in-class work on its block. packDay clones, so
+         writing onto these does not touch the parsed calendar. A course that
+         meets twice in a day gets it on the first block only — claimed is what
+         stops the same quiz appearing at 9am and again at 2pm. */
+      const slot = work.get(dayKeyOf(date))
+      const claimed = new Set()
+      if (slot) {
+        for (const m of packed) {
+          const course = norm(m.summary)
+          if (claimed.has(course)) continue
+          const marks = slot.onClass.get(course)
+          if (marks) { m.marks = marks; claimed.add(course) }
+        }
+      }
+
+      /* An exam on a day its course does not meet — the final sits outside the
+         term entirely — has no block to ride. It falls through to the strip
+         rather than being silently dropped. */
+      const stranded = []
+      if (slot) {
+        for (const [course, list] of slot.onClass) {
+          if (!claimed.has(course)) stranded.push(...list)
+        }
+      }
+
       return {
         dow,
         date,
@@ -332,11 +539,16 @@ export default function Calendar({ now }) {
         // A weekday inside the term with nothing on it is a holiday, and the
         // grid should say so — otherwise the EXDATEs just look like a gap.
         off: dayList.length === 0 && term && date >= startOfDay(term.first) && date <= term.last,
-        meetings: packDay(dayList),
+        meetings: packed,
+        due: slot ? [...slot.due, ...stranded] : stranded,
       }
     })
-    return { start, end, cols, count: inWeek.length }
-  }, [weekTs, meetings, term, nowTs])
+    /* Reserved on every column or none. The strip is a flex row above the lane,
+       so giving it to only the days that have something due would start those
+       lanes lower than the rest and put every hour out of line with the axis. */
+    const hasDue = cols.some((c) => c.due.length > 0)
+    return { start, end, cols, count: inWeek.length, hasDue }
+  }, [weekTs, meetings, term, nowTs, work])
 
   /* Which block the pointer (or keyboard focus) is on. Held as the meeting plus
      the rect it was measured from, so the readout does not have to re-query the
@@ -347,6 +559,15 @@ export default function Calendar({ now }) {
     if (!el) return
     const r = el.getBoundingClientRect()
     setHot({ meeting, anchor: { top: r.top, left: r.left, right: r.right, height: r.height } })
+  }, [])
+
+  /* A chip. `meeting` comes along when the chip is sitting on a block, purely
+     so the block stays lit while the pointer is on one of its chips — without
+     it the class would go cold the moment you reached for its quiz. */
+  const showWork = useCallback((item, el, meeting) => {
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    setHot({ work: item, meeting, anchor: { top: r.top, left: r.left, right: r.right, height: r.height } })
   }, [])
 
   const hideTip = useCallback(() => setHot(null), [])
@@ -532,7 +753,7 @@ export default function Calendar({ now }) {
           />
 
           <div className="card__body">
-            <div className="sched">
+            <div className="sched" data-due={week.hasDue ? 'on' : 'off'}>
               <div className="sched__axis">
                 <span className="sched__axishead" aria-hidden="true" />
                 <div className="sched__ticks">
@@ -555,6 +776,42 @@ export default function Calendar({ now }) {
                       <span className="sched__dow">{DAY_LABEL[col.dow]}</span>
                       <span className="sched__date">{col.date.getDate()}</span>
                     </div>
+
+                    {/* Rendered on every column once any day in the week has
+                        something due, empty ones included — see week.hasDue.
+                        An empty strip is what keeps the lanes level. */}
+                    {week.hasDue ? (
+                      <div className="sched__due">
+                        {col.due.slice(0, 2).map((d) => (
+                          <span
+                            key={d.id}
+                            className={cx('duetag', `duetag--${d.kind}`, d.done && 'is-done')}
+                            /* Focusable so the readout is reachable without a
+                               pointer, exactly as the class blocks are. */
+                            tabIndex={0}
+                            aria-label={workLabel(d, nowTs)}
+                            onMouseEnter={(e) => showWork(d, e.currentTarget)}
+                            onMouseLeave={hideTip}
+                            onFocus={(e) => showWork(d, e.currentTarget)}
+                            onBlur={hideTip}
+                          >
+                            {chipLabel(d.title)}
+                          </span>
+                        ))}
+                        {/* The strip is one fixed row — it has to be, or the
+                            lanes stop lining up. So rather than let the extras
+                            slide out of a hidden overflow where nothing says
+                            they exist, they are counted. */}
+                        {col.due.length > 2 ? (
+                          <span
+                            className="duetag duetag--more"
+                            title={col.due.slice(2).map((d) => d.title).join(', ')}
+                          >
+                            {`+${col.due.length - 2}`}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
 
                     <div className="sched__lane">
                       {term.hours.map((min) => (
@@ -595,6 +852,36 @@ export default function Calendar({ now }) {
                         >
                           <span className="sched__title">{m.summary}</span>
                           <span className="sched__when">{fmtRange(m.start, m.end)}</span>
+                          {/* Above the room deliberately: if the block is ever
+                              too short for everything, the room is what the
+                              block gives up first (see .sched__where). */}
+                          {m.marks ? (
+                            <span className="sched__marks">
+                              {m.marks.map((k) => (
+                                <span
+                                  key={k.id}
+                                  className={cx('duetag', `duetag--${k.kind}`, k.done && 'is-done')}
+                                  tabIndex={0}
+                                  aria-label={workLabel(k, nowTs)}
+                                  onMouseEnter={(e) => showWork(k, e.currentTarget, m)}
+                                  /* Sliding off a chip usually means going back
+                                     onto the class under it, and the block's own
+                                     onMouseEnter will not fire again — it was
+                                     never left. So hand the readout back rather
+                                     than blanking it. */
+                                  onMouseLeave={(e) => {
+                                    const block = e.currentTarget.closest('.sched__block')
+                                    if (block) showTip(m, block)
+                                    else hideTip()
+                                  }}
+                                  onFocus={(e) => showWork(k, e.currentTarget, m)}
+                                  onBlur={hideTip}
+                                >
+                                  {chipLabel(k.title)}
+                                </span>
+                              ))}
+                            </span>
+                          ) : null}
                           <span className="sched__where truncate">{shortRoom(m.location)}</span>
                         </article>
                       ))}
@@ -638,7 +925,8 @@ export default function Calendar({ now }) {
         </Card>
       </div>
 
-      {hot ? (
+      {hot && hot.work ? <WorkTip item={hot.work} anchor={hot.anchor} nowTs={nowTs} /> : null}
+      {hot && !hot.work ? (
         <ScheduleTip
           meeting={hot.meeting}
           series={seriesById.get(hot.meeting.seriesId)}

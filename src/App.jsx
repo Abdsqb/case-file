@@ -7,17 +7,18 @@ import Dashboard from './views/Dashboard';
 import CaseFiles from './views/CaseFiles';
 import Reporting from './views/Reporting';
 import Calendar from './views/Calendar';
+import Flashcards from './views/Flashcards';
 import Settings from './views/Settings';
+import NotesDrawer from './ui/NotesDrawer.jsx';
 
 const CLOCK_MS = 30000;         // drives overdue arithmetic only; nothing renders seconds
-const NAV_REVEAL_Y = 96;        // how near the top edge the pointer must come to summon the nav
-const NAV_IDLE_MS = 1800;       // how long it waits before hiding itself again unattended
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'cases', label: 'Case files' },
   { id: 'reporting', label: 'Reporting' },
   { id: 'calendar', label: 'Class calendar' },
+  { id: 'flashcards', label: 'Flashcards' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -111,87 +112,34 @@ export default function App() {
 
   const openCase = useCallback(id => { setActiveCaseId(id); go('cases'); }, [go]);
 
-  /* The nav is summoned by moving the pointer near the top edge.
-   *
-   * The class is toggled straight on the node and only when the threshold is
-   * actually crossed — never through React state. A pointermove that set state
-   * would re-render the entire app on every mouse move, which would make the
-   * whole dashboard feel broken to save one line of code.
-   *
-   * It starts hidden on EVERY device — no media query force-shows it — and a
-   * press in the same band summons it where there is no mouse to hover with. */
+  /* The nav is always on screen.
+
+     It used to be summoned by putting the pointer near the top edge, which
+     meant a whole apparatus: a threshold test on every pointermove, an idle
+     timer to close it again, a guard so a stationary cursor aiming at it was
+     never yanked away, and a safety net for the case where the pointer leaves
+     through the top of the window into the browser's own chrome and the last
+     reported y latches it open forever. All of it is gone.
+
+     What is left is the one thing the layout still needs: the shell has to
+     start below the bar, and the bar is `position: fixed` so it contributes no
+     height of its own. Its measured height is published as --nav-h rather than
+     hard-coded, because the pill wraps to a second line on a narrow window and
+     a constant would be wrong exactly when it mattered. */
   const barRef = useRef(null);
   useEffect(() => {
     const el = barRef.current;
     if (!el) return undefined;
 
-    let open = false;
-    let idle = 0;
-    let px = -1;
-    let py = -1;
-
-    const set = next => {
-      if (next === open) return;
-      open = next;
-      el.classList.toggle('is-open', open);
+    const publish = () => {
+      document.documentElement.style.setProperty('--nav-h', `${Math.round(el.offsetHeight)}px`);
     };
+    publish();
 
-    /* Keep it up while it is genuinely being used, so a motionless pointer
-     * resting on it — about to click — is never yanked out from under the user.
-     *
-     * This tests the last reported pointer position against the bar's box
-     * rather than asking CSS `:hover`. While hidden the bar is
-     * pointer-events:none, so when it fades in beneath a stationary cursor
-     * there is no pointer movement left to make :hover true, and a hover-based
-     * guard would let the idle timer hide it while the user is aiming at it. */
-    const inUse = () => {
-      if (el.querySelector(':focus-visible')) return true;
-      const nav = el.querySelector('.topbar__nav');
-      if (!nav) return false;
-      const r = nav.getBoundingClientRect();
-      return px >= r.left && px <= r.right && py >= r.top && py <= r.bottom;
-    };
-
-    const close = () => { clearTimeout(idle); set(false); };
-
-    /* The safety net. Leaving through the TOP edge into the browser's own
-     * chrome is the common case and the worst one: the final pointermove
-     * reports y ~ 0, which latches the bar open, and no leave event is
-     * guaranteed to follow. So an armed timer closes it once the pointer has
-     * stopped reporting from the top band — unless it is being used, in which
-     * case it re-arms and keeps watching. */
-    const arm = () => {
-      clearTimeout(idle);
-      idle = setTimeout(() => { if (inUse()) arm(); else close(); }, NAV_IDLE_MS);
-    };
-
-    const onMove = e => {
-      px = e.clientX;
-      py = e.clientY;
-      if (py <= NAV_REVEAL_Y) { set(true); arm(); }
-      else close();
-    };
-
-    /* The shell has to start below this band, or reaching for the first row of
-       controls summons a bar nobody asked for. Publishing the constant is what
-       keeps the padding honest if this number ever changes. */
-    document.documentElement.style.setProperty('--nav-reveal', `${NAV_REVEAL_Y}px`);
-
-    window.addEventListener('pointermove', onMove, { passive: true });
-    window.addEventListener('pointerdown', onMove, { passive: true });
-    // Pointer left the page entirely, or the window lost focus (alt-tab, a
-    // second monitor) — either way the mouse is not "there" any more.
-    document.addEventListener('mouseleave', close);
-    document.addEventListener('pointerleave', close);
-    window.addEventListener('blur', close);
-    return () => {
-      clearTimeout(idle);
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerdown', onMove);
-      document.removeEventListener('mouseleave', close);
-      document.removeEventListener('pointerleave', close);
-      window.removeEventListener('blur', close);
-    };
+    if (typeof ResizeObserver !== 'function') return undefined;
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   let body = null;
@@ -223,9 +171,14 @@ export default function App() {
         onMutate={refresh}
       />
     );
+  } else if (view === 'flashcards') {
+    // Its own store (decks/cards); nothing to do with projects.
+    body = <Flashcards />;
   } else if (view === 'calendar') {
-    // Reads a bundled .ics and nothing else — no projects, no server.
-    body = <Calendar now={now} />;
+    // The timetable itself is the bundled .ics; projects are what hangs on it —
+    // a case named after a course puts that course's quizzes, exams, readings
+    // and deadlines onto its classes.
+    body = <Calendar now={now} projects={projects} />;
   } else if (view === 'reporting') {
     // onRefresh lets Reporting refetch after it reorders a case.
     body = <Reporting projects={projects} now={now} onSelectCase={openCase} onRefresh={refresh} />;
@@ -259,6 +212,11 @@ export default function App() {
           {body}
         </BuildStage>
       </main>
+
+      {/* Outside <main> and outside the keyed BuildStage: the pad belongs to the
+          app rather than to whichever screen is showing, so navigating must not
+          remount it and throw away what is being typed. */}
+      <NotesDrawer />
     </div>
   );
 }

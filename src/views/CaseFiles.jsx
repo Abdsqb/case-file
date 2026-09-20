@@ -1,5 +1,5 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Check, ChevronRight, FolderPlus, Plus, RotateCcw, Trash2 } from 'lucide-react'
 
 import {
   Card,
@@ -17,7 +17,8 @@ import {
   Trend,
 } from '../ui/primitives.jsx'
 import { DotMatrix, MiniBars } from '../ui/charts.jsx'
-import IsoCase from '../ui/IsoCase.jsx'
+import CaseGraph from '../ui/CaseGraph.jsx'
+import { buildGraph } from '../lib/graph.js'
 import api from '../lib/api.js'
 import { applyWalk, siblingWalk } from '../lib/reorder.js'
 import {
@@ -29,6 +30,7 @@ import {
   rangeOf,
   recommendations,
   statusTone,
+  urgencyTone,
 } from '../lib/metrics.js'
 
 /* ============================================================================
@@ -312,12 +314,25 @@ function EntryRow({
   subCount = 0,
   subsOpen = true,
   from = null,
+  canDrag = false,
+  dragging = false,
+  accepts = false,
+  dragHint = null,
   onToggleSubs,
   onPatch,
   onDelete,
   onAddSub,
+  onDragStart,
+  onDragEnd,
+  onDropEntry,
 }) {
   const [editing, setEditing] = useState(false)
+  const [over, setOver] = useState(false)
+  /* dragenter and dragleave fire again for every child the pointer crosses, so
+     a plain boolean flickers the highlight off the moment the cursor moves from
+     the row onto the title inside it. Counting enters against leaves is what
+     makes the state describe the row rather than whatever is under the cursor. */
+  const overDepth = useRef(0)
   const [draft, setDraft] = useState(entry.title || '')
   const [dateOpen, setDateOpen] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -349,7 +364,9 @@ function EntryRow({
   const effectiveDue = ownDue === null ? toMs(inheritedDue) : ownDue
   const inherited = ownDue === null && effectiveDue !== null
   const completed = !!entry.completed
-  const tone = completed ? 'done' : statusTone(effectiveDue, now)
+  // Same convention as the case pins: the status square on a row and the pin on
+  // the diagram are the same fact, and must never disagree about it.
+  const tone = completed ? 'done' : urgencyTone(effectiveDue, now)
   const statusMod = completed ? 'done' : tone === 'none' ? 'open' : tone
 
   const commit = () => {
@@ -370,14 +387,54 @@ function EntryRow({
         ? `Due ${dueLabel}, inherited from the parent entry. Set an own due date`
         : `Due ${dueLabel}. Change the due date`
 
+  /* Editing has to switch dragging off: a draggable ancestor swallows the
+     press-and-sweep that selects text, so the title field would become
+     impossible to select inside. */
+  const grabbable = canDrag && !editing && !disabled
+
+  const leaveDrop = () => { overDepth.current = 0; setOver(false) }
+
   return (
     <div
       className={cx(
         'entry',
         completed && 'entry--done',
         !completed && tone === 'overdue' && 'entry--overdue',
-        (confirm || dateOpen || editing) && 'is-open'
+        (confirm || dateOpen || editing) && 'is-open',
+        dragging && 'entry--dragging',
+        accepts && over && 'entry--drop'
       )}
+      draggable={grabbable || undefined}
+      title={dragHint || undefined}
+      onDragStart={grabbable ? (e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        /* Some browsers refuse to start a drag with no payload at all. */
+        try { e.dataTransfer.setData('text/plain', String(entry.id)) } catch { /* ignore */ }
+        if (onDragStart) onDragStart()
+      } : undefined}
+      onDragEnd={grabbable ? () => { leaveDrop(); if (onDragEnd) onDragEnd() } : undefined}
+      /* Always attached, and each one asks whether it should act. Hanging them
+         off `accepts` instead meant a row only became a drop target once React
+         had re-rendered from the dragstart — fine for a hand-held drag, which
+         has frames to spare, but it made the target depend on a render landing
+         between two events that can arrive back to back. */
+      onDragOver={(e) => {
+        if (!accepts) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+      }}
+      onDragEnter={() => { if (accepts) { overDepth.current += 1; setOver(true) } }}
+      onDragLeave={() => {
+        if (!accepts) return
+        overDepth.current -= 1
+        if (overDepth.current <= 0) leaveDrop()
+      }}
+      onDrop={(e) => {
+        if (!accepts) return
+        e.preventDefault()
+        leaveDrop()
+        if (onDropEntry) onDropEntry()
+      }}
     >
       <span className={`entry__status entry__status--${statusMod}`} aria-hidden="true" />
 
@@ -529,6 +586,18 @@ function EntryRow({
 
 export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate }) {
   const list = useMemo(() => (Array.isArray(projects) ? projects.filter(Boolean) : []), [projects])
+  const loadFolders = useCallback(async () => {
+    try {
+      setFolders(await api.listCaseFolders())
+    } catch {
+      // A folder list that will not load must not take the whole screen with
+      // it — the cases are the point, the grouping is a convenience.
+      setFolders([])
+    }
+  }, [])
+
+  useEffect(() => { loadFolders() }, [loadFolders])
+
   const ordered = useMemo(() => orderCases(list), [list])
 
   const activeId = useMemo(() => {
@@ -635,6 +704,109 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
   // sub-cases. null means the case itself.
   const [subScope, setSubScope] = useState(null)
 
+  /* Case folders. A folder groups cases in the strip and nothing more — the
+     cases inside it stay standalone, each with its own screen, entries and
+     diagram. That is the whole difference from a sub-case, which is scoped
+     INSIDE its parent and rolls its entries up into it. */
+  const [folders, setFolders] = useState([])
+  /* Which folders are shut. Persisted, because a folder you collapsed to get the
+     bar under control should stay collapsed next time you open the app —
+     otherwise the tidying has to be redone every reload. */
+  const [shut, setShut] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem('case-folders-shut')
+      return new Set(raw ? JSON.parse(raw) : [])
+    } catch {
+      return new Set()
+    }
+  })
+
+  /* The centre slot is a deck of two panels sharing one space: the entries
+     first, because they are what the screen is for, and the structure behind
+     them as the picture of the same thing.
+
+     The wheel used to flip between them. It no longer does: a page where
+     scrolling silently swaps one panel for another gives you no way to simply
+     read a long list, and the gesture was doing two jobs badly. The list now
+     scrolls the way a list scrolls, and the pair of dots at the corner is the
+     only thing that switches panels. */
+  const [deckView, setDeckView] = useState('entries')
+  const deckRef = useRef(null)
+
+  const showDeck = useCallback((next) => {
+    setDeckView((cur) => (cur === next ? cur : next))
+  }, [])
+
+  /* Expanding a folder can push the case bar onto a second line, and the whole
+     page below it used to jump by exactly one row height. Nothing animates an
+     auto height, so the head's measured height is written onto a wrapper that
+     does have a transition — the layout still reflows instantly underneath, but
+     the wrapper takes ~300ms to hand the space over. */
+  const headRef = useRef(null)
+  const [headH, setHeadH] = useState(null)
+
+  useLayoutEffect(() => {
+    const el = headRef.current
+    if (!el || typeof ResizeObserver !== 'function') return undefined
+    const ro = new ResizeObserver(() => setHeadH(el.offsetHeight))
+    ro.observe(el)
+    setHeadH(el.offsetHeight)
+    return () => ro.disconnect()
+  }, [])
+
+  /* Switching case replays the arrival — the flanking cards fly back in from
+     their own side, the deck's title lifts — so a switch reads as the screen
+     being rebuilt for the new case rather than text quietly changing.
+
+     Deliberately NOT a remount. Keying the panels on the case is exactly what
+     used to tear the whole screen down and make it flicker, and it would also
+     throw the diagram's morph away — the ground is meant to flow from one
+     case's shape into the next, not pop. So the class goes onto the bento that
+     is already standing, and only the cards around the diagram replay.
+
+     Removing the class, reading offsetWidth and re-adding it is the part that
+     actually matters: without that forced reflow the browser coalesces the two
+     class changes into no change at all, and the animation never restarts. */
+  const bentoRef = useRef(null)
+  const lastCase = useRef(activeId)
+
+  useLayoutEffect(() => {
+    if (lastCase.current === activeId) return undefined
+    lastCase.current = activeId
+
+    const el = bentoRef.current
+    if (!el) return undefined
+    // The first case can land after the data does, mid-build. Letting both run
+    // would start the cards, then restart them a frame later.
+    if (el.closest('.view.is-building')) return undefined
+
+    el.classList.remove('is-swapping')
+    void el.offsetWidth
+    el.classList.add('is-swapping')
+
+    /* Dropped once spent — the same fail-safe as every other gated animation
+       here. A class left on forever is how `both` fill strands content at
+       opacity 0 when an animation cannot run. */
+    const done = window.setTimeout(() => el.classList.remove('is-swapping'), 1000)
+    return () => window.clearTimeout(done)
+  }, [activeId])
+
+  const toggleFolder = useCallback((id) => {
+    setShut((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      try {
+        window.localStorage.setItem('case-folders-shut', JSON.stringify([...next]))
+      } catch {
+        // A browser refusing storage is not a reason to refuse the collapse.
+      }
+      return next
+    })
+  }, [])
+  const [folderForm, setFolderForm] = useState(null)     // {mode:'new'|'rename', id, value}
+  const [folderConfirm, setFolderConfirm] = useState(null)
+
   // a case swap must not carry another case's row state with it
   useEffect(() => {
     setSubComposer(null)
@@ -703,25 +875,19 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     return tips.find((t) => t.meta === 'Analysis') || tips[0] || null
   }, [scope, now])
 
-  const isoEntries = useMemo(
-    () =>
-      flat
-        .map((e) => ({
-          id: e.id,
-          title: e.title,
-          tone: e.completed
-            ? 'done'
-            : statusTone(e.dueDate, now) === 'overdue'
-              ? 'overdue'
-              : 'normal',
-          // Carried so a node can identify itself on hover. IsoCase formats it.
-          dueDate: e.dueDate,
-          priority: e.priority,
-          completed: e.completed,
-          isSub: e.isSub,
-        }))
-        .filter((e) => filter !== 'open' || e.tone !== 'done'),
-    [flat, now, filter]
+  /* The graph, built from the WHOLE project list rather than from flat.
+     flat is scoped to the open case's own tasks, which was right for a diagram
+     that only ever drew pins — but a graph has to show this case's sub-cases
+     and their entries too, and those live in `list` as separate projects with
+     parentId set. buildGraph walks that; see lib/graph.js. */
+  const graph = useMemo(
+    /* focus mirrors what the entries list beside it is showing: with the filter
+       on "open only" the old diagram dropped closed pins, and the graph drops
+       closed nodes for the same reason — the two halves of this panel are the
+       same data and must not disagree. "done only" left the diagram whole, and
+       still does. */
+    () => buildGraph(list, { rootId: activeId, now, focus: filter === 'open' }),
+    [list, activeId, now, filter]
   )
 
   const matrixColumns = useMemo(() => {
@@ -853,6 +1019,43 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     }
   }
 
+  const submitFolderForm = async () => {
+    if (!folderForm) return
+    const value = folderForm.value.trim()
+    if (!value) return
+    const res = await write(() =>
+      folderForm.mode === 'rename'
+        ? api.renameCaseFolder(folderForm.id, value)
+        : api.createCaseFolder(value)
+    )
+    if (res.ok) {
+      setFolderForm(null)
+      await loadFolders()
+      // A folder you just made is the one you want to be looking at.
+      if (folderForm.mode === 'new' && res.result && res.result.id) setFolderScope(res.result.id)
+    }
+  }
+
+  const deleteFolder = async () => {
+    const id = folderConfirm
+    if (!id) return
+    const res = await write(() => api.deleteCaseFolder(id))
+    if (res.ok) {
+      setFolderConfirm(null)
+      await loadFolders()
+      // The cases were unfiled rather than deleted, so the list itself changed.
+      if (onMutate) await onMutate()
+    }
+  }
+
+  const fileCase = async (caseId, folderId) => {
+    const res = await write(() => api.fileProject(caseId, folderId))
+    if (res.ok) {
+      await loadFolders()
+      if (onMutate) await onMutate()
+    }
+  }
+
   const moveCase = (id, direction) => {
     write(() => api.moveProject(id, direction))
   }
@@ -906,6 +1109,20 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
           setCaseForm({ mode: 'sub', id: activeCase.id, value: '' })
         },
       },
+      ...folders
+        .filter((f) => f.id !== (activeCase.folderId ?? null))
+        .map((f) => ({
+          key: `file-${f.id}`,
+          label: `Move to ${f.name}`,
+          onClick: () => fileCase(activeCase.id, f.id),
+        })),
+      ...(activeCase.folderId
+        ? [{
+            key: 'unfile',
+            label: 'Move out of folder',
+            onClick: () => fileCase(activeCase.id, null),
+          }]
+        : []),
       {
         key: 'delete',
         label: 'Delete case',
@@ -918,7 +1135,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     ]
     // moveCase / write are stable enough for this menu; rebuilt on every data change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCase, ordered, write])
+  }, [activeCase, ordered, write, folders])
 
   /* The sub-case bar. Slot 0 is the case itself — it is the parent, not a
      sub-case, so it is anchored: it cannot be dragged and nothing can be
@@ -963,17 +1180,39 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     write(() => applyWalk(api.moveProject, id, walk))
   }
 
-  const segItems = useMemo(
-    () =>
-      ordered
-        .filter(({ depth }) => depth === 0)
-        .map(({ project }) => ({
-          value: project.id,
-          label: project.name || 'Untitled',
-          menu: project.id === activeId ? caseMenu : undefined,
-        })),
-    [ordered, activeId, caseMenu]
+  /* The bar, as groups. Folders come first in creation order, then everything
+     unfiled — an unsorted case belongs at the end of the bar, not the front.
+     This is ONE bar: a folder is a chip inside it that expands to show its
+     cases, not a filter that hides the rest. */
+  const roots = useMemo(() => ordered.filter(({ depth }) => depth === 0), [ordered])
+
+  const chipFor = useCallback(
+    ({ project }) => ({
+      value: project.id,
+      label: project.name || 'Untitled',
+      menu: project.id === activeId ? caseMenu : undefined,
+    }),
+    [activeId, caseMenu]
   )
+
+  const groups = useMemo(() => {
+    const out = folders.map((f) => ({
+      key: f.id,
+      folder: f,
+      items: roots.filter(({ project }) => (project.folderId ?? null) === f.id),
+    }))
+    const loose = roots.filter(({ project }) => !project.folderId)
+    return { folders: out, loose }
+  }, [folders, roots])
+
+  /* A case cannot be open and invisible at the same time, so the folder holding
+     it is marked even while shut — the chip itself carries the active state. */
+  const activeFolderId = useMemo(() => {
+    const found = roots.find(({ project }) => project.id === activeId)
+    return found ? found.project.folderId ?? null : null
+  }, [roots, activeId])
+
+  const segItems = useMemo(() => groups.loose.map(chipFor), [groups, chipFor])
 
   /* ---- entry writes ----------------------------------------------- */
 
@@ -982,6 +1221,25 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     const res = await write(() => api.createTask(entryProject.id, { title, priority, dueDate }))
     return res.ok
   }
+
+  /* Dragging one entry onto another files it under it.
+
+     Only the id being dragged is kept here, plus the parent it already has, so
+     a row can tell whether accepting the drop would actually change anything.
+     Nothing is done optimistically: nesting moves a row from one list into
+     another, and a guess at that which then had to be taken back would be worse
+     than the refetch, which is immediate anyway. */
+  const [drag, setDrag] = useState(null)   // { id, parentId }
+
+  const nestTask = useCallback(
+    async (childId, parentId) => {
+      setDrag(null)
+      if (!childId || !parentId || childId === parentId) return false
+      const res = await write(() => api.updateTask(childId, { parentTaskId: parentId }))
+      return res.ok
+    },
+    [write]
+  )
 
   const createSub = async (parentId, title) => {
     const res = await write(() => api.createSubtask(parentId, title))
@@ -1034,20 +1292,145 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
 
   return (
     <>
-      <div className="viewhead">
+      {folderForm ? (
+        <div className="composer" style={{ margin: '0 0 12px' }}>
+          <Field
+            className="grow"
+            value={folderForm.value}
+            onChange={(v) => setFolderForm({ ...folderForm, value: v })}
+            placeholder={folderForm.mode === 'rename' ? 'New folder name' : 'Folder name, e.g. University'}
+            autoFocus
+            aria-label={folderForm.mode === 'rename' ? 'Rename folder' : 'New folder name'}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); submitFolderForm() }
+              if (e.key === 'Escape') { e.preventDefault(); setFolderForm(null) }
+            }}
+          />
+          <div className="composer__actions">
+            <Pill active onClick={submitFolderForm} disabled={disabled || !folderForm.value.trim()}>
+              {folderForm.mode === 'rename' ? 'Save' : 'Create'}
+            </Pill>
+            <Pill className="pill--ghost" onClick={() => setFolderForm(null)}>Cancel</Pill>
+          </div>
+        </div>
+      ) : null}
+
+      {folderConfirm ? (
+        <div className="composer" role="alert" style={{ margin: '0 0 12px' }}>
+          <span className="grow micro">
+            delete the folder "{(folders.find((f) => f.id === folderConfirm) || {}).name || ''}"?
+            its {ordered.filter((o) => o.project.folderId === folderConfirm).length} case(s) stay —
+            they just move out of it.
+          </span>
+          <div className="composer__actions">
+            <Pill className="pill--danger" onClick={deleteFolder} disabled={disabled}>
+              <Trash2 size={13} strokeWidth={1.5} aria-hidden="true" />
+              Delete folder
+            </Pill>
+            <Pill className="pill--ghost" onClick={() => setFolderConfirm(null)}>Cancel</Pill>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="headshift" style={headH == null ? undefined : { height: headH }}>
+      <div className="viewhead" ref={headRef}>
         <div className="viewhead__left">
           <span className="section-label">My cases</span>
-          {ordered.length ? (
-            <Segmented
-              items={segItems}
-              value={activeId}
-              onChange={(id) => onSelectCase && onSelectCase(id)}
-              onReorder={reorderCase}
-              label="Cases"
-            />
-          ) : (
-            <span className="micro dim">no cases yet</span>
-          )}
+
+          <div className="casebar">
+            {groups.folders.map((g) => {
+              const closed = shut.has(g.folder.id)
+              const holds = activeFolderId === g.folder.id
+              return (
+                <div
+                  key={g.folder.id}
+                  className={cx('casefold', closed && 'is-shut', holds && 'holds-active')}
+                >
+                  <button
+                    type="button"
+                    className="casefold__tab"
+                    onClick={() => toggleFolder(g.folder.id)}
+                    aria-expanded={!closed}
+                    title={closed ? `Show ${g.items.length} case(s)` : 'Collapse'}
+                  >
+                    <ChevronRight
+                      size={12}
+                      strokeWidth={1.8}
+                      className={cx('casefold__chev', !closed && 'is-open')}
+                      aria-hidden="true"
+                    />
+                    <span className="casefold__name truncate">{g.folder.name}</span>
+                    {closed ? <span className="casefold__n">{g.items.length}</span> : null}
+                  </button>
+
+                  <IconMenu
+                    label={`Actions for ${g.folder.name}`}
+                    items={[
+                      {
+                        key: 'rename',
+                        label: 'Rename folder',
+                        onClick: () => {
+                          setFolderConfirm(null)
+                          setFolderForm({ mode: 'rename', id: g.folder.id, value: g.folder.name })
+                        },
+                      },
+                      {
+                        key: 'delete',
+                        label: 'Delete folder',
+                        danger: true,
+                        onClick: () => {
+                          setFolderForm(null)
+                          setFolderConfirm(g.folder.id)
+                        },
+                      },
+                    ]}
+                  />
+
+                  {/* 0fr -> 1fr on the inline axis: collapses to nothing without
+                      anyone having to measure the strip's width in JS. */}
+                  <div className="casefold__wrap">
+                    <div className="casefold__inner">
+                      {g.items.length ? (
+                        <Segmented
+                          items={g.items.map(chipFor)}
+                          value={activeId}
+                          onChange={(id) => onSelectCase && onSelectCase(id)}
+                          onReorder={reorderCase}
+                          label={g.folder.name}
+                        />
+                      ) : (
+                        <span className="micro dim casefold__empty">empty</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+
+            {segItems.length ? (
+              <Segmented
+                items={segItems}
+                value={activeId}
+                onChange={(id) => onSelectCase && onSelectCase(id)}
+                onReorder={reorderCase}
+                label="Cases"
+              />
+            ) : null}
+
+            {!roots.length ? <span className="micro dim">no cases yet</span> : null}
+
+            <Pill
+              className="pill--micro pill--ghost casebar__add"
+              onClick={() => {
+                setFolderConfirm(null)
+                setFolderForm({ mode: 'new', id: null, value: '' })
+              }}
+              aria-label="New folder"
+            >
+              <FolderPlus size={12} strokeWidth={1.5} aria-hidden="true" />
+              <span className="pill__label">Folder</span>
+            </Pill>
+          </div>
         </div>
         <div className="viewhead__right">
           <Toggle
@@ -1060,6 +1443,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
             New case
           </Pill>
         </div>
+      </div>
       </div>
 
       {error ? (
@@ -1159,9 +1543,9 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
            place. Now only what actually differs re-renders, and the ground in
            Case structure flows from one case's shape to the next. The one thing
            the remount did want is preserved: see the key on Composer. */
-        <div className="bento">
+        <div className="bento" ref={bentoRef}>
           {/* ---------------- left column ---------------- */}
-          <div className="span-3 stack">
+          <div className="span-3 stack col col--left">
             <Card tone="sage">
               <CardHead
                 className="card__head"
@@ -1233,36 +1617,224 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
             </Card>
           </div>
 
-          {/* ---------------- centre ---------------- */}
-          <Card className="span-6">
-            <CardHead
-              className="card__head"
-              title={caseName}
-              subtitle="Case structure"
-              right={
-                <HeadRight>
+          {/* ---------------- centre: the deck ---------------- */}
+          <div
+            ref={deckRef}
+            className="deck span-6"
+            data-show={deckView}
+            role="region"
+            aria-label="Case structure and entries"
+          >
+            {/* No frame on this one, deliberately: the diagram is the object, and
+                a box around it was competing with the thing inside it. */}
+            <section
+              className="deck__panel deck__panel--structure"
+              aria-hidden={deckView !== 'structure'}
+            >
+              <header className="deckhead">
+                <div className="deckhead__titles">
+                  <h2 className="deckhead__title truncate">{caseName}</h2>
+                  <p className="deckhead__sub">Case structure</p>
+                </div>
+                {/* Absolutely placed, so the title stays optically centred in the
+                    panel rather than centred in whatever is left beside them. */}
+                <div className="deckhead__aside">
                   <span className="micro dim nowrap">
-                    {isoEntries.length} {isoEntries.length === 1 ? 'node' : 'nodes'}
+                    {graph.nodes.length} {graph.nodes.length === 1 ? 'node' : 'nodes'}
                   </span>
                   <IconMenu items={caseMenu} label={`Actions for ${caseName}`} />
-                </HeadRight>
-              }
-            />
-            <div className="card__body card__body--center">
-              <div style={{ width: '100%', maxWidth: '560px', margin: '0 auto' }}>
-                <IsoCase entries={isoEntries} completion={stats.completion} seed={activeCase.id} />
+                </div>
+              </header>
+
+              <div className="deck__body deck__body--center">
+                <div style={{ width: '100%', maxWidth: '560px', margin: '0 auto' }}>
+                  <CaseGraph graph={graph} now={now} seed={activeCase.id} />
+                </div>
               </div>
+
+              <div className="deck__foot">
+                <span className="nowrap">{nextDueText}</span>
+                <span style={{ flex: '0 1 220px', minWidth: '120px' }}>
+                  <Meter value={stats.completion} label={`Completion of ${caseName}`} />
+                </span>
+              </div>
+            </section>
+
+            <section
+              className="deck__panel deck__panel--entries"
+              aria-hidden={deckView !== 'entries'}
+            >
+            <Card className="deck__card">
+              <CardHead
+                className="card__head"
+                title="Entries"
+                subtitle={
+                  `${entryStats.open} open · ${entryStats.overdue} late · ${entryStats.total} logged` +
+                  (entryProject && entryProject.id !== activeId ? ` · in ${entryProject.name || 'sub-case'}` : '')
+                }
+                right={
+                  <HeadRight>
+                    <PillSelect
+                      value={filter}
+                      options={FILTER_OPTIONS}
+                      onChange={setFilter}
+                      label="Filter entries"
+                      align="end"
+                    />
+                    <IconMenu items={sortMenu} label="Sort entries" />
+                  </HeadRight>
+                }
+              />
+              <div className="card__body">
+                <div className="subbar">
+                  <span className="section-label">Sub-cases</span>
+                  <Segmented
+                    items={subItems}
+                    value={entryProject ? entryProject.id : activeId}
+                    onChange={(id) => setSubScope(id === activeId ? null : id)}
+                    onReorder={reorderSub}
+                    label="Sub-cases"
+                  />
+                  <Pill
+                    className="pill--micro"
+                    disabled={disabled}
+                    onClick={() => {
+                      setCaseConfirm(null)
+                      setCaseForm({ mode: 'sub', id: activeId, value: '' })
+                    }}
+                  >
+                    <Plus size={12} strokeWidth={1.5} aria-hidden="true" />
+                    Sub-case
+                  </Pill>
+                </div>
+
+                {/* The single thing worth remounting on a switch: a half-typed
+                    entry must not follow you into a different case. */}
+                <Composer key={activeCase.id} disabled={disabled} onCreate={createEntry} />
+
+                {rows.length === 0 ? (
+                  <EmptyState
+                    lead={filter === 'all' ? 'No entries in this case yet.' : 'Nothing matches this filter.'}
+                    hint={
+                      filter === 'all'
+                        ? 'Log the first one above — it lands here immediately.'
+                        : 'Widen the filter to see the rest of the case.'
+                    }
+                    action={
+                      filter === 'all' ? null : (
+                        <Pill onClick={() => setFilter('all')}>Show everything</Pill>
+                      )
+                    }
+                  />
+                ) : (
+                  <div className="entrylist">
+                    {rows.map(({ task, due, subs, from }) => {
+                      const open = !collapsed.includes(task.id)
+                      const composing = subComposer === task.id
+                      const showBlock = (open && subs.length > 0) || composing
+                      return (
+                        <Fragment key={task.id}>
+                          <EntryRow
+                            entry={task}
+                            now={now}
+                            disabled={disabled}
+                            subCount={subs.length}
+                            subsOpen={open}
+                            from={from}
+                            /* An entry holding subtasks cannot itself become
+                               one — that would be a third level — so it is not
+                               offered as something to drag, and says why. */
+                            canDrag={subs.length === 0}
+                            dragHint={
+                              subs.length === 0
+                                ? 'Drag onto another entry to file it as a subtask'
+                                : 'Has subtasks of its own, so it cannot be filed under another entry'
+                            }
+                            dragging={!!drag && drag.id === task.id}
+                            accepts={!!drag && drag.id !== task.id && drag.parentId !== task.id}
+                            onDragStart={() => setDrag({ id: task.id, parentId: null })}
+                            onDragEnd={() => setDrag(null)}
+                            onDropEntry={() => nestTask(drag && drag.id, task.id)}
+                            onToggleSubs={() =>
+                              setCollapsed((prev) =>
+                                prev.includes(task.id)
+                                  ? prev.filter((id) => id !== task.id)
+                                  : [...prev, task.id]
+                              )
+                            }
+                            onPatch={(patch) => patchTask(task.id, patch)}
+                            onDelete={() => removeTask(task.id)}
+                            onAddSub={() => {
+                              setCollapsed((prev) => prev.filter((id) => id !== task.id))
+                              setSubComposer(task.id)
+                            }}
+                          />
+
+                          {showBlock ? (
+                            <div className="subtasks">
+                              {open
+                                ? subs.map(({ sub }) => (
+                                    <EntryRow
+                                      key={sub.id}
+                                      entry={sub}
+                                      now={now}
+                                      isSub
+                                      inheritedDue={due}
+                                      disabled={disabled}
+                                      /* A subtask can be dragged to a different
+                                         entry, but nothing may be filed under
+                                         it. */
+                                      canDrag
+                                      dragHint="Drag onto another entry to move it there"
+                                      dragging={!!drag && drag.id === sub.id}
+                                      onDragStart={() => setDrag({ id: sub.id, parentId: task.id })}
+                                      onDragEnd={() => setDrag(null)}
+                                      onPatch={(patch) => patchTask(sub.id, patch)}
+                                      onDelete={() => removeTask(sub.id)}
+                                    />
+                                  ))
+                                : null}
+                              {composing ? (
+                                <SubComposer
+                                  disabled={disabled}
+                                  onCreate={(title) => createSub(task.id, title)}
+                                  onCancel={() => setSubComposer(null)}
+                                />
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </Fragment>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </Card>
+            </section>
+
+            {/* The only way to switch panels, now that the wheel does not. */}
+            <div className="deck__dots" role="tablist" aria-label="Switch panel">
+              {[['entries', 'Entries'], ['structure', 'Case structure']].map(([k, lbl]) => (
+                <button
+                  key={k}
+                  type="button"
+                  role="tab"
+                  aria-selected={deckView === k}
+                  aria-label={lbl}
+                  title={lbl}
+                  className={cx('deck__dot', deckView === k && 'is-on')}
+                  onClick={() => showDeck(k)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); showDeck('structure') }
+                    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); showDeck('entries') }
+                  }}
+                />
+              ))}
             </div>
-            <div className="card__foot">
-              <span className="nowrap">{nextDueText}</span>
-              <span style={{ flex: '0 1 220px', minWidth: '120px' }}>
-                <Meter value={stats.completion} label={`Completion of ${caseName}`} />
-              </span>
-            </div>
-          </Card>
+          </div>
 
           {/* ---------------- right column ---------------- */}
-          <div className="span-3 stack">
+          <div className="span-3 stack col col--right">
             <Card>
               <CardHead
                 className="card__head"
@@ -1358,131 +1930,6 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
             </Card>
           </div>
 
-          {/* ---------------- the entry list ---------------- */}
-          <Card className="span-12">
-            <CardHead
-              className="card__head"
-              title="Entries"
-              subtitle={
-                `${entryStats.open} open · ${entryStats.overdue} late · ${entryStats.total} logged` +
-                (entryProject && entryProject.id !== activeId ? ` · in ${entryProject.name || 'sub-case'}` : '')
-              }
-              right={
-                <HeadRight>
-                  <PillSelect
-                    value={filter}
-                    options={FILTER_OPTIONS}
-                    onChange={setFilter}
-                    label="Filter entries"
-                    align="end"
-                  />
-                  <IconMenu items={sortMenu} label="Sort entries" />
-                </HeadRight>
-              }
-            />
-            <div className="card__body">
-              <div className="subbar">
-                <span className="section-label">Sub-cases</span>
-                <Segmented
-                  items={subItems}
-                  value={entryProject ? entryProject.id : activeId}
-                  onChange={(id) => setSubScope(id === activeId ? null : id)}
-                  onReorder={reorderSub}
-                  label="Sub-cases"
-                />
-                <Pill
-                  className="pill--micro"
-                  disabled={disabled}
-                  onClick={() => {
-                    setCaseConfirm(null)
-                    setCaseForm({ mode: 'sub', id: activeId, value: '' })
-                  }}
-                >
-                  <Plus size={12} strokeWidth={1.5} aria-hidden="true" />
-                  Sub-case
-                </Pill>
-              </div>
-
-              {/* The single thing worth remounting on a switch: a half-typed
-                  entry must not follow you into a different case. */}
-              <Composer key={activeCase.id} disabled={disabled} onCreate={createEntry} />
-
-              {rows.length === 0 ? (
-                <EmptyState
-                  lead={filter === 'all' ? 'No entries in this case yet.' : 'Nothing matches this filter.'}
-                  hint={
-                    filter === 'all'
-                      ? 'Log the first one above — it lands here immediately.'
-                      : 'Widen the filter to see the rest of the case.'
-                  }
-                  action={
-                    filter === 'all' ? null : (
-                      <Pill onClick={() => setFilter('all')}>Show everything</Pill>
-                    )
-                  }
-                />
-              ) : (
-                <div className="entrylist">
-                  {rows.map(({ task, due, subs, from }) => {
-                    const open = !collapsed.includes(task.id)
-                    const composing = subComposer === task.id
-                    const showBlock = (open && subs.length > 0) || composing
-                    return (
-                      <Fragment key={task.id}>
-                        <EntryRow
-                          entry={task}
-                          now={now}
-                          disabled={disabled}
-                          subCount={subs.length}
-                          subsOpen={open}
-                          from={from}
-                          onToggleSubs={() =>
-                            setCollapsed((prev) =>
-                              prev.includes(task.id)
-                                ? prev.filter((id) => id !== task.id)
-                                : [...prev, task.id]
-                            )
-                          }
-                          onPatch={(patch) => patchTask(task.id, patch)}
-                          onDelete={() => removeTask(task.id)}
-                          onAddSub={() => {
-                            setCollapsed((prev) => prev.filter((id) => id !== task.id))
-                            setSubComposer(task.id)
-                          }}
-                        />
-
-                        {showBlock ? (
-                          <div className="subtasks">
-                            {open
-                              ? subs.map(({ sub }) => (
-                                  <EntryRow
-                                    key={sub.id}
-                                    entry={sub}
-                                    now={now}
-                                    isSub
-                                    inheritedDue={due}
-                                    disabled={disabled}
-                                    onPatch={(patch) => patchTask(sub.id, patch)}
-                                    onDelete={() => removeTask(sub.id)}
-                                  />
-                                ))
-                              : null}
-                            {composing ? (
-                              <SubComposer
-                                disabled={disabled}
-                                onCreate={(title) => createSub(task.id, title)}
-                                onCancel={() => setSubComposer(null)}
-                              />
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </Fragment>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </Card>
         </div>
       )}
     </>

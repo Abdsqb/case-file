@@ -12,8 +12,11 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
        y -> (-0.866, +0.5)
        z -> ( 0.000, -1.0)
 
-   <IsoCase entries={[{ id, title, tone:'normal'|'overdue'|'done' }]}
+   <IsoCase entries={[{ id, title, tone:'normal'|'soon'|'urgent'|'overdue'|'done' }]}
             completion={0..1} />
+
+   `soon` is "inside the deadline window" — the caller decides what that means
+   (see statusTone), this only renders it.
 ============================================================================ */
 
 /* --------------------------------------------------------------- geometry */
@@ -416,6 +419,7 @@ function tipMeta(e) {
     );
   } else bits.push('no date');
   if (e.tone === 'overdue') bits.push('overdue');
+  else if (e.tone === 'soon') bits.push('due soon');
   if (e.priority === 'high') bits.push('high');
   if (e.isSub) bits.push('subtask');
   return bits.join(' · ');
@@ -426,7 +430,14 @@ function buildNodes(entries, count, heightAt) {
   const a = spiralScale(count);
   for (let i = 0; i < count; i += 1) {
     const e = entries[i] || {};
-    const tone = e.tone === 'overdue' ? 'overdue' : e.tone === 'done' ? 'done' : 'normal';
+    /* Anything unrecognised falls back to `normal` rather than throwing away the
+       pin, so an older caller that knows nothing of `soon` still renders. */
+    const tone =
+      e.tone === 'overdue' ? 'overdue'
+      : e.tone === 'done' ? 'done'
+      : e.tone === 'urgent' ? 'urgent'
+      : e.tone === 'soon' ? 'soon'
+      : 'normal';
     const [x, y] = spiralPos(i, a);
     // The ground under this pin. Every part of the pin is measured from here, so
     // it stands ON the terrain instead of floating at the old z = 0 plane.
@@ -436,7 +447,12 @@ function buildNodes(entries, count, heightAt) {
     const top = px(x, y, h);
     out.push({
       id: e.id != null ? `${e.id}` : `n${i}`,
-      cls: tone === 'overdue' ? 'hot' : tone === 'done' ? 'done' : '',
+      cls:
+        tone === 'overdue' ? 'hot'
+        : tone === 'done' ? 'done'
+        : tone === 'urgent' ? 'urgent'
+        : tone === 'soon' ? 'soon'
+        : '',
       depth: x + y,
       ground: g,
       stem: seg(x, y, g, x, y, h),
@@ -513,13 +529,34 @@ const CSS = `
 /* One hue per state, declared once on the pin group. Every part of a pin reads
    --pin from its parent, so hover and the build animation never have to know
    which state they are dressing, and a fourth state would be one line. */
-.ic-pin-g      {--pin:var(--pin-open)}   /* open */
-.ic-pin-g.hot  {--pin:var(--pin-late)}   /* overdue */
-.ic-pin-g.done {--pin:var(--pin-done)}   /* closed */
+.ic-pin-g        {--pin:var(--pin-open)}   /* open, nothing imminent */
+.ic-pin-g.soon   {--pin:var(--pin-soon)}   /* due inside the window */
+/* Urgent and overdue share the red. What separates them is that overdue
+   breathes — see the blink below. */
+.ic-pin-g.urgent {--pin:var(--pin-late)}   /* due today or tomorrow */
+.ic-pin-g.hot    {--pin:var(--pin-late)}   /* past due */
+.ic-pin-g.done   {--pin:var(--pin-done)}   /* closed */
+
+/* Overdue blinks. A slow breath rather than a strobe: anything faster than
+   about 3Hz is a seizure risk, and this needs to nag without being a hazard.
+   Scoped with :not(.ic-armed) because this rule out-specifies the pin-pop
+   entrance, and would otherwise replace it while the screen is still building. */
+@keyframes pin-blink{0%,100%{opacity:1}50%{opacity:.3}}
+.ic-still-pins .ic-pin-g.hot .ic-node,
+.ic-still-pins .ic-pin-g.hot .ic-pip,
+.ic-still-pins .ic-pin-g.hot .ic-stem{animation:none !important;opacity:1}
+.ic-svg:not(.ic-armed) .ic-pin-g.hot .ic-node,
+.ic-svg:not(.ic-armed) .ic-pin-g.hot .ic-pip,
+.ic-svg:not(.ic-armed) .ic-pin-g.hot .ic-stem{
+  animation:pin-blink 1500ms ease-in-out infinite}
 
 /* An opaque fill punches a black hole in the wireframe, so a pin is a
    translucent plate — the mesh still shows through it. */
 .ic-node{fill:var(--pin);fill-opacity:.72;stroke:var(--pin);stroke-width:2;vector-effect:non-scaling-stroke}
+/* The white state sits closest in value to the --fg mesh it stands on, so it
+   carries less fill and leans on its outline to stay a marker, not a blob. */
+.ic-pin-g:not(.soon):not(.hot):not(.done) .ic-node{fill-opacity:.5}
+.ic-pin-g:not(.soon):not(.hot):not(.done) .ic-shadow{fill-opacity:.4}
 .ic-stem{fill:none;stroke:var(--pin);stroke-width:1.3;vector-effect:non-scaling-stroke;opacity:.9}
 .ic-shadow{fill:var(--pin);fill-opacity:.55;stroke:none}
 /* The plate is near-opaque now, so a pip in the plate's own colour was dead ink.
@@ -561,8 +598,9 @@ const CSS = `
    so the plate lands first and the wall knits upward out of it. Layers then
    fade in sequence, and the entry nodes drop in last. Everything replays on
    navigation because the whole view subtree is remounted by key. */
-@keyframes ic-build{from{clip-path:inset(100% 0 0 0)}to{clip-path:inset(0 0 0 0)}}
 @keyframes ic-layer{from{opacity:0}to{opacity:var(--ic-o,1)}}
+/* The surface landing. transform + opacity only, so it stays on the compositor. */
+@keyframes ic-rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
 /* A pin being planted: it rises out of the plate, overshoots, and settles.
    The overshoot is what makes it read as a pop rather than a fade. */
 @keyframes ic-pin{
@@ -573,12 +611,20 @@ const CSS = `
 /* Its stem grows upward out of the floor to meet it. */
 @keyframes ic-stemup{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 
-.is-building .ic-svg{animation:ic-build 880ms cubic-bezier(0.16,1,0.3,1) both}
+/* Deliberately NOT a clip-path reveal on .ic-svg any more. clip-path cannot be
+   composited, so animating it on the root re-rasterised all ~740 child nodes on
+   every frame for 880ms. The staged group fades below already read as the thing
+   assembling; the face layer keeps a short rise so it still lands rather than
+   merely appearing. */
 
-.is-building .ic-cage{--ic-o:.3;animation:ic-layer 420ms linear 60ms both}
-.is-building .ic-cage-edge{--ic-o:.5;animation:ic-layer 420ms linear 140ms both}
-.is-building .ic-face{animation:ic-layer 460ms linear 240ms both}
-.is-building .ic-mesh{--ic-o:.6;animation:ic-layer 460ms linear 340ms both}
+/* One animation per stage, on the wrapping group. The children keep their own
+   resting opacity (.ic-cage is .3, .ic-mesh is .6) and group opacity multiplies
+   with it, so nothing needed a per-element target value — which is why --ic-o
+   is gone from these four. */
+.is-building .ic-l-cage{animation:ic-layer 420ms linear 60ms both}
+.is-building .ic-l-edge{animation:ic-layer 420ms linear 140ms both}
+.is-building .ic-l-face{animation:ic-rise 460ms cubic-bezier(0.16,1,0.3,1) 240ms both}
+.is-building .ic-l-mesh{animation:ic-layer 460ms linear 340ms both}
 
 /* Pins arrive after the structure exists to receive them, and one at a time.
    --i is set inline per node; because the node list is depth-sorted for
@@ -612,9 +658,12 @@ const CSS = `
 .is-building .ic-label{animation:ic-layer 420ms linear 820ms both}
 
 @media (prefers-reduced-motion: reduce){
+  .ic-pin-g.hot .ic-node,.ic-pin-g.hot .ic-pip,.ic-pin-g.hot .ic-stem{
+    animation:none !important;opacity:1}
   .ic-pulse{animation:none;opacity:.62}
   .ic-g{transform:none !important}
   .ic-svg,.ic-face,.ic-mesh,.ic-cage,.ic-cage-edge,
+  .ic-l-cage,.ic-l-edge,.ic-l-face,.ic-l-mesh,
   .ic-node,.ic-pip,.ic-stem,.ic-shadow,
   .ic-label{animation:none !important;clip-path:none !important;transform:none !important}
 }
@@ -925,7 +974,10 @@ export default function IsoCase({ entries = [], completion = 0, className = '', 
       ref={svgRef}
       className={
         `ic-svg${armed ? ' ic-armed' : ''}${morphing ? ' ic-morphing' : ''}` +
-        `${className ? ` ${className}` : ''}`
+        /* The blink is the one animation here that runs forever, so the app's
+           own reduced-motion setting has to be able to stop it — a media query
+           alone would only honour the OS preference. */
+        `${prefs.reduced ? ' ic-still-pins' : ''}${className ? ` ${className}` : ''}`
       }
       viewBox={`0 0 ${VB_W} ${VB_H}`}
       preserveAspectRatio="xMidYMid meet"
@@ -972,33 +1024,51 @@ export default function IsoCase({ entries = [], completion = 0, className = '', 
         />
 
         {/* ---- the cage: gridded back walls and floor, behind the sheet */}
-        {CAGE_WALL.map((l) => (
-          <line key={l.key} className="ic-ln ic-cage" x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />
-        ))}
-        {CAGE_FLOOR.map((l) => (
-          <line key={l.key} className="ic-ln ic-cage" x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />
-        ))}
+        {/* Each build stage is wrapped in one group so the assembly can animate
+            four elements instead of ~740. Measured: the flat version put 736
+            individual opacity animations on screen at once, which was most of
+            the 852 running animations during a screen build and cost frames up
+            to 100ms. Group opacity also composites as a single layer, where
+            per-node opacity repainted every node every frame.
 
-        {CAGE_EDGE.map((e) => (
-          <polyline key={e.key} className="ic-ln ic-cage-edge" points={e.pts} />
-        ))}
+            Document order is untouched, so the painter's far-to-near ordering
+            and the .ic-face index-to-cell mapping the morph relies on both
+            still hold. */}
+        <g className="ic-l-cage">
+          {CAGE_WALL.map((l) => (
+            <line key={l.key} className="ic-ln ic-cage" x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />
+          ))}
+          {CAGE_FLOOR.map((l) => (
+            <line key={l.key} className="ic-ln ic-cage" x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />
+          ))}
+        </g>
+
+        <g className="ic-l-edge">
+          {CAGE_EDGE.map((e) => (
+            <polyline key={e.key} className="ic-ln ic-cage-edge" points={e.pts} />
+          ))}
+        </g>
 
         {/* ---- the surface, far to near ------------------------------------
              Shaded cells first (painter's algorithm — SVG has no z-buffer, so a
              wrong order shows as a far crest drawn over a near one), then the
              mesh riding over them. */}
-        {terrain.faces.map((f) => (
-          <polygon
-            key={f.key}
-            className="ic-face"
-            points={f.pts}
-            style={{ fill: faceFill(f.pct, ramp) }}
-          />
-        ))}
+        <g className="ic-l-face">
+          {terrain.faces.map((f) => (
+            <polygon
+              key={f.key}
+              className="ic-face"
+              points={f.pts}
+              style={{ fill: faceFill(f.pct, ramp) }}
+            />
+          ))}
+        </g>
 
-        {terrain.mesh.map((l) => (
-          <polyline key={l.key} className="ic-ln ic-mesh" points={l.pts} />
-        ))}
+        <g className="ic-l-mesh">
+          {terrain.mesh.map((l) => (
+            <polyline key={l.key} className="ic-ln ic-mesh" points={l.pts} />
+          ))}
+        </g>
 
         {/* ---- entries ---- */}
         {nodes.length === 0 ? (

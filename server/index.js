@@ -29,6 +29,7 @@ function taskRowToJson(row, subtasks = []) {
 function projectRowToJson(p, tasks) {
   return {
     id: p.id,
+    folderId: p.folder_id ?? null,
     name: p.name,
     openedAt: p.opened_at,
     parentId: p.parent_id,
@@ -92,12 +93,25 @@ app.patch('/api/projects/:projectId', (req, res) => {
   const { name } = body;
   const renaming = name !== undefined;
   const reparenting = Object.prototype.hasOwnProperty.call(body, 'parentId');
+  const refiling = Object.prototype.hasOwnProperty.call(body, 'folderId');
 
   if (renaming && (!name || !name.trim())) {
     return res.status(400).json({ error: 'name is required' });
   }
-  if (!renaming && !reparenting) {
-    return res.status(400).json({ error: 'name or parentId is required' });
+  if (!renaming && !reparenting && !refiling) {
+    return res.status(400).json({ error: 'name, parentId or folderId is required' });
+  }
+
+  /* Filing is not parenting. folderId groups a case in the strip; parentId makes
+     it a sub-case of another. They are independent, and this endpoint keeps them
+     that way — moving a case into a folder never changes its parent. */
+  let nextFolder = existing.folder_id ?? null;
+  if (refiling) {
+    nextFolder = body.folderId === null || body.folderId === '' ? null : body.folderId;
+    if (nextFolder) {
+      const f = db.prepare('SELECT id FROM case_folders WHERE id = ?').get(nextFolder);
+      if (!f) return res.status(404).json({ error: 'folder not found' });
+    }
   }
 
   /* Re-parenting. A sub-case could be created but never un-nested, so the only
@@ -138,10 +152,11 @@ app.patch('/api/projects/:projectId', (req, res) => {
     const { max } = db
       .prepare('SELECT MAX(sort_order) AS max FROM projects WHERE parent_id IS ?')
       .get(nextParent);
-    db.prepare('UPDATE projects SET name = ?, parent_id = ?, sort_order = ? WHERE id = ?')
-      .run(nextName, nextParent, (max ?? -1) + 1, projectId);
+    db.prepare('UPDATE projects SET name = ?, parent_id = ?, sort_order = ?, folder_id = ? WHERE id = ?')
+      .run(nextName, nextParent, (max ?? -1) + 1, nextFolder, projectId);
   } else {
-    db.prepare('UPDATE projects SET name = ? WHERE id = ?').run(nextName, projectId);
+    db.prepare('UPDATE projects SET name = ?, folder_id = ? WHERE id = ?')
+      .run(nextName, nextFolder, projectId);
   }
 
   const after = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
@@ -247,8 +262,57 @@ app.patch('/api/tasks/:taskId', (req, res) => {
   const priority = body.priority !== undefined ? body.priority : existing.priority;
   const dueDate = body.dueDate !== undefined ? body.dueDate : existing.due_date;
 
-  db.prepare('UPDATE tasks SET title = ?, completed = ?, priority = ?, due_date = ? WHERE id = ?')
-    .run(title, completed, priority, dueDate, taskId);
+  /* Re-parenting. `parentTaskId: <id>` makes this entry a subtask of that one;
+     `parentTaskId: null` lifts it back to being an entry in its own right.
+     Absent, nothing about its place changes.
+
+     The same one-level-deep rule the subtask route enforces applies here, and
+     it has to be checked from both ends: the entry being moved must have no
+     subtasks of its own, and the one it is moving under must not already be a
+     subtask. Either would make a grandchild. */
+  let parentTaskId = existing.parent_task_id;
+  let projectId = existing.project_id;
+
+  if (body.parentTaskId !== undefined) {
+    if (body.parentTaskId === null) {
+      parentTaskId = null;
+    } else {
+      const wanted = Number(body.parentTaskId);
+      if (!Number.isFinite(wanted)) {
+        return res.status(400).json({ error: 'parentTaskId must be a task id or null' });
+      }
+      if (wanted === taskId) {
+        return res.status(400).json({ error: 'an entry cannot be filed under itself' });
+      }
+      const parent = db.prepare('SELECT * FROM tasks WHERE id = ?').get(wanted);
+      if (!parent) {
+        return res.status(404).json({ error: 'the entry it was dropped on no longer exists' });
+      }
+      if (parent.parent_task_id) {
+        return res.status(400).json({ error: 'subtasks only go one level deep' });
+      }
+      const kids = db
+        .prepare('SELECT COUNT(*) AS n FROM tasks WHERE parent_task_id = ?')
+        .get(taskId).n;
+      if (kids > 0) {
+        return res.status(400).json({
+          error: 'this entry has subtasks of its own, so it cannot become one',
+        });
+      }
+      parentTaskId = wanted;
+      /* A subtask belongs to whatever case its parent is in — the same rule the
+         subtask route applies when it copies the parent's project. Dragging
+         across cases therefore moves the entry as well as nesting it. */
+      projectId = parent.project_id;
+    }
+  }
+
+  db.prepare(`
+    UPDATE tasks
+       SET title = ?, completed = ?, priority = ?, due_date = ?,
+           parent_task_id = ?, project_id = ?
+     WHERE id = ?
+  `).run(title, completed, priority, dueDate, parentTaskId, projectId, taskId);
 
   const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
   res.json(taskRowToJson(row));
@@ -266,6 +330,26 @@ app.delete('/api/tasks/:taskId', (req, res) => {
   res.status(204).end();
 });
 
+// ---------- the scratchpad ----------
+
+/* Always answers, even before anything has ever been written — an empty pad is
+   a perfectly good pad, and the client should not have to treat "nothing yet"
+   as a different case from "nothing in it". */
+app.get('/api/notes', (req, res) => {
+  const row = db.prepare('SELECT body, updated_at FROM notes WHERE id = 1').get();
+  res.json({ body: row ? row.body : '', updatedAt: row ? row.updated_at : null });
+});
+
+app.put('/api/notes', (req, res) => {
+  const body = req.body && typeof req.body.body === 'string' ? req.body.body : '';
+  const now = Date.now();
+  db.prepare(`
+    INSERT INTO notes (id, body, updated_at) VALUES (1, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at
+  `).run(body, now);
+  res.json({ body, updatedAt: now });
+});
+
 // ---------- the wire (global headlines) ----------
 
 app.get('/api/headlines', async (req, res) => {
@@ -280,6 +364,389 @@ app.get('/api/headlines', async (req, res) => {
 // Resolving is a POST because it can spend an LLM call and a geocode on a cache miss.
 // The client sends the headline text rather than an id so this doesn't depend on the
 // server's headline cache still holding the story the user is looking at.
+/* ------------------------------------------------------------------ *
+ * flashcards                                                          *
+ * ------------------------------------------------------------------ */
+
+const deckToJson = (r, counts) => ({
+  id: r.id,
+  name: r.name,
+  folderId: r.folder_id ?? null,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at ?? null,
+  sourceName: r.source_name ?? null,
+  // The source text itself is deliberately NOT in the list payload — it is the
+  // whole imported file, and sending every deck's copy on every list would
+  // dwarf the rest of the response. GET /decks/:id/source fetches one.
+  hasSource: !!r.source_text,
+  cardCount: counts ? counts.total : undefined,
+  dueCount: counts ? counts.due : undefined,
+});
+
+const folderToJson = (r) => ({ id: r.id, name: r.name, createdAt: r.created_at });
+
+const cardToJson = (r) => ({
+  id: r.id,
+  deckId: r.deck_id,
+  front: r.front,
+  back: r.back,
+  ef: r.ef,
+  interval: r.interval_days,
+  reps: r.reps,
+  due: r.due,
+  lastReviewed: r.last_reviewed,
+});
+
+/* Counted in one grouped pass rather than a query per deck: a term of lecture
+   decks is dozens of rows, and N+1 here would be paid on every dashboard load. */
+function deckCounts(now) {
+  const rows = db.prepare(
+    'SELECT deck_id, COUNT(*) AS total, SUM(CASE WHEN due <= ? THEN 1 ELSE 0 END) AS due FROM cards GROUP BY deck_id'
+  ).all(now);
+  const map = new Map();
+  for (const r of rows) map.set(r.deck_id, { total: r.total, due: r.due || 0 });
+  return map;
+}
+
+app.get('/api/decks', (req, res) => {
+  const now = Date.now();
+  const counts = deckCounts(now);
+  const rows = db.prepare('SELECT * FROM decks ORDER BY created_at DESC').all();
+  res.json(rows.map((r) => deckToJson(r, counts.get(r.id) || { total: 0, due: 0 })));
+});
+
+app.post('/api/decks', (req, res) => {
+  const { name, cards, folderId = null, sourceText = null, sourceName = null } = req.body ?? {};
+  if (!name || !String(name).trim()) {
+    return res.status(400).json({ error: 'name is required' });
+  }
+  if (!Array.isArray(cards) || cards.length === 0) {
+    return res.status(400).json({ error: 'cards must be a non-empty array' });
+  }
+
+  const clean = [];
+  for (const c of cards) {
+    const front = c && c.front !== undefined && c.front !== null ? String(c.front).trim() : '';
+    const back = c && c.back !== undefined && c.back !== null ? String(c.back).trim() : '';
+    if (front && back) clean.push({ front, back });
+  }
+  if (!clean.length) {
+    return res.status(400).json({ error: 'no card had both a front and a back' });
+  }
+
+  const id = randomUUID();
+  const now = Date.now();
+
+  /* One transaction: a deck that half-imported would look complete in the list
+     and be missing cards in the session, with nothing to point at why. */
+  if (folderId) {
+    const f = db.prepare('SELECT id FROM folders WHERE id = ?').get(folderId);
+    if (!f) return res.status(404).json({ error: 'folder not found' });
+  }
+
+  db.exec('BEGIN');
+  try {
+    db.prepare(
+      'INSERT INTO decks (id, name, created_at, updated_at, folder_id, source_text, source_name) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, String(name).trim(), now, now, folderId || null, sourceText, sourceName);
+    const insert = db.prepare(
+      'INSERT INTO cards (id, deck_id, front, back, ef, interval_days, reps, due, last_reviewed) VALUES (?, ?, ?, ?, 2.5, 0, 0, ?, NULL)'
+    );
+    // Every imported card is due immediately, which is what makes a fresh deck
+    // studyable the moment it lands.
+    for (const c of clean) insert.run(randomUUID(), id, c.front, c.back, now);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'import failed: ' + err.message });
+  }
+
+  res.status(201).json({
+    id,
+    name: String(name).trim(),
+    folderId: folderId || null,
+    createdAt: now,
+    updatedAt: now,
+    sourceName,
+    hasSource: !!sourceText,
+    cardCount: clean.length,
+    dueCount: clean.length,
+  });
+});
+
+app.patch('/api/decks/:deckId', (req, res) => {
+  const { deckId } = req.params;
+  const existing = db.prepare('SELECT * FROM decks WHERE id = ?').get(deckId);
+  if (!existing) return res.status(404).json({ error: 'deck not found' });
+
+  const body = req.body ?? {};
+  const renaming = body.name !== undefined;
+  const moving = Object.prototype.hasOwnProperty.call(body, 'folderId');
+  if (!renaming && !moving) return res.status(400).json({ error: 'name or folderId is required' });
+  if (renaming && !String(body.name).trim()) return res.status(400).json({ error: 'name is required' });
+
+  // null is a real destination here: it means "out of every folder".
+  let folderId = existing.folder_id ?? null;
+  if (moving) {
+    folderId = body.folderId === null || body.folderId === '' ? null : body.folderId;
+    if (folderId) {
+      const f = db.prepare('SELECT id FROM folders WHERE id = ?').get(folderId);
+      if (!f) return res.status(404).json({ error: 'folder not found' });
+    }
+  }
+  const name = renaming ? String(body.name).trim() : existing.name;
+
+  db.prepare('UPDATE decks SET name = ?, folder_id = ? WHERE id = ?').run(name, folderId, deckId);
+  res.json(deckToJson({ ...existing, name, folder_id: folderId }));
+});
+
+/* The file this deck was imported from, fetched on demand. */
+app.get('/api/decks/:deckId/source', (req, res) => {
+  const row = db.prepare('SELECT * FROM decks WHERE id = ?').get(req.params.deckId);
+  if (!row) return res.status(404).json({ error: 'deck not found' });
+  const { n } = db.prepare('SELECT COUNT(*) AS n FROM cards WHERE deck_id = ?').get(row.id);
+  res.json({
+    id: row.id,
+    name: row.name,
+    sourceName: row.source_name ?? null,
+    sourceText: row.source_text ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at ?? null,
+    cardCount: n,
+  });
+});
+
+/**
+ * Replace a deck's cards from a corrected file.
+ *
+ * Matched on the FRONT text, and this is the whole point of the endpoint. The
+ * obvious implementation — delete every card, insert the new ones — silently
+ * throws away every ease factor, interval and streak in the deck, so fixing one
+ * typo would cost a term of review history. Instead:
+ *
+ *   front unchanged -> keep the card and its schedule, update only its back
+ *   front is new    -> insert, due immediately
+ *   front is gone   -> delete that card
+ *
+ * The counts come back so the UI can say what actually happened rather than
+ * claiming a flat "replaced".
+ */
+app.post('/api/decks/:deckId/replace', (req, res) => {
+  const { deckId } = req.params;
+  const deck = db.prepare('SELECT * FROM decks WHERE id = ?').get(deckId);
+  if (!deck) return res.status(404).json({ error: 'deck not found' });
+
+  const { cards, sourceText = null, sourceName = null, name = null } = req.body ?? {};
+  if (!Array.isArray(cards) || cards.length === 0) {
+    return res.status(400).json({ error: 'cards must be a non-empty array' });
+  }
+
+  const incoming = [];
+  const seen = new Set();
+  for (const c of cards) {
+    const front = c && c.front != null ? String(c.front).trim() : '';
+    const back = c && c.back != null ? String(c.back).trim() : '';
+    if (!front || !back) continue;
+    // A file with the same question twice would otherwise keep one and delete
+    // the other on the next replace, which looks like data loss.
+    const key = front.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    incoming.push({ front, back, key });
+  }
+  if (!incoming.length) {
+    return res.status(400).json({ error: 'no card had both a front and a back' });
+  }
+
+  const now = Date.now();
+  const existing = db.prepare('SELECT * FROM cards WHERE deck_id = ?').all(deckId);
+  const byFront = new Map();
+  for (const row of existing) byFront.set(String(row.front).trim().toLowerCase(), row);
+
+  let kept = 0;
+  let added = 0;
+  let removed = 0;
+
+  db.exec('BEGIN');
+  try {
+    const updateBack = db.prepare('UPDATE cards SET back = ? WHERE id = ?');
+    const insert = db.prepare(
+      'INSERT INTO cards (id, deck_id, front, back, ef, interval_days, reps, due, last_reviewed) VALUES (?, ?, ?, ?, 2.5, 0, 0, ?, NULL)'
+    );
+    const drop = db.prepare('DELETE FROM cards WHERE id = ?');
+
+    for (const c of incoming) {
+      const match = byFront.get(c.key);
+      if (match) {
+        if (String(match.back) !== c.back) updateBack.run(c.back, match.id);
+        kept += 1;
+        byFront.delete(c.key);
+      } else {
+        insert.run(randomUUID(), deckId, c.front, c.back, now);
+        added += 1;
+      }
+    }
+    for (const orphan of byFront.values()) {
+      drop.run(orphan.id);
+      removed += 1;
+    }
+
+    db.prepare('UPDATE decks SET name = ?, source_text = ?, source_name = ?, updated_at = ? WHERE id = ?')
+      .run(name && String(name).trim() ? String(name).trim() : deck.name, sourceText, sourceName, now, deckId);
+
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'replace failed: ' + err.message });
+  }
+
+  res.json({ id: deckId, kept, added, removed, total: incoming.length });
+});
+
+/* ----------------------------------------------------------- case folders */
+
+const caseFolderToJson = (r) => ({ id: r.id, name: r.name, createdAt: r.created_at });
+
+app.get('/api/case-folders', (req, res) => {
+  res.json(db.prepare('SELECT * FROM case_folders ORDER BY created_at ASC').all().map(caseFolderToJson));
+});
+
+app.post('/api/case-folders', (req, res) => {
+  const { name } = req.body ?? {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' });
+  const id = randomUUID();
+  const now = Date.now();
+  db.prepare('INSERT INTO case_folders (id, name, created_at) VALUES (?, ?, ?)')
+    .run(id, String(name).trim(), now);
+  res.status(201).json({ id, name: String(name).trim(), createdAt: now });
+});
+
+app.patch('/api/case-folders/:folderId', (req, res) => {
+  const row = db.prepare('SELECT * FROM case_folders WHERE id = ?').get(req.params.folderId);
+  if (!row) return res.status(404).json({ error: 'folder not found' });
+  const { name } = req.body ?? {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' });
+  db.prepare('UPDATE case_folders SET name = ? WHERE id = ?').run(String(name).trim(), row.id);
+  res.json(caseFolderToJson({ ...row, name: String(name).trim() }));
+});
+
+/* Deleting a folder never deletes cases — they are unfiled. A folder is a label
+   for a group of work; losing the work because you tidied the label would be the
+   worst possible surprise, and the same rule the flashcard folders follow. */
+app.delete('/api/case-folders/:folderId', (req, res) => {
+  const row = db.prepare('SELECT id FROM case_folders WHERE id = ?').get(req.params.folderId);
+  if (!row) return res.status(404).json({ error: 'folder not found' });
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE projects SET folder_id = NULL WHERE folder_id = ?').run(row.id);
+    db.prepare('DELETE FROM case_folders WHERE id = ?').run(row.id);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'delete failed: ' + err.message });
+  }
+  res.status(204).end();
+});
+
+/* ---------------------------------------------------------------- folders */
+
+app.get('/api/folders', (req, res) => {
+  res.json(db.prepare('SELECT * FROM folders ORDER BY created_at ASC').all().map(folderToJson));
+});
+
+app.post('/api/folders', (req, res) => {
+  const { name } = req.body ?? {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' });
+  const id = randomUUID();
+  const now = Date.now();
+  db.prepare('INSERT INTO folders (id, name, created_at) VALUES (?, ?, ?)').run(id, String(name).trim(), now);
+  res.status(201).json({ id, name: String(name).trim(), createdAt: now });
+});
+
+app.patch('/api/folders/:folderId', (req, res) => {
+  const row = db.prepare('SELECT * FROM folders WHERE id = ?').get(req.params.folderId);
+  if (!row) return res.status(404).json({ error: 'folder not found' });
+  const { name } = req.body ?? {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' });
+  db.prepare('UPDATE folders SET name = ? WHERE id = ?').run(String(name).trim(), row.id);
+  res.json(folderToJson({ ...row, name: String(name).trim() }));
+});
+
+/* Deleting a folder never deletes decks. A folder is a label for a course, and
+   losing a term of cards because you tidied up the labelling would be the
+   worst kind of surprise — the decks are unfiled instead. */
+app.delete('/api/folders/:folderId', (req, res) => {
+  const row = db.prepare('SELECT id FROM folders WHERE id = ?').get(req.params.folderId);
+  if (!row) return res.status(404).json({ error: 'folder not found' });
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE decks SET folder_id = NULL WHERE folder_id = ?').run(row.id);
+    db.prepare('DELETE FROM folders WHERE id = ?').run(row.id);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'delete failed: ' + err.message });
+  }
+  res.status(204).end();
+});
+
+app.delete('/api/decks/:deckId', (req, res) => {
+  const { deckId } = req.params;
+  const existing = db.prepare('SELECT id FROM decks WHERE id = ?').get(deckId);
+  if (!existing) return res.status(404).json({ error: 'deck not found' });
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM cards WHERE deck_id = ?').run(deckId);
+    db.prepare('DELETE FROM decks WHERE id = ?').run(deckId);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'delete failed: ' + err.message });
+  }
+  res.status(204).end();
+});
+
+/* The review queue. Omit deckId to study everything due across every deck.
+   Ordered by due ascending, so the most overdue card is always next. */
+app.get('/api/cards/due', (req, res) => {
+  const now = Date.now();
+  const { deckId, folderId } = req.query;
+  let rows;
+  if (deckId) {
+    rows = db.prepare('SELECT * FROM cards WHERE deck_id = ? AND due <= ? ORDER BY due ASC').all(deckId, now);
+  } else if (folderId) {
+    // Everything due across one course.
+    rows = db.prepare(
+      'SELECT c.* FROM cards c JOIN decks d ON d.id = c.deck_id WHERE d.folder_id = ? AND c.due <= ? ORDER BY c.due ASC'
+    ).all(folderId, now);
+  } else {
+    rows = db.prepare('SELECT * FROM cards WHERE due <= ? ORDER BY due ASC').all(now);
+  }
+  res.json(rows.map(cardToJson));
+});
+
+app.patch('/api/cards/:cardId', (req, res) => {
+  const { cardId } = req.params;
+  const existing = db.prepare('SELECT * FROM cards WHERE id = ?').get(cardId);
+  if (!existing) return res.status(404).json({ error: 'card not found' });
+
+  const b = req.body ?? {};
+  const num = (v, fallback) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
+  const ef = num(b.ef, existing.ef);
+  const interval = Math.round(num(b.interval, existing.interval_days));
+  const reps = Math.round(num(b.reps, existing.reps));
+  const due = Math.round(num(b.due, existing.due));
+  const lastReviewed = b.lastReviewed === null ? null : Math.round(num(b.lastReviewed, existing.last_reviewed));
+
+  db.prepare(
+    'UPDATE cards SET ef = ?, interval_days = ?, reps = ?, due = ?, last_reviewed = ? WHERE id = ?'
+  ).run(ef, interval, reps, due, lastReviewed, cardId);
+
+  res.json(cardToJson({
+    ...existing, ef, interval_days: interval, reps, due, last_reviewed: lastReviewed,
+  }));
+});
+
 app.post('/api/headlines/locate', async (req, res) => {
   const { title } = req.body ?? {};
   if (!title || !String(title).trim()) {

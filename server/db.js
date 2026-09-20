@@ -29,6 +29,63 @@ db.exec(`
   -- clicking the same story twice never re-spends an LLM call or a Nominatim hit.
   -- Misses are cached too (place NULL) — vague headlines are common and retrying
   -- them on every click would burn the free-tier rate limit for nothing.
+  /* Flashcards. A deck is an imported file; a card carries its own SM-2 state,
+     so scheduling never has to be recomputed from a review log. The due column
+     is a ms timestamp and is the only thing a review queue reads, which is why
+     it is indexed. Named interval_days rather than interval because the unit is
+     the part that keeps being got wrong. */
+  /* A folder is a course; decks are its lectures. Nullable on the deck, because
+     a deck that belongs nowhere in particular is the normal starting state and
+     should not require inventing a folder first. */
+  /* Folders for CASES, kept separate from the flashcard folders below. They are
+     the same idea but not the same thing: reorganising your decks should not
+     silently reorganise your cases, and a shared table would make that the
+     default. A case folder is purely a grouping in the strip — it is NOT a
+     parent case, so the cases inside it stay standalone, with their own screen,
+     their own entries and their own diagram. */
+  CREATE TABLE IF NOT EXISTS case_folders (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS folders (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS decks (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS cards (
+    id TEXT PRIMARY KEY,
+    deck_id TEXT NOT NULL REFERENCES decks(id),
+    front TEXT NOT NULL,
+    back TEXT NOT NULL,
+    ef REAL NOT NULL DEFAULT 2.5,
+    interval_days INTEGER NOT NULL DEFAULT 0,
+    reps INTEGER NOT NULL DEFAULT 0,
+    due INTEGER NOT NULL,
+    last_reviewed INTEGER
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_cards_deck ON cards(deck_id);
+  CREATE INDEX IF NOT EXISTS idx_cards_due  ON cards(due);
+
+  /* One free-text scratchpad for the whole app. The CHECK is what makes it a
+     single row rather than a table of notes — there is one pad, it is always
+     row 1, and writing it is an UPSERT rather than a decision about which note
+     the caller meant. */
+  CREATE TABLE IF NOT EXISTS notes (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    body TEXT NOT NULL DEFAULT '',
+    updated_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS headline_places (
     headline_key TEXT PRIMARY KEY,
     place TEXT,
@@ -52,10 +109,35 @@ if (!projectColumns.includes('sort_order')) {
   existing.forEach((row, i) => setOrder.run(i, row.id));
 }
 
+// migrate: a project can sit in a case folder. Nullable, because "not filed"
+// is the normal state and must not require inventing a folder first.
+const projectFolderColumns = db.prepare('PRAGMA table_info(projects)').all().map(c => c.name);
+if (!projectFolderColumns.includes('folder_id')) {
+  db.exec('ALTER TABLE projects ADD COLUMN folder_id TEXT REFERENCES case_folders(id)');
+}
+
 // migrate: tasks gain an optional parent task, making them subtasks
 const taskColumns = db.prepare('PRAGMA table_info(tasks)').all().map(c => c.name);
 if (!taskColumns.includes('parent_task_id')) {
   db.exec('ALTER TABLE tasks ADD COLUMN parent_task_id INTEGER REFERENCES tasks(id)');
+}
+
+/* migrate: decks gain a folder, and keep the file they were imported from.
+   Holding the source text is what makes "show me what this deck came from" and
+   "replace it with a corrected file" possible at all — without it an import is
+   a one-way door. */
+const deckColumns = db.prepare('PRAGMA table_info(decks)').all().map(c => c.name);
+if (!deckColumns.includes('folder_id')) {
+  db.exec('ALTER TABLE decks ADD COLUMN folder_id TEXT REFERENCES folders(id)');
+}
+if (!deckColumns.includes('source_text')) {
+  db.exec('ALTER TABLE decks ADD COLUMN source_text TEXT');
+}
+if (!deckColumns.includes('source_name')) {
+  db.exec('ALTER TABLE decks ADD COLUMN source_name TEXT');
+}
+if (!deckColumns.includes('updated_at')) {
+  db.exec('ALTER TABLE decks ADD COLUMN updated_at INTEGER');
 }
 
 const { n: projectCount } = db.prepare('SELECT COUNT(*) AS n FROM projects').get();

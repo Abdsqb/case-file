@@ -12,6 +12,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.5",
+    "@codemirror/view": "^6.43.12",
+    "@lezer/highlight": "^1.2.3",
     "compromise": "^14.16.0",
     "express": "^4.19.2",
     "fast-xml-parser": "^5.10.1",

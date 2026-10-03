@@ -228,15 +228,26 @@ function normalizeOptions(options) {
  * Card / CardHead
  * ------------------------------------------------------------------ */
 
+/* One surface, for every card on every screen.
+ *
+ * A card used to be able to ask for a `sage` tone, which gave it a breath of
+ * the accent in its fill and an accent hairline — a way of saying "this is the
+ * one to look at" in a grid of six. That was a judgement the card made about
+ * itself, and in a row of panels it read as one of them being broken rather
+ * than as one of them mattering. It is also at odds with the glass: a panel's
+ * whole job now is to let the light behind it through unchanged.
+ *
+ * Emphasis is still available, and it is made of content — a metric at size, a
+ * lit status dot, the accent on the one control that is live. */
 export const Card = forwardRef(function Card(
-  { tone = 'dark', span, className, style, children, as: As = 'section', ...rest },
+  { span, className, style, children, as: As = 'section', ...rest },
   ref
 ) {
   const merged = span ? { gridColumn: `span ${span}`, ...style } : style
   return (
     <As
       ref={ref}
-      className={cx('card', tone === 'sage' && 'card--sage', className)}
+      className={cx('card', className)}
       style={merged}
       {...rest}
     >
@@ -934,10 +945,32 @@ export function Meter({ value = 0, label, className }) {
  * EmptyState
  * ------------------------------------------------------------------ */
 
+/* The accent face, applied in exactly one place in the app.
+ *
+ * An empty state's lead is a short sentence — "nothing past due — the queue is
+ * clean." — and its last word is the one carrying the news. That word is set
+ * in the italic serif, which is the whole of the accent typography: a change
+ * of voice on one word, never a highlight and never a whole line.
+ *
+ * Done here rather than at forty call sites so that every empty state in the
+ * app gets it without any of them having to know about it, and so that a lead
+ * passed as markup rather than as a string is simply left alone. */
+function withAccent(lead) {
+  if (typeof lead !== 'string') return lead
+  const m = /^([\s\S]*\s)(\S+)$/.exec(lead.trim())
+  if (!m) return lead
+  return (
+    <>
+      {m[1]}
+      <em className="serif">{m[2]}</em>
+    </>
+  )
+}
+
 export function EmptyState({ lead, hint, action, className }) {
   return (
     <div className={cx('empty', className)}>
-      {lead ? <div className="empty__lead">{lead}</div> : null}
+      {lead ? <div className="empty__lead">{withAccent(lead)}</div> : null}
       {hint ? <div className="empty__hint">{hint}</div> : null}
       {action ? <div className="empty__action">{action}</div> : null}
     </div>

@@ -37,32 +37,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom';
 
 import { neighbourMap } from '../lib/graph.js';
+import { readMotionPrefs, watchMotionPrefs } from '../lib/prefs.js';
 
 /* ------------------------------------------------------------------ motion */
-
-const RM_QUERY = '(prefers-reduced-motion: reduce)';
-
-/* Matches IsoCase's contract exactly, including defaulting to reduced when
-   there is no window — a server render must not claim motion it cannot do. */
-function readMotionPrefs() {
-  if (typeof window === 'undefined') return { reduced: true, parallax: false };
-  let sysReduced = false;
-  try {
-    sysReduced = window.matchMedia(RM_QUERY).matches;
-  } catch {
-    sysReduced = false;
-  }
-  let forced = false;
-  let parallaxOff = false;
-  try {
-    forced = window.localStorage.getItem('casefile.reducedMotion') === 'on';
-    parallaxOff = window.localStorage.getItem('casefile.parallax') === 'off';
-  } catch {
-    /* storage unavailable — fall through to defaults */
-  }
-  const reduced = sysReduced || forced;
-  return { reduced, parallax: !reduced && !parallaxOff };
-}
 
 /* ------------------------------------------------------------------- layout */
 
@@ -179,63 +156,31 @@ const SHAPE = {
   subtask: { r: 8.5, ring: 0 },
 };
 
-/* A node is drawn as a guilloche rosette rather than a plain dot: a ring of
-   closed loops, a second band inside it on the two structural kinds, and a
-   filled core that carries the state colour.
-
-   It is an epitrochoid — the curve traced by a point on a small circle rolling
-   around the outside of a larger one. `loops` is how many times the small
-   circle goes round, `d` how far the traced point sits from its centre; d
-   larger than the small radius is exactly what makes each petal close into a
-   loop instead of merely scalloping the edge.
-
-   `steps` is set per kind rather than globally: a subtask is drawn a few pixels
-   across and detail there is invisible, so it would be paying for points nobody
-   can see. The four strings are built once at module load and shared by every
-   node of that kind — the geometry never changes, only the translate on the
-   group that holds it. */
-function guilloche(reach, loops, dRatio, steps) {
-  const r = 1 / loops;
-  const d = dRatio * r;
-  /* The curve's true extent is 1 + r + d, so scale by that to land inside the
-     radius the layout has reserved for this node. */
-  const k = reach / (1 + r + d);
-  const R = k;
-  const rr = r * k;
-  const dd = d * k;
-  const turn = (R + rr) / rr;
-  let out = '';
-  for (let i = 0; i <= steps; i += 1) {
-    const t = (i / steps) * Math.PI * 2;
-    const x = (R + rr) * Math.cos(t) - dd * Math.cos(turn * t);
-    const y = (R + rr) * Math.sin(t) - dd * Math.sin(turn * t);
-    out += `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`;
-  }
-  return `${out}Z`;
-}
-
-/* loops / d / steps / how much of the radius the filled core takes / a second
-   band at this fraction of the radius, 0 for none. */
-const ROSETTE = {
-  /* steps is ~13 points per loop, which is where a loop stops looking faceted;
-     it was nearly twice that and the extra points bought nothing visible while
-     costing 9 dropped frames per settle across sixty-odd rosettes. */
-  case:    { loops: 13, d: 1.7, steps: 170, core: 0.3, inner: 0.62 },
-  subcase: { loops: 11, d: 1.7, steps: 140, core: 0.32, inner: 0.6 },
-  entry:   { loops: 9, d: 1.8, steps: 100, core: 0.42, inner: 0 },
-  subtask: { loops: 7, d: 1.8, steps: 72, core: 0.44, inner: 0 },
+/* A node is a disc, and only a disc. SHAPE above is the room the layout
+   reserves for it; this is how much of that room gets ink, which is less —
+   a solid circle filling its whole reserved radius reads twice as heavy as an
+   outline did at the same size, and the spacing was tuned against the outline.
+   Keeping the two numbers apart means the drawing can be made lighter or
+   heavier without the layout moving underneath it. */
+const DISC = {
+  case:    SHAPE.case.r * 0.6,
+  subcase: SHAPE.subcase.r * 0.62,
+  entry:   SHAPE.entry.r * 0.66,
+  subtask: SHAPE.subtask.r * 0.7,
 };
 
-const GLYPH = Object.fromEntries(
-  Object.entries(SHAPE).map(([kind, sh]) => {
-    const g = ROSETTE[kind] || ROSETTE.entry;
-    return [kind, {
-      outer: guilloche(sh.r, g.loops, g.d, g.steps),
-      inner: g.inner ? guilloche(sh.r * g.inner, g.loops, g.d, g.steps) : null,
-      core: sh.r * g.core,
-    }];
-  })
-);
+/* The board is rigid.
+ *
+ * It used to lift each kind of node by its own height, so the layers slid past
+ * each other as the pointer moved. On paper that is parallax; on screen it
+ * read as the drawing being stretched, because a constellation whose points
+ * move apart from each other is not a solid thing seen from a new angle — it
+ * is a rubber sheet. Depth now comes from the panel the graph sits on turning
+ * in perspective, and the drawing on it holds its shape.
+ *
+ * What is left of the lean is one rigid translate of the whole board toward
+ * the pointer, which is the parallax that was there before any of this.
+ */
 
 /* How far a node reaches from its centre — the reticle, where there is one,
    reaches further than the dot. The fit, the hit test and the label offset all
@@ -589,7 +534,10 @@ function GraphTip({ node, anchor, now }) {
  */
 export default function CaseGraph({ graph, now = Date.now(), className = '', seed = 0 }) {
   const svgRef = useRef(null);
-  const worldRef = useRef(null);
+  /* The element the lean is applied to, and how far it is currently leaning,
+     in pixels — see lean(). */
+  const stageRef = useRef(null);
+  const leanPxRef = useRef({ x: 0, y: 0 });
   const fitRef = useRef(null);
   const nodeRefs = useRef(new Map());
   const labelRefs = useRef(new Map());
@@ -601,6 +549,13 @@ export default function CaseGraph({ graph, now = Date.now(), className = '', see
   const meshRef = useRef(null);
   const meshLitRef = useRef(null);
   const rafRef = useRef(0);
+  /* The frame the lean is waiting on. */
+  const liftRafRef = useRef(0);
+  /* Where the pointer last was, and the graph's box with the frame it was
+     measured on — see boxOf. */
+  const pointRef = useRef({ x: 0, y: 0 });
+  const boxRef = useRef(null);
+  const boxAtRef = useRef(0);
   const posRef = useRef([]);
 
   const [prefs, setPrefs] = useState(readMotionPrefs);
@@ -613,23 +568,9 @@ export default function CaseGraph({ graph, now = Date.now(), className = '', see
   }, []);
 
   useEffect(() => {
-    let mql = null;
-    try { mql = window.matchMedia(RM_QUERY); } catch { mql = null; }
-    if (mql) {
-      if (typeof mql.addEventListener === 'function') mql.addEventListener('change', sync);
-      else if (typeof mql.addListener === 'function') mql.addListener(sync);
-    }
-    window.addEventListener('storage', sync);
-    window.addEventListener('casefile:settings', sync);
+    const stop = watchMotionPrefs(sync);
     sync();
-    return () => {
-      if (mql) {
-        if (typeof mql.removeEventListener === 'function') mql.removeEventListener('change', sync);
-        else if (typeof mql.removeListener === 'function') mql.removeListener(sync);
-      }
-      window.removeEventListener('storage', sync);
-      window.removeEventListener('casefile:settings', sync);
-    };
+    return stop;
   }, [sync]);
 
   const nodes = graph && graph.nodes ? graph.nodes : [];
@@ -873,25 +814,146 @@ export default function CaseGraph({ graph, now = Date.now(), className = '', see
   /* Hit-tested in JS against the painted positions rather than with 123 DOM
      listeners: one handler, and it can pick the NEAREST node rather than
      whichever 3px circle the pointer happened to land on. */
+  /* The graph's own box, read at most once a frame.
+   *
+   * getBoundingClientRect forces the browser to settle style and layout before
+   * it can answer. Called straight from a pointermove that is firing at 80Hz —
+   * on a page where every panel is mid-transition — that is a forced layout per
+   * event, and it is what took the dashboard from 60fps to 30 while the pointer
+   * was moving. Measured: 33.2ms a frame with the read per event, 16.7ms with
+   * it behind this. */
+  const boxOf = useCallback(() => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const now = performance.now();
+    if (!boxRef.current || now - boxAtRef.current > 14) {
+      boxRef.current = svg.getBoundingClientRect();
+      boxAtRef.current = now;
+    }
+    return boxRef.current;
+  }, []);
+
+  /* The lean, from wherever the pointer is on the page.
+   *
+   * It used to be driven by the SVG's own pointermove, so the board was flat
+   * until you were over it and snapped level the moment you left. The app has
+   * a pointer field now and the panels are all leaning off it, so the graph
+   * leans too — from anywhere, including from the other side of the screen.
+   *
+   * Measured against the graph's own box rather than the viewport: the board
+   * tips toward the pointer, and the pointer being three panels away is a
+   * small lean rather than no lean. Clamped, or the board would be pinned at
+   * full tilt for most of a wide window. */
+  const lean = useCallback(() => {
+    const svg = svgRef.current;
+    if (!svg || !prefsRef.current.parallax) return;
+    const r = boxOf();
+    if (!r || !r.width || !r.height) return;
+    const { x: clientX, y: clientY } = pointRef.current;
+    /* Where the board would be if it were not leaning. The element moves with
+       the lean now, so measuring against its current box would make the lean
+       its own input — a reference frame that chases itself. */
+    const base = leanPxRef.current;
+    const left = r.left - base.x;
+    const top = r.top - base.y;
+    /* Reach: how far outside its own box the board still answers to. Over the
+       graph the lean is proportional; beyond that it saturates. */
+    const REACH = 1.6;
+    const unit = (v) => Math.max(-1, Math.min(1, v));
+    /* Where the pointer is across the panel, edge to edge. */
+    const nx = unit(((clientX - left) / r.width - 0.5) * 2);
+    const ny = unit(((clientY - top) / r.height - 0.5) * 2);
+    /* The same thing softened by the reach, which is what the BOARD leans on:
+       a pointer out at the far side of the screen should tip the drawing a
+       little, not pin it at its limit. The panel's own turn wants the full
+       range instead — it only happens while the pointer is on the panel, and
+       it should reach its full angle by the time it reaches the edge. */
+    const sx = unit(nx / REACH) * PARALLAX;
+    const sy = unit(ny / REACH) * PARALLAX;
+    shiftRef.current = { x: sx, y: sy };
+
+    /* Where the pointer is over THIS graph, as -1 to 1, published for CSS.
+   
+       The app already has a pointer field, but it is measured against the
+       window: the graph's panel covers about a third of it, so crossing the
+       panel moves that field barely a tenth of its range and anything driven
+       by it would sit at one angle the whole time. A panel that turns to face
+       the pointer has to be told where the pointer is on the PANEL. */
+    const root = document.documentElement;
+    root.style.setProperty('--gx', nx.toFixed(3));
+    root.style.setProperty('--gy', ny.toFixed(3));
+
+    /* The board moves as a CSS transform on the element wrapping the drawing,
+       rather than as a transform attribute on a group inside it.
+
+       This is the whole difference between 60fps and 30 here, and it is not
+       obvious: a transform ATTRIBUTE on an SVG group is not a compositor
+       transform. It invalidates the group, so the browser re-rasterises every
+       node, link and label underneath it — and these nodes are filled with
+       radial gradients, which is expensive to rasterise. A CSS transform on
+       the wrapper moves an already-painted layer instead, and the drawing is
+       never redrawn at all. Measured on the dashboard, sweeping the pointer:
+       33.0ms a frame as an attribute, 16.7ms as a layer.
+
+       The viewBox is a fixed 1000 units wide however big the element is, so
+       the lean converts to pixels on the way out. */
+    const stage = stageRef.current;
+    if (stage) {
+      const k = r.width / VB;
+      const px = sx * k;
+      const py = sy * k;
+      leanPxRef.current = { x: px, y: py };
+      stage.style.transform = `translate3d(${px.toFixed(2)}px, ${py.toFixed(2)}px, 0)`;
+    }
+
+    /* The LAYERS moving at their own heights is a different thing: every node,
+       link and label lands somewhere new, and rewriting the drawing inside a
+       panel that is blurring whatever is behind it is raster work, not
+       compositing. Measured on the dashboard, one of those per frame is what
+       takes a 60fps sweep to 30 — the main thread is half idle throughout, so
+       it is the GPU being asked to re-raster the card, not the maths.
+   
+       So the depth updates on its own slower clock. It is a slow ambient
+       parallax over a few pixels; at 30 a second nobody can tell, and the rest
+       of the screen keeps every frame it had. */
+    /* And that is all of it. Nothing is repainted: the drawing is rigid, so
+       the lean is one layer being moved and the browser never redraws a thing.
+       This used to be a repaint of every node, link and label on its own
+       throttled clock, which was both the stretch the eye did not like and
+       most of a frame's budget. */
+  }, [boxOf]);
+
+  /* One listener on the window, so the board answers to the pointer wherever
+     it is rather than only while it is over the graph.
+     
+     The handler itself does nothing but remember where the pointer is: all the
+     work happens on the frame, because a pointer reports more often than the
+     screen redraws and every extra pass would be thrown away unseen. */
+  useEffect(() => {
+    const onWindowMove = (e) => {
+      pointRef.current = { x: e.clientX, y: e.clientY };
+      if (!liftRafRef.current) {
+        liftRafRef.current = requestAnimationFrame(() => {
+          liftRafRef.current = 0;
+          lean();
+        });
+      }
+    };
+    window.addEventListener('pointermove', onWindowMove, { passive: true });
+    return () => window.removeEventListener('pointermove', onWindowMove);
+  }, [lean]);
+
   const onMove = useCallback((e) => {
     const svg = svgRef.current;
     const pos = posRef.current;
     const data = dataRef.current;
     if (!svg || !pos.length) return;
-    const r = svg.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    /* Pointer parallax: the whole drawing leans a few units toward the cursor.
-       One transform on one group, so it is compositor work rather than a
-       relayout — the codebase's own rule that only transform and opacity are
-       cheap to animate is why this shifts the world instead of the nodes. */
+    const r = boxOf();
+    if (!r || !r.width || !r.height) return;
+    /* The whole element leans, so a pointer position taken against its own
+       box is already in the leaning frame: there is no shift left to undo. */
     const px = (e.clientX - r.left) / r.width;
     const py = (e.clientY - r.top) / r.height;
-    if (prefsRef.current.parallax) {
-      const sx = (px - 0.5) * 2 * PARALLAX;
-      const sy = (py - 0.5) * 2 * PARALLAX;
-      shiftRef.current = { x: sx, y: sy };
-      if (worldRef.current) worldRef.current.setAttribute('transform', `translate(${sx.toFixed(1)} ${sy.toFixed(1)})`);
-    }
 
     /* Undo the parallax lean, then the fit, so the pointer arrives in the same
        coordinates the layout is stored in and the radii below mean what they
@@ -901,9 +963,10 @@ export default function CaseGraph({ graph, now = Date.now(), className = '', see
     const fs = (fit && fit.__s) || 1;
     const fox = (fit && fit.__ox) || 0;
     const foy = (fit && fit.__oy) || 0;
-    const x = (px * VB - shiftRef.current.x - fox) / fs;
-    const y = (py * VB - shiftRef.current.y - foy) / fs;
+    const x = (px * VB - fox) / fs;
+    const y = (py * VB - foy) / fs;
     const slack = 11 / fs;
+
 
     let best = -1;
     let bestD = Infinity;
@@ -919,11 +982,18 @@ export default function CaseGraph({ graph, now = Date.now(), className = '', see
     setHot((h) => (h && h.node.id === node.id ? h : { node, anchor: { x: e.clientX, y: e.clientY } }));
   }, []);
 
-  const onLeave = useCallback(() => {
-    setHot(null);
-    shiftRef.current = { x: 0, y: 0 };
-    if (worldRef.current) worldRef.current.setAttribute('transform', 'translate(0 0)');
-  }, []);
+  /* Only the readout closes. The lean belongs to the window listener now, and
+     levelling the board here would mean it snapped flat every time the pointer
+     crossed out of the panel — which is the one moment it should be leaning
+     hardest. */
+  const onLeave = useCallback(() => setHot(null), []);
+
+  /* The lean's pending frame outlives the layout effect that scheduled it —
+     this is the one place that knows the component is going away. */
+  useEffect(() => () => {
+    if (liftRafRef.current) cancelAnimationFrame(liftRafRef.current);
+    liftRafRef.current = 0;
+  }, [boxOf]);
 
   /* Lighting the neighbourhood touches only the few elements involved — not a
      re-render, and not a pass over every node.
@@ -998,6 +1068,10 @@ export default function CaseGraph({ graph, now = Date.now(), className = '', see
 
   return (
     <>
+      {/* The leaning layer. A plain element with nothing in it but the
+          drawing, promoted once, so the lean is a layer being moved rather
+          than a picture being redrawn. */}
+      <div className="cg__stage" ref={stageRef}>
       <svg
         ref={svgRef}
         className={`cg ${className}`.trim()}
@@ -1010,9 +1084,11 @@ export default function CaseGraph({ graph, now = Date.now(), className = '', see
         onPointerMove={onMove}
         onPointerLeave={onLeave}
       >
-        {/* Everything the simulation draws lives in one group, so parallax is a
-            single transform rather than a write per node. */}
-        <g className="cg__world" ref={worldRef}>
+        {/* One group around the drawing. It carries no transform any more —
+            the lean is a CSS transform on the wrapper, for the reason spelled
+            out in lean() — but the nesting is what keeps the fit, the mesh and
+            the nodes in one coordinate system. */}
+        <g className="cg__world">
         <g className="cg__fit" ref={fitRef}>
         {/* One path for every mesh segment in the graph, and a second holding
             just the ones meeting the hovered node. Two elements in place of
@@ -1030,7 +1106,7 @@ export default function CaseGraph({ graph, now = Date.now(), className = '', see
         </g>
         <g className="cg__nodes">
           {nodes.map((n) => {
-            const glyph = GLYPH[n.kind] || GLYPH.entry;
+            const r = DISC[n.kind] || DISC.entry;
             return (
               <g
                 key={n.id}
@@ -1040,9 +1116,23 @@ export default function CaseGraph({ graph, now = Date.now(), className = '', see
                 }}
                 className={`cg__node cg__node--${n.kind} cg__node--${n.tone}`}
               >
-                <path className="cg__rose" d={glyph.outer} />
-                {glyph.inner ? <path className="cg__rose cg__rose--inner" d={glyph.inner} /> : null}
-                <circle className="cg__dot" r={glyph.core} />
+                {/* The shadow it casts on the board, and it drops further the
+                    higher the node sits — which is most of what tells you it
+                    is sitting higher at all. */}
+                <circle className="cg__shade" r={r} cy={r * 0.7} />
+                <circle className="cg__dot" r={r} />
+                {/* The light on top of it, from the upper left.
+   
+                    Both of these were radial gradients, and they were lovely:
+                    a disc with a soft falloff reads as a sphere rather than a
+                    sticker. They were also, measured, the single most
+                    expensive thing on the dashboard — the board re-rasterises
+                    every time the layers move, and a gradient fill rasterises
+                    perhaps twenty times slower than a flat one. Thirty-six of
+                    them took a pointer sweep from 60fps to 30. Flat fills, a
+                    rim and an offset cap give nearly the same read for nearly
+                    nothing. */}
+                <circle className="cg__cap" r={r * 0.62} cx={-r * 0.24} cy={-r * 0.26} />
               </g>
             );
           })}
@@ -1068,6 +1158,7 @@ export default function CaseGraph({ graph, now = Date.now(), className = '', see
         </g>
         </g>
       </svg>
+      </div>
       {hot ? <GraphTip node={hot.node} anchor={hot.anchor} now={now} /> : null}
     </>
   );

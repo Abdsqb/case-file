@@ -1,37 +1,26 @@
-# Northlake
+# Fonts
 
-The app's global body face. It is **not** bundled — Northlake is neither a system
-font nor a Google font, so the file has to come from you.
+Nothing lives here any more, and nothing needs to.
 
-## To make it render
+The app used to carry two drop-in faces: **Northlake** as the body face and
+**Ndot** as a dot-matrix display face, both declared against this folder with
+`@font-face` and both falling back to something else until you supplied the
+file. The redesign replaced the whole type system with three Google-hosted
+faces, declared once in `index.html`:
 
-Either install it on the machine, or drop the file here as one of:
+| | |
+|---|---|
+| **Geist** | the UI — headings, labels, body |
+| **Geist Mono** | anything that is a measurement: counts, times, ids, status |
+| **Instrument Serif** *(italic)* | one word per empty state, and nothing else |
 
-```
-public/fonts/Northlake.woff2      <- preferred: smallest, best supported
-public/fonts/Northlake.woff
-public/fonts/Northlake.otf
-public/fonts/Northlake.ttf
-```
+The `@font-face` blocks for Northlake and Ndot are gone from `src/styles.css`,
+so dropping a file in here does nothing. To put a face back, add it to the
+stack in the `:root` token block (`--font`, `--font-mono`, `--font-serif`) and
+declare it — a `local()` source if it is installed, a `url('/fonts/…')` source
+if you serve it from this folder, which Vite copies verbatim.
 
-Optionally a bold: `Northlake-Bold.woff2` (or `.otf` / `.ttf`).
-
-Then `npm run build` and reload. Vite copies `public/` verbatim, so the file is
-served at `/fonts/...` with no config.
-
-## Why it is set up this way
-
-`src/styles.css` declares `@font-face` with `local()` first and `url()` after, so
-an installed copy is used without a download and a dropped-in file works as the
-fallback. If neither exists, `--font` falls through to IBM Plex Mono and the app
-looks unchanged rather than showing blank text.
-
-## Converting a .otf or .ttf to .woff2
-
-Not required — `.otf` and `.ttf` both work. `.woff2` is roughly half the size if
-you want it:
-
-```
-npm i -g ttf2woff2
-ttf2woff2 < Northlake.ttf > Northlake.woff2
-```
+One warning worth keeping from the old version of this file: never point
+`@font-face` at a URL that does not exist. The server answers any unknown path
+with `index.html`, so the browser would fetch HTML, try to decode it as a font,
+and fail on every single load.

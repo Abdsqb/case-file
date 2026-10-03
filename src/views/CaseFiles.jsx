@@ -17,7 +17,7 @@ import {
   Trend,
 } from '../ui/primitives.jsx'
 import { DotMatrix, MiniBars } from '../ui/charts.jsx'
-import CaseGraph from '../ui/CaseGraph.jsx'
+import CaseFlow from '../ui/CaseFlow.jsx'
 import { buildGraph } from '../lib/graph.js'
 import api from '../lib/api.js'
 import { applyWalk, siblingWalk } from '../lib/reorder.js'
@@ -1546,7 +1546,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
         <div className="bento" ref={bentoRef}>
           {/* ---------------- left column ---------------- */}
           <div className="span-3 stack col col--left">
-            <Card tone="sage">
+            <Card>
               <CardHead
                 className="card__head"
                 title="Completion"
@@ -1640,16 +1640,25 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
                     panel rather than centred in whatever is left beside them. */}
                 <div className="deckhead__aside">
                   <span className="micro dim nowrap">
-                    {graph.nodes.length} {graph.nodes.length === 1 ? 'node' : 'nodes'}
+                    {graph.nodes.length} {graph.nodes.length === 1 ? 'step' : 'steps'}
                   </span>
                   <IconMenu items={caseMenu} label={`Actions for ${caseName}`} />
                 </div>
               </header>
 
               <div className="deck__body deck__body--center">
-                <div style={{ width: '100%', maxWidth: '560px', margin: '0 auto' }}>
-                  <CaseGraph graph={graph} now={now} seed={activeCase.id} />
-                </div>
+                {/* The same flow the dashboard draws, from the same builder:
+                    two screens showing one case must not disagree about its
+                    shape. No width cap — the flow lays itself out and scales
+                    to whatever box it is handed. */}
+                <CaseFlow
+                  cases={list}
+                  rootId={activeId}
+                  now={now}
+                  focus={filter === 'open'}
+                  chrome={false}
+                  className="deck__flow"
+                />
               </div>
 
               <div className="deck__foot">

@@ -1,14 +1,119 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-32 -32 64 64" width="64" height="64">
-  <!-- Same geometry as the in-app <Logo>: a rounded-hexagon pebble, outlined,
-       with one lobe filled across a diagonal cut. -->
-  <rect x="-32" y="-32" width="64" height="64" fill="#000000"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!--
+    The app's mark: the light from behind the app, gathered into one orb.
+
+    Everything on screen is lit by a bundle of strands that sweeps in from off
+    the top right, folds back on itself at a point, and streams out again —
+    see src/ui/Streak.jsx. This is that picture at sixteen pixels: the fold,
+    and the thing it folds around.
+
+    Built from gradients rather than filters. A favicon is rasterised at sizes
+    down to 16px by tab strips, bookmark bars, OS docks and a dozen other
+    things, each with its own renderer; gradients are the part of SVG every one
+    of them gets right, and a Gaussian blur is not. The glow is therefore drawn
+    rather than computed — a stack of radial gradients standing in for the
+    additive blending the canvas does for real.
+  -->
   <defs>
-    <clipPath id="lobe">
-      <polygon points="-32,-32 6,-32 -9,32 -32,32"/>
+    <!-- The light thrown into the dark around the orb. Wide and faint: this is
+         the part that says the orb is a source rather than an object. -->
+    <radialGradient id="bloom" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#C9B6FF" stop-opacity="0.50"/>
+      <stop offset="22%"  stop-color="#A98BFF" stop-opacity="0.34"/>
+      <stop offset="46%"  stop-color="#8E6FF0" stop-opacity="0.14"/>
+      <stop offset="74%"  stop-color="#6E55C4" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="#6E55C4" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- The halo that hugs the limb: transparent across the sphere itself,
+         brightest exactly at its edge, gone a few pixels out. Drawn over the
+         orb, so the edge burns the way crossing strands do on the canvas. -->
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#A98BFF" stop-opacity="0"/>
+      <stop offset="54%"  stop-color="#A98BFF" stop-opacity="0"/>
+      <stop offset="62%"  stop-color="#D5C6FF" stop-opacity="0.62"/>
+      <stop offset="70%"  stop-color="#A98BFF" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#A98BFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- The orb: lit from the upper left and falling to a dark limb on the
+         lower right. The near-white core is wide, because a light source is
+         blown out in the middle and a billiard ball is not. -->
+    <radialGradient id="orb" cx="37%" cy="33%" r="82%">
+      <stop offset="0%"   stop-color="#FFFFFF"/>
+      <stop offset="18%"  stop-color="#F3EDFF"/>
+      <stop offset="38%"  stop-color="#C6B1FF"/>
+      <stop offset="60%"  stop-color="#9176EE"/>
+      <stop offset="80%"  stop-color="#6A4FC6"/>
+      <stop offset="100%" stop-color="#43308A"/>
+    </radialGradient>
+
+    <!-- A strand is brightest as it passes the fold and gone by the time it
+         leaves: the one thing that makes a curve read as light travelling
+         rather than as a line someone drew. -->
+    <linearGradient id="strandIn" x1="100%" y1="0%" x2="20%" y2="62%">
+      <stop offset="0%"   stop-color="#8E6FF0" stop-opacity="0"/>
+      <stop offset="40%"  stop-color="#A98BFF" stop-opacity="0.42"/>
+      <stop offset="76%"  stop-color="#E4D9FF" stop-opacity="0.92"/>
+      <stop offset="100%" stop-color="#F6F1FF" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="strandOut" x1="20%" y1="38%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#F6F1FF" stop-opacity="0.9"/>
+      <stop offset="30%"  stop-color="#C2AEFF" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#8E6FF0" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- The limb light: the thin bright edge a sphere catches on the side away
+         from its highlight. -->
+    <linearGradient id="limb" x1="18%" y1="8%" x2="88%" y2="96%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="52%"  stop-color="#C9B6FF" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#EFE7FF" stop-opacity="0.62"/>
+    </linearGradient>
+
+    <!-- The specular, with an edge soft enough not to look stuck on. -->
+    <radialGradient id="spec" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="45%"  stop-color="#FFFFFF" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- The mark is a disc, and the corners are not part of it. A square plate
+         would be a second shape competing with the orb, and the orb is the
+         whole idea: one round source of light. Clipping rather than simply
+         drawing a filled circle, because the strands run well past the edge on
+         their way in and out and have to be cut off AT it. -->
+    <clipPath id="plate">
+      <circle cx="32" cy="32" r="32"/>
     </clipPath>
   </defs>
-  <path id="pebble"
-        d="M -22 -7 A 15 15 0 0 1 -7 -22 L 7 -22 A 15 15 0 0 1 22 -7 L 22 7 A 15 15 0 0 1 7 22 L -7 22 A 15 15 0 0 1 -22 7 Z"
-        fill="none" stroke="#EDEDED" stroke-width="4" stroke-linejoin="round"/>
-  <use href="#pebble" fill="#EDEDED" stroke="none" clip-path="url(#lobe)"/>
+
+  <g clip-path="url(#plate)">
+    <!-- The same near-black the app is on. -->
+    <rect x="0" y="0" width="64" height="64" fill="#07060A"/>
+    <circle cx="32" cy="32" r="32" fill="url(#bloom)"/>
+
+    <!-- The fold, behind the orb: in from off the top right, round the far
+         side, and out again underneath itself. Five strands, because three
+         read as a bracket and a dozen read as a scribble at this size. -->
+    <g fill="none" stroke-linecap="round">
+      <path d="M70 1 C 50 9, 21 13, 15 28 C 11 40, 30 49, 45 46"
+            stroke="url(#strandIn)" stroke-width="0.95"/>
+      <path d="M68 11 C 48 18, 16 21, 12 32 C 9 43, 33 53, 53 52"
+            stroke="url(#strandIn)" stroke-width="0.75"/>
+      <path d="M64 21 C 46 26, 20 28, 18 34 C 16 41, 36 45, 51 41"
+            stroke="url(#strandIn)" stroke-width="0.55" opacity="0.75"/>
+      <path d="M15 28 C 19 44, 44 53, 72 48"
+            stroke="url(#strandOut)" stroke-width="0.8"/>
+      <path d="M12 32 C 18 50, 46 59, 70 59"
+            stroke="url(#strandOut)" stroke-width="0.6"/>
+    </g>
+
+    <!-- And the thing they fold around. -->
+    <circle cx="32" cy="32" r="13" fill="url(#orb)"/>
+    <circle cx="32" cy="32" r="12.6" fill="none" stroke="url(#limb)" stroke-width="0.9"/>
+    <circle cx="32" cy="32" r="21" fill="url(#halo)"/>
+    <ellipse cx="26.8" cy="25.8" rx="3.4" ry="2.5" fill="url(#spec)"
+             transform="rotate(-28 26.8 25.8)"/>
+  </g>
 </svg>

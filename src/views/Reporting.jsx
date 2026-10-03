@@ -558,7 +558,7 @@ export function Reporting({ projects, now, onRefresh }) {
           </Card>
         </div>
       ) : (
-        <div className="bento">
+        <div className="bento bento--fit">
           <QueueCard
             title="Overdue"
             subtitle="Past due, oldest first"

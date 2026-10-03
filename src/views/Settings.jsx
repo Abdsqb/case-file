@@ -28,6 +28,7 @@ import {
 } from 'react'
 import { Card, CardHead, Metric, Pill, Segmented, Toggle } from '../ui/primitives.jsx'
 import { listProjects } from '../lib/api.js'
+import * as clerk from '../lib/clerk.js'
 import { globalStats } from '../lib/metrics.js'
 
 /* ------------------------------------------------------------------ *
@@ -435,6 +436,15 @@ export function Settings({ projects, now }) {
   const weekStart = useSetting(KEY_WEEK_START, 1)
 
   const stats = useMemo(() => globalStats(cases, clock), [cases, clock])
+  /* Asked once. The answer is a function of .env, which cannot change without
+     a server restart, so there is nothing to poll for. */
+  const [clerkState, setClerkState] = useState(null)
+  useEffect(() => {
+    let alive = true
+    clerk.status().then((st) => { if (alive) setClerkState(st) })
+    return () => { alive = false }
+  }, [])
+
   const caseCount = Array.isArray(cases) ? cases.length : 0
   const unknown = status === 'error'
 
@@ -544,6 +554,88 @@ export function Settings({ projects, now }) {
           </div>
           <div className="card__foot">
             <span>{unknown ? 'Counts unavailable — the server did not answer.' : 'Counts include subtasks.'}</span>
+          </div>
+        </Card>
+
+        {/* ---------------------------------------------------------------
+            The clerk, and what it costs you in privacy.
+
+            This is the only feature in the app that sends anything anywhere,
+            so it gets a panel that says so in the plainest terms available —
+            what is sent, to whom, and when. It is read-only on purpose: the
+            switch for this is the API key in .env, which cannot be flipped by
+            accident from a settings screen, and which is the honest place for
+            it because the key is what actually makes the calls possible.
+            ---------------------------------------------------------------- */}
+        <Card className="span-12">
+          <CardHead
+            className="card__head"
+            title="The clerk"
+            subtitle={clerkState === null
+              ? 'Checking…'
+              : clerkState.ready
+                ? 'On duty'
+                : 'Off — no API key configured'}
+          />
+          <div className="card__body">
+            <p className="settings-row__hint" style={{ maxWidth: '72ch', marginTop: 0 }}>
+              Everything else in Case File runs on this machine against a local
+              database. The clerk does not. When you ask it something, file the pad
+              or draft a deck, the text involved is sent to whichever provider is
+              configured below, together with your case names, the entries in them
+              and the courses on your timetable. Nothing is sent at any other time —
+              there is no background call, no analytics and no sync. Turn it off by
+              removing the key and restarting.
+            </p>
+
+            <div className="fc-providers">
+              {(clerkState?.providers || []).map((pr) => (
+                <div key={pr.id} className={`fc-provider${pr.configured ? ' is-on' : ''}`}>
+                  <span className="status-dot" aria-hidden="true" />
+                  <span className="fc-provider__name">{pr.label}</span>
+                  <span className="fc-provider__env mono">{pr.env}</span>
+                  <span className="fc-provider__state">{pr.configured ? 'configured' : 'not set'}</span>
+                </div>
+              ))}
+            </div>
+
+            {clerkState?.ready ? (
+              <div className="fc-routing">
+                <SettingRow
+                  title="Filing and decks"
+                  hint="The long jobs — a syllabus plus your whole archive in one call. Routed to the biggest context window available."
+                >
+                  <span className="mono dim">
+                    {clerkState.routing?.deep
+                      ? `${clerkState.routing.deep.label} · ${clerkState.routing.deep.model}`
+                      : '—'}
+                  </span>
+                </SettingRow>
+                <SettingRow
+                  title="The brief and the chat"
+                  hint="The interactive ones, where speed is most of the experience. Routed to the fastest provider you have a key for."
+                >
+                  <span className="mono dim">
+                    {clerkState.routing?.fast
+                      ? `${clerkState.routing.fast.label} · ${clerkState.routing.fast.model}`
+                      : '—'}
+                  </span>
+                </SettingRow>
+              </div>
+            ) : clerkState ? (
+              <p className="settings-row__hint" style={{ maxWidth: '72ch' }}>
+                Add <span className="mono">GEMINI_API_KEY</span> or{' '}
+                <span className="mono">GROQ_API_KEY</span> to <span className="mono">.env</span>{' '}
+                and restart the server. Both have a free tier. Set{' '}
+                <span className="mono">CLERK_PROVIDER</span> to pin every job to one of them.
+              </p>
+            ) : null}
+          </div>
+          <div className="card__foot">
+            <span>{clerkState?.ready
+              ? 'Keys are read on the server and never sent to this page.'
+              : 'With no key, the clerk never appears anywhere in the app.'}</span>
+            <span className="dim">.env</span>
           </div>
         </Card>
 

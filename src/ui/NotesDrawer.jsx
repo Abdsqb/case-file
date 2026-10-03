@@ -7,23 +7,64 @@
  *
  * Saving is on a debounce rather than a button, and on close, and on the page
  * being hidden. A pad you have to remember to save is a pad that loses things.
+ *
+ * It is also where FILING happens. The pad was already the place unstructured
+ * text lands in this app — a syllabus week, an email, what someone said in a
+ * lecture — and filing is the step that was missing from the other end of it.
+ * `File it` hands the pad to the clerk, which proposes entries; the proposals
+ * replace the pad on screen until you accept or discard them, and the text
+ * itself is never touched either way.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 
 import api from '../lib/api.js';
+import * as clerk from '../lib/clerk.js';
+import Filing from './Filing.jsx';
+/* The editor is CodeMirror, which is most of 300KB — every screen should not
+   pay for something that lives behind a tab. It is split into its own chunk and
+   fetched once the app goes idle, so by the time the pad is opened it is almost
+   always already there. */
+const loadEditor = () => import('./LiveMarkdown.jsx');
+const LiveMarkdown = lazy(loadEditor);
 
 /* Long enough that ordinary typing does not put a request on every keystroke,
    short enough that a stray tab-close rarely beats it. Closing and hiding both
    flush immediately, so this only governs the idle case. */
 const SAVE_AFTER = 700;
 
-export default function NotesDrawer() {
+export default function NotesDrawer({ projects = [], now = Date.now(), onFiled }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState('');
   const [loaded, setLoaded] = useState(false);
 
+  /* ---- filing ------------------------------------------------------------
+     Four states and no more: nothing, waiting on the clerk, reviewing what it
+     proposed, and the one line that says what was written. `onDuty` is
+     undefined until the server has answered, which is what keeps the button
+     from flickering into view on a server with no key. */
+  const [onDuty, setOnDuty] = useState(null);
+  const [filing, setFiling] = useState(false);
+  const [proposal, setProposal] = useState(null);
+  const [filed, setFiled] = useState(null);
+  const [fileError, setFileError] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    clerk.status().then((s) => { if (alive) setOnDuty(!!s.ready); });
+    return () => { alive = false; };
+  }, []);
+
   const areaRef = useRef(null);
+  /* Only mounted from the first open onwards, so the chunk is not demanded the
+     moment the app starts. */
+  const [everOpened, setEverOpened] = useState(false);
+  useEffect(() => { if (open) setEverOpened(true); }, [open]);
+  useEffect(() => {
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1500));
+    const id = idle(() => { loadEditor().catch(() => {}); });
+    return () => (window.cancelIdleCallback || clearTimeout)(id);
+  }, []);
   const timer = useRef(0);
   /* What the server is known to hold. Saving compares against this so closing
      an untouched pad does not write, and so a failed write can be retried
@@ -101,14 +142,92 @@ export default function NotesDrawer() {
 
   const close = useCallback(() => { flush(); setOpen(false); }, [flush]);
 
+  /* ---- handing the pad to the clerk --------------------------------------
+     The pad is saved first. What the clerk reads and what is on disk should be
+     the same text, so that if anything goes wrong the pad is still the record
+     of what you wrote. */
+  const askClerk = useCallback(async () => {
+    const text = bodyRef.current.trim();
+    if (!text || filing) return;
+    setFiling(true);
+    setFileError('');
+    setFiled(null);
+    try {
+      await flush();
+      setProposal(await clerk.file(text));
+    } catch (err) {
+      setFileError(err.message || 'the clerk could not read the pad.');
+    } finally {
+      setFiling(false);
+    }
+  }, [filing, flush]);
+
+  /* What the reader approved, written.
+
+     The pad is deliberately NOT cleared afterwards. Filing is not a transfer —
+     the same notes are often filed twice as a week goes on, and silently
+     emptying a page someone wrote by hand to confirm a button worked is the
+     kind of helpfulness that loses work. The line that appears says what was
+     written; clearing the pad stays the reader's decision. */
+  const applyProposal = useCallback(async (rows) => {
+    setFiling(true);
+    setFileError('');
+    try {
+      const made = await clerk.apply(rows);
+      setProposal(null);
+      setFiled(made);
+      if (onFiled) onFiled();
+    } catch (err) {
+      setFileError(err.message || 'that could not be filed.');
+    } finally {
+      setFiling(false);
+    }
+  }, [onFiled]);
+
+  const discard = useCallback(() => { setProposal(null); setFileError(''); }, []);
+
   /* ---- open and close ---------------------------------------------------- */
+
+  /* Shift+N toggles the pad from anywhere — except while typing. There, it is
+     just a capital N: an entry title, the log box and the pad itself all need
+     to be able to take one. That includes the pad, which takes focus when it
+     opens, so from inside it Escape (or clicking away) is what closes it. */
+  const openRef = useRef(open);
+  openRef.current = open;
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'N' && e.key !== 'n') return;
+      if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      const t = e.target;
+      const typing = t && (
+        t.isContentEditable ||
+        t.tagName === 'TEXTAREA' ||
+        t.tagName === 'SELECT' ||
+        (t.tagName === 'INPUT' && !/^(button|checkbox|radio|range|submit|reset|file|color)$/i.test(t.type || ''))
+      );
+      if (typing) return;
+      e.preventDefault();
+      if (openRef.current) close();
+      else setOpen(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [close]);
 
   useEffect(() => {
     if (!open) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      /* The review sheet is a layer over the pad, so Escape dismisses that
+         first. Closing the whole drawer on a keypress meant for the sheet
+         would throw away a set of proposals that took a model call to get. */
+      if (proposal) discard();
+      else close();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, close]);
+  }, [open, close, proposal, discard]);
 
   useEffect(() => {
     if (!open) return;
@@ -116,8 +235,11 @@ export default function NotesDrawer() {
        type. After the frame, or the transform is still running and Safari
        scrolls the panel into view from off screen. */
     const id = requestAnimationFrame(() => {
-      const el = areaRef.current;
-      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+      const view = areaRef.current;
+      if (view) {
+        view.focus();
+        view.dispatch({ selection: { anchor: view.state.doc.length } });
+      }
     });
     return () => cancelAnimationFrame(id);
   }, [open]);
@@ -129,7 +251,7 @@ export default function NotesDrawer() {
         className="notab"
         aria-label="Notes"
         aria-expanded={open}
-        title="Notes"
+        title="Notes (Shift+N)"
         onClick={() => (open ? close() : setOpen(true))}
       >
         {/* A page with lines on it. Drawn rather than lettered so it carries no
@@ -150,16 +272,69 @@ export default function NotesDrawer() {
       />
 
       <aside className={`notes${open ? ' is-open' : ''}`} aria-label="Notes">
-        <textarea
-          ref={areaRef}
-          className="notes__pad"
-          value={body}
-          spellCheck="true"
-          aria-label="Notes"
-          placeholder=""
-          onChange={(e) => onType(e.target.value)}
-          onBlur={flush}
-        />
+        {/* Markdown, rendered live: every line but the one being edited shows
+            its finished form. What is saved is still the plain markdown.
+
+            Kept mounted under the review sheet rather than swapped out, because
+            unmounting CodeMirror loses the cursor, the scroll position and the
+            undo history — and going back to the pad after discarding should
+            land you exactly where you left it. */}
+        {everOpened ? (
+          <Suspense fallback={null}>
+            <LiveMarkdown
+              editorRef={areaRef}
+              className="notes__pad"
+              value={body}
+              onChange={onType}
+              onBlur={flush}
+              autoFocus={open}
+            />
+          </Suspense>
+        ) : null}
+
+        {/* The one line of result, and the one button that starts it. Absent
+            entirely when no key is configured: an app that cannot do a thing
+            should not have a button for it. */}
+        {onDuty ? (
+          <div className="notes__foot">
+            {filed ? (
+              <span className="notes__filed">
+                {[
+                  filed.cases ? `${filed.cases} ${filed.cases === 1 ? 'case' : 'cases'}` : '',
+                  filed.entries ? `${filed.entries} ${filed.entries === 1 ? 'entry' : 'entries'}` : '',
+                  filed.subtasks ? `${filed.subtasks} ${filed.subtasks === 1 ? 'subtask' : 'subtasks'}` : '',
+                ].filter(Boolean).join(', ') || 'nothing'} filed.
+              </span>
+            ) : fileError && !proposal ? (
+              <span className="notes__filed notes__filed--bad">{fileError}</span>
+            ) : (
+              <span className="notes__hint">the clerk reads this and proposes entries. nothing is written without you.</span>
+            )}
+
+            <button
+              type="button"
+              className="pill pill--micro notes__file"
+              onClick={askClerk}
+              disabled={filing || !body.trim()}
+            >
+              {filing && !proposal ? 'reading…' : 'File it'}
+            </button>
+          </div>
+        ) : null}
+
+        {proposal ? (
+          <div className="notes__review">
+            <Filing
+              result={proposal}
+              cases={projects}
+              now={now}
+              busy={filing}
+              error={fileError}
+              onApply={applyProposal}
+              onDiscard={discard}
+            />
+          </div>
+        ) : null}
       </aside>
     </>
   );

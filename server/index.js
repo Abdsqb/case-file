@@ -5,6 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db } from './db.js';
 import { getHeadlines, resolveHeadlineLocation } from './news.js';
+import { loadProjects, projectRowToJson, taskRowToJson } from './archive.js';
+import * as clerk from './clerk.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(__dirname, '..', 'dist');
@@ -12,31 +14,9 @@ const distDir = path.join(__dirname, '..', 'dist');
 const app = express();
 app.use(express.json());
 
-function taskRowToJson(row, subtasks = []) {
-  return {
-    id: row.id,
-    title: row.title,
-    priority: row.priority,
-    createdAt: row.created_at,
-    dueDate: row.due_date,
-    completed: !!row.completed,
-    blockedBy: row.blocked_by,
-    parentTaskId: row.parent_task_id ?? null,
-    subtasks,
-  };
-}
-
-function projectRowToJson(p, tasks) {
-  return {
-    id: p.id,
-    folderId: p.folder_id ?? null,
-    name: p.name,
-    openedAt: p.opened_at,
-    parentId: p.parent_id,
-    sortOrder: p.sort_order,
-    tasks,
-  };
-}
+/* taskRowToJson / projectRowToJson / loadProjects now live in archive.js, so
+   the clerk reads the archive in exactly the shape the browser does. Two
+   definitions of "a case, as JSON" is one more than this app can keep true. */
 
 function deleteProjectRecursive(id) {
   const children = db.prepare('SELECT id FROM projects WHERE parent_id = ?').all(id);
@@ -46,16 +26,7 @@ function deleteProjectRecursive(id) {
 }
 
 app.get('/api/projects', (req, res) => {
-  const projects = db.prepare('SELECT * FROM projects ORDER BY sort_order ASC').all();
-  const taskStmt = db.prepare('SELECT * FROM tasks WHERE project_id = ? AND parent_task_id IS NULL ORDER BY created_at DESC');
-  const subtaskStmt = db.prepare('SELECT * FROM tasks WHERE parent_task_id = ? ORDER BY created_at ASC');
-
-  const result = projects.map(p => projectRowToJson(
-    p,
-    taskStmt.all(p.id).map(t => taskRowToJson(t, subtaskStmt.all(t.id).map(s => taskRowToJson(s)))),
-  ));
-
-  res.json(result);
+  res.json(loadProjects());
 });
 
 app.post('/api/projects', (req, res) => {
@@ -758,6 +729,80 @@ app.post('/api/headlines/locate', async (req, res) => {
   } catch (err) {
     console.error('Failed to locate headline', err);
     res.status(502).json({ error: err.message ?? 'could not resolve a location' });
+  }
+});
+
+/* ------------------------------------------------------------------ the clerk
+ *
+ * Every route here is behind a key the reader put in .env themselves. With no
+ * key, /api/clerk answers `ready: false` and the UI never offers the feature —
+ * so the default install is still an app that talks to nothing.
+ *
+ * Note the shape of the write path: /file and /deck RETURN proposals and touch
+ * nothing, and /apply takes back what the reader approved. The model is never
+ * in the same request as a write.
+ */
+
+function clerkFail(res, err, what) {
+  const status = Number.isFinite(err?.status) ? err.status : 502;
+  if (status >= 500) console.error(`Clerk: ${what} failed`, err?.message || err);
+  res.status(status).json({ error: err?.message || `the clerk could not ${what}.` });
+}
+
+/** What the UI needs to decide whether to offer any of this. Never a key. */
+app.get('/api/clerk', (req, res) => {
+  res.json(clerk.status());
+});
+
+app.post('/api/clerk/file', async (req, res) => {
+  if (!clerk.ready()) return clerkFail(res, { status: 503, message: 'the clerk is off duty — no API key is configured.' }, 'file');
+  try {
+    res.json(await clerk.file(req.body?.text, Date.now()));
+  } catch (err) {
+    clerkFail(res, err, 'read the pad');
+  }
+});
+
+app.post('/api/clerk/apply', (req, res) => {
+  /* Not behind the key check: applying is pure database work on rows the
+     reader approved, and it must keep working if a key is pulled mid-session. */
+  try {
+    res.json(clerk.apply(req.body?.proposals, Date.now()));
+  } catch (err) {
+    clerkFail(res, err, 'file what you approved');
+  }
+});
+
+app.get('/api/clerk/brief', async (req, res) => {
+  const force = req.query.force === '1';
+  if (!clerk.ready()) return res.status(503).json({ error: 'the clerk is off duty.' });
+
+  /* A cached brief is served even when `force` was not asked for and the model
+     is unreachable — a day-old sentence beats an error box on the dashboard. */
+  try {
+    res.json(await clerk.brief(Date.now(), { force }));
+  } catch (err) {
+    const fallback = clerk.cachedBrief(Date.now());
+    if (fallback) return res.json({ ...fallback, stale: true });
+    clerkFail(res, err, 'write the brief');
+  }
+});
+
+app.post('/api/clerk/chat', async (req, res) => {
+  if (!clerk.ready()) return res.status(503).json({ error: 'the clerk is off duty.' });
+  try {
+    res.json(await clerk.ask(req.body?.messages, Date.now()));
+  } catch (err) {
+    clerkFail(res, err, 'answer');
+  }
+});
+
+app.post('/api/clerk/deck', async (req, res) => {
+  if (!clerk.ready()) return res.status(503).json({ error: 'the clerk is off duty.' });
+  try {
+    res.json(await clerk.deck(req.body?.text, { name: req.body?.name, count: req.body?.count }));
+  } catch (err) {
+    clerkFail(res, err, 'build a deck');
   }
 });
 

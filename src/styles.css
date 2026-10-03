@@ -8,141 +8,157 @@
    -------------------------------------------------------------------------- */
 
 :root {
-  /* ground — pitch black. Cards are black too: structure comes from the hairline,
-     not from a lifted fill. No hue anywhere except the urgency red. */
-  --bg:            #000000;
-  --card:          #000000;
-  --card-hi:       #0C0C0C;   /* inner wells, hover — barely lifted off black */
-  --line:          #1A1A1A;   /* every 1px border and divider. Deliberately faint:
-                                 the shadowless cards read as outlines, not boxes. */
-  --line-soft:     #131313;   /* one step below, for inner dividers */
+  /* ------------------------------------------------------------------
+     GROUND
+     Near-black with a trace of violet in it, so the accent reads as a light
+     ON the surface rather than a sticker stuck to it. Nothing in the UI is
+     pure white and nothing is pure black.
+     ------------------------------------------------------------------ */
+  --bg:            #07060A;
+  --bg-elevated:   rgba(255, 255, 255, 0.03);
 
-  /* the pale accent surface — the only bright surface, 1-2 cards per screen */
-  --sage:          #B4B4B4;   /* small highlight chips only, not card surfaces */
-  --sage-dim:      #9E9E9E;
-  --on-sage:       #111111;
-  --on-sage-dim:   #4B4B4B;
+  /* A panel is glass: a dark translucent fill over whatever the streak is
+     doing behind it, blurred. The alpha is the whole point — opaque panels
+     would cut holes in the light. */
+  --panel:         rgba(13, 11, 19, 0.46);
+  --panel-blur:    blur(30px) saturate(1.25);
 
-  /* type */
-  --fg:            #C4C4C4;
-  --fg-mid:        #909090;
-  --fg-dim:        #5E5E5E;
+  /* A panel sits in the page and can afford to be thin. A menu, a tooltip or
+     the scratchpad sits ON TOP of the page, over text and charts, and at 72%
+     you would read the dashboard straight through it. Same glass, nearly
+     opaque. */
+  --overlay:       rgba(14, 12, 19, 0.95);
 
-  /* data ink */
-  --bar:           #C4C4C4;   /* chart bars */
-  --bar-dim:       #242424;   /* unfilled / trailing bars */
-  --glow:          #9C9C9C;   /* the wireframe render glow, used sparingly */
-  --glow-soft:     rgba(156, 156, 156, 0.14);
-  /* Case-structure pin states, read as a traffic light with a neutral resting
-     state: white while there is nothing to worry about, yellow inside the
-     deadline window, red once it has passed, green when it is closed.
+  --border:        rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
 
-     The three chromatic ones are siblings by construction — one shared
-     saturation and lightness, only the hue turned — so they read as one set
-     rather than three colours that happened to land together. Saturation
-     carries them rather than lightness: on a near-black screen whose only other
-     ink is grey, a pale tint would be the loudest thing on the page, while a
-     dark one just goes muddy.
+  /* ------------------------------------------------------------------
+     INK
+     One colour at three strengths. Muted and faint are alpha rather than
+     grey, so text sits IN the glass instead of on top of it.
+     ------------------------------------------------------------------ */
+  --text:          #F1EFF6;
+  --text-muted:    rgba(241, 239, 246, 0.55);
+  --text-faint:    rgba(241, 239, 246, 0.32);
 
-     --pin-open is the exception and is meant to be: an untroubled entry should
-     be plain, and plain here means brighter than the --fg mesh it stands on,
-     or it disappears into the wireframe. --hot keeps its own value, since it is
-     used as text elsewhere and must carry contrast alone. */
-  --hot:           #E8705A;   /* overdue, as text — hsl(9 76% 63%) */
-  --hot-soft:      rgba(232, 112, 90, 0.14);
+  /* ------------------------------------------------------------------
+     ACCENT
+     Violet, and it is the only saturated colour in the chrome: primary
+     actions, the active state, and done. Everything else earns attention
+     through contrast, not hue.
 
-  /* Course work on the timetable. The screen had exactly one accent before this
-     and it means "late"; a second thing competing in red would blunt it. Iris
-     sits far enough round the wheel to read as a different KIND of thing rather
-     than a different severity, and at these opacities it tints the chip without
-     lighting it up against the blocks it sits on. */
-  --iris:          #A79BF5;   /* hsl(247 82% 78%) */
-  --iris-soft:     rgba(167, 155, 245, 0.15);
-  --iris-hi:       rgba(167, 155, 245, 0.34);
-  --iris-deep:     rgba(167, 155, 245, 0.26);
-  --iris-faint:    rgba(167, 155, 245, 0.07);
-  --pin-open:      #F2F2F2;   /* open, nothing imminent */
-  --pin-soon:      #C98F1D;   /* inside the deadline window — hsl(40 75% 45%) */
-  --pin-late:      #C53C20;   /* past due — hsl(10 72% 45%) */
-  --pin-done:      #2BA166;   /* closed — hsl(150 58% 40%) */
+     Light enough to carry dark ink on top of it at button size, and cool
+     enough that it sits in the near-black rather than on it — the ground
+     carries a trace of the same hue, which is what stops the accent reading
+     as a sticker.
+     ------------------------------------------------------------------ */
+  --accent:        #A98BFF;
+  --accent-hover:  #BCA4FF;
+  --accent-ink:    #0B0716;   /* text on a violet fill */
+  --accent-glow:   rgba(169, 139, 255, 0.35);
+  --accent-faint:  rgba(169, 139, 255, 0.10);
+  /* The fill behind a thing that is selected — a wash you can see the glass
+     and the light through, not a solid chip of colour stuck on top of it. */
+  --accent-wash:   rgba(169, 139, 255, 0.18);
+  --accent-edge:   rgba(169, 139, 255, 0.45);
 
-  --radius:        16px;      /* cards */
-  --radius-sm:     10px;      /* inner tiles */
+  /* The streak's second tint, and the only other hue in the app. A cooler
+     blue-violet beside the accent: close enough that the bundle reads as one
+     light rather than two, far enough that the strands separate. It belongs
+     to the streak and nothing in the UI may spend it. */
+  --accent-cool:   #6E8CFF;
+
+  /* ------------------------------------------------------------------
+     STATUS
+     Not decoration — these three say late, soon and done, and nothing
+     else in the app is allowed to use them.
+     ------------------------------------------------------------------ */
+  --amber:         #E3B341;   /* due soon */
+  --red:           #E5704F;   /* overdue — muted, not a siren */
+
+  /* ------------------------------------------------------------------
+     THE OLD NAMES
+     The stylesheet below is four thousand lines written against these, and
+     every one of them now resolves into the palette above. They are kept as
+     aliases rather than find-and-replaced because that is what makes this a
+     re-skin and not a rewrite: one definition each, nothing to keep in step
+     by hand, and no rule left pointing at a colour that no longer exists.
+     ------------------------------------------------------------------ */
+  --card:          var(--panel);
+  --card-hi:       var(--bg-elevated);
+  --line:          var(--border);
+  --line-soft:     rgba(255, 255, 255, 0.05);
+
+  --fg:            var(--text);
+  --fg-mid:        var(--text-muted);
+  --fg-dim:        var(--text-faint);
+
+  /* The highlight surface was a hatched grey slab; it is a violet-tinted pane
+     of the same glass now. */
+  --sage:          var(--accent);
+  --sage-dim:      var(--accent-hover);
+  --on-sage:       var(--accent-ink);
+  --on-sage-dim:   rgba(11, 13, 6, 0.62);
+
+  /* Data ink stays neutral. A chart is information, not chrome, and a screen
+     of violet bars would spend the accent on the one thing that does not need
+     it — only the live value is picked out. */
+  --bar:           rgba(242, 244, 239, 0.78);
+  --bar-dim:       rgba(255, 255, 255, 0.07);
+  --glow:          var(--accent);
+  --glow-soft:     var(--accent-faint);
+
+  --hot:           var(--red);
+  --hot-soft:      rgba(229, 112, 79, 0.14);
+  --hot-wash:      rgba(229, 112, 79, 0.18);
+  --hot-wash-hi:   rgba(229, 112, 79, 0.34);
+
+  /* Course work on the timetable. It had a purple of its own, which is now
+     the app's accent and so is spent elsewhere; it reads as plain glass and
+     lets the status colours be the only thing with a temperature. */
+  --iris:          var(--text);
+  --iris-soft:     rgba(255, 255, 255, 0.06);
+  --iris-hi:       rgba(255, 255, 255, 0.12);
+  --iris-deep:     rgba(255, 255, 255, 0.10);
+  --iris-faint:    rgba(255, 255, 255, 0.035);
+
+  /* The four states an entry can be in, read as a traffic light with a
+     neutral rest. Done takes the accent: finishing something is the one piece
+     of good news the app has, and the accent is what it is for. */
+  --pin-open:      var(--text);
+  --pin-soon:      var(--amber);
+  --pin-late:      var(--red);
+  --pin-done:      var(--accent);
+
+  --radius:        16px;      /* panels */
+  --radius-sm:     10px;      /* inner tiles, inputs */
+  --radius-xs:     8px;       /* icon buttons */
   --radius-pill:   999px;
 
-  /* Northlake stays first so it wins the moment its file is supplied (see
-     public/fonts/README.md). Sono is the working face until then: soft, rounded
-     terminals, and — measured, not assumed — monospaced, so the week table, the
-     counts and every tabular readout keep their alignment. Every other rounded
-     family worth having (M PLUS Rounded 1c, Nunito, Quicksand, Rubik) is
-     proportional, and would have quietly broken those columns. */
-  --font: 'Northlake', 'Sono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* ------------------------------------------------------------------
+     TYPE
+     Three faces, one job each, and the job is what picks the face: prose
+     and labels are set in the sans, anything that is a measurement is set
+     in the mono, and exactly one word per title is set in the serif.
+     ------------------------------------------------------------------ */
+  --font: 'Geist', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
-  /* The dot-matrix display face — Nothing's Ndot, with a real dot-matrix
-     fallback. Ndot is not on Google Fonts and cannot be bundled here, so it is
-     declared against a local path: drop Ndot-55.woff2 into public/fonts/ and it
-     takes over on its own. Until then DotGothic16 carries the same idea. */
-  --font-dot: 'Ndot', 'DotGothic16', 'IBM Plex Mono', ui-monospace, monospace;
+  /* Data: counts, timestamps, ids, status, durations. Lowercase, slashed,
+     and in the muted ink — it is there to be checked, not read. */
+  --font-mono: 'Geist Mono', 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* structural rhythm */
-  --pad:        20px;   /* card padding */
-  --gap:        12px;   /* bento gap */
-  --shell-x:    24px;   /* page + topbar horizontal padding */
+  /* Used in italic and nowhere else. One or two words in a title, never a
+     sentence, never body copy. */
+  --font-serif: 'Instrument Serif', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+
+  /* structural rhythm. Everything is a notch looser than it was: glass wants
+     room around it, and the light behind the panels only reads if there is
+     somewhere for it to come through. */
+  --pad:        22px;   /* card padding */
+  --gap:        14px;   /* bento gap */
+  --shell-x:    30px;   /* page + topbar horizontal padding */
   --hairline:   1px solid var(--line);
   --hairline-soft: 1px solid var(--line-soft);
-}
-
-/* Nothing's Ndot, if it is installed on the machine. local() only — pointing at
-   a URL that does not exist is worse than useless here: the server's SPA
-   catch-all answers any unknown path with index.html, so the browser would
-   fetch HTML and try to decode it as a font on every single load.
-
-   To self-host instead, drop the file in public/fonts/ and add:
-     src: local('Ndot 55'), url('/fonts/Ndot-55.woff2') format('woff2'); */
-/* Northlake is the global body face. It is not a Google font and not a system
-   font, so it has to come from one of two places, tried in this order:
-
-   1. installed on the machine   — local(), no download, instant
-   2. dropped into public/fonts  — url(), served with the app
-
-   If neither exists the stack simply falls through to IBM Plex Mono and the app
-   looks exactly as it did. That is deliberate: a missing font should degrade,
-   not blank the text. See public/fonts/README.md for the drop-in.
-
-   font-display: swap so text is never invisible while the file loads. */
-@font-face {
-  font-family: 'Northlake';
-  src: local('Northlake'), local('Northlake Regular'), local('Northlake-Regular'),
-       url('/fonts/Northlake.woff2') format('woff2'),
-       url('/fonts/Northlake.woff') format('woff'),
-       url('/fonts/Northlake.otf') format('opentype'),
-       url('/fonts/Northlake.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Northlake';
-  src: local('Northlake Bold'), local('Northlake-Bold'),
-       url('/fonts/Northlake-Bold.woff2') format('woff2'),
-       url('/fonts/Northlake-Bold.otf') format('opentype'),
-       url('/fonts/Northlake-Bold.ttf') format('truetype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Ndot';
-  src: local('Ndot 55'), local('Ndot-55'), local('Ndot55'),
-       local('Ndot 57'), local('Ndot-57'),
-       local('Ndot 47'), local('Ndot-47'),
-       local('Ndot 45'), local('Ndot-45'),
-       local('Ndot');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
 }
 
 /* --------------------------------------------------------------------------
@@ -169,10 +185,16 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font);
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 1.45;
-  letter-spacing: 0;
+  font-size: 13.5px;
+  /* The sans carries the UI at 450-500: at 400 a geometric face this clean
+     goes thin and silvery on a near-black ground, and at 600 every label
+     starts shouting. */
+  font-weight: 450;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+  /* Kept from when the whole app was monospaced: the face is proportional
+     now, so figures have to be told to hold their columns, or every count
+     and countdown jitters as it ticks. */
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1, 'zero' 0;
   -webkit-font-smoothing: antialiased;
@@ -180,8 +202,219 @@ body {
   overflow-x: hidden;
 }
 
+/* --- the three background layers ------------------------------------------
+   Ground, then a dot grid, then the streak (its own canvas, behind
+   everything), then a vignette. All of it is fixed and none of it takes the
+   pointer, so the page scrolls through the light rather than dragging it
+   along. */
+
+/* The grid. Faint enough to be a texture rather than a pattern, and masked
+   to a soft oval so it dissolves at the edges instead of stopping at them. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.045) 1px, transparent 0);
+  background-size: 28px 28px;
+  -webkit-mask-image: radial-gradient(118% 92% at 50% 42%, #000 32%, transparent 78%);
+  mask-image: radial-gradient(118% 92% at 50% 42%, #000 32%, transparent 78%);
+}
+
+/* The vignette, over the streak and under the content: it is what keeps body
+   text legible where a bright strand runs behind it. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    radial-gradient(130% 100% at 50% 40%, transparent 42%, rgba(7, 8, 7, 0.55) 78%, rgba(7, 8, 7, 0.86) 100%);
+}
+
+/* --------------------------------------------------------------------------
+   THE POINTER FIELD
+   --px and --py are where the pointer is, from -1 to 1, written on the root
+   by App.jsx — one listener for the whole app, on a frame, and everything
+   below moves on the compositor off the back of it.
+
+   Declared here with a resting value so every rule that reads them works on a
+   touch screen, before the first pointer event, and with the preference off:
+   nothing has to guard against the field not existing yet.
+   -------------------------------------------------------------------------- */
+:root {
+  --px: 0;
+  --py: 0;
+}
+
+/* The panels are in a room, not on a wall.
+   ------------------------------------------------------------------------
+   One perspective for the whole grid, with its vanishing point following the
+   pointer: every panel is seen from the same eye, so the layout reads as one
+   scene turning rather than as a dozen cards each doing a trick. Sliding them
+   left and right could never do this — a flat translate has no foreshortening
+   in it, and foreshortening is the only thing the eye accepts as depth.
+
+   1200px is close enough for the turn to be obvious at a couple of degrees and
+   far enough that the panels at the edges are not visibly sheared. */
+.bento {
+  /* A long lens. Pulling the eye back is what takes the distortion out of the
+     turn: at 900px a panel this wide came out a visible trapezoid — one edge
+     taller than the other, the contents sheared — which reads as the card
+     being stretched rather than turned. Far enough back, the same angle is a
+     turn and nothing else. */
+  perspective: 2200px;
+  perspective-origin: 50% 50%;
+}
+
+/* The deck is the exception, and on purpose.
+   ------------------------------------------------------------------------
+   Its panel stands against the right edge of the screen and is meant to look
+   like it is standing there — so the eye is where the reader is, out in the
+   middle of the page over the greeting, not squarely in front of the panel.
+   That off-centre eye is what gives the near edge its height and the far edge
+   its recession; a shorter lens than the grid's, because one panel on its own
+   has nothing beside it to be sheared against.
+
+   On the slide and not on the stack, because perspective reaches exactly one
+   generation. The card is the slide's child and the stack's grandchild, so a
+   lens on the stack was spent on the slide and the card came out flattened —
+   an orthographic squash, which is the difference between a panel that is
+   turned and a panel that is merely narrower. */
+.dash__slide {
+  perspective: 1500px;
+  perspective-origin: -25% 50%;
+}
+
+/* The columns have to pass the third dimension through to the cards inside
+   them, or a card in a stack would be flattened against its wrapper and the
+   whole grid would tilt as a single sheet of paper. */
+.bento > *,
+.bento .stack,
+.bento .col { transform-style: preserve-3d; }
+
+/* ONE panel turns, and it is the one with the drawing on it.
+   ------------------------------------------------------------------------
+   Every panel turning at once cancels itself out: if the whole room moves
+   together there is nothing for the eye to measure the movement against, and
+   a dozen surfaces each at their own slight angle reads as a wobble rather
+   than as depth. Hold the rest of the grid still and turn one panel hard, and
+   that panel is unmistakably an object standing in front of the others.
+
+   :has() rather than a class, so this follows the graph wherever it is put —
+   it is on a card on the dashboard and inside a deck on Case files, and
+   neither of them should have to know about this rule. */
+/* A card, and only a card. On Case files the graph is on the deck's structure
+   face, which has no surface of its own — the drawing floats straight on the
+   page there. Turning that would shear the drawing with no frame around it to
+   say why, which is the stretch this whole change was made to get rid of. A
+   turn needs an edge you can see turning. */
+/* It only does this while you are looking at it.
+   ------------------------------------------------------------------------
+   A panel that is turning all the time is wallpaper; one that comes alive
+   under the pointer is an object you picked up. And it turns to face the
+   POINTER ON ITSELF — --gx and --gy, published by the graph — not the
+   window-wide field, which barely moves across a panel this size and would
+   leave the card stuck at one angle the whole time it was hovered. */
+.card:has(.flow) {
+  transform: rotateY(var(--tilt, 0deg));
+  /* Slower coming back than going out: it leaves the pointer reluctantly. */
+  transition:
+    transform 520ms cubic-bezier(0.22, 1, 0.3, 1),
+    box-shadow 520ms ease;
+}
+
+.card:has(.flow):hover {
+  transform:
+    rotateY(calc(var(--tilt, 0deg) + var(--gx, 0) * 6deg))
+    rotateX(calc(var(--gy, 0) * -5deg))
+    /* A small, FIXED step toward the eye. It was proportional to the pointer
+       before, which meant the card changed size as you moved across it —
+       the other half of what read as stretching. Lifting by the same amount
+       the whole time it is held is a lift; lifting by a varying amount is a
+       zoom. */
+    translateZ(14px);
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.3, 1),
+    box-shadow 220ms ease;
+  /* Standing in front of its neighbours, so it casts onto them. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 40px 90px -36px rgba(0, 0, 0, 0.95),
+    0 0 50px -24px var(--accent-glow);
+  z-index: 2;
+}
+
+/* Under reduced motion nothing follows anything: App.jsx stops writing the
+   field, and this makes sure a stale value cannot leave a panel parked off
+   its own grid position. */
+@media (prefers-reduced-motion: reduce) {
+  .card:has(.flow) { transform: none; transition: none; }
+}
+[data-motion='reduced'] .card:has(.flow) { transform: none !important; }
+
+/* The light itself. Fixed, behind the vignette, and never in the way of a
+   pointer. The canvas paints nothing but light — the ground beneath it is the
+   body's own background. */
+.streak {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  display: block;
+  opacity: 1;
+  transition: opacity 600ms ease;
+}
+
+/* On a screen that is mostly rows, the bundle drops back to a suggestion.
+   It is the dashboard's picture; everywhere else it is a light in the room. */
+.streak[data-dense='true'] { opacity: 0.4; }
+
+@media (max-width: 760px) {
+  .streak { opacity: 0.72; }
+  .streak[data-dense='true'] { opacity: 0.3; }
+}
+
+/* Everything the app draws sits above all of it. */
+.app { position: relative; z-index: 3; }
+
 h1, h2, h3, h4, h5, h6, p, figure, blockquote, dl, dd {
   margin: 0;
+}
+
+/* Large type tightens up; small type does not. Negative tracking on a 12px
+   label just makes it muddy. */
+h1, h2, h3 {
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+/* The one emphasised word in a title. Italic serif against the geometric
+   sans, optically a size larger because a serif at the same point size reads
+   smaller, and never more than two words — it is a change of voice, not a
+   highlighter. */
+.serif {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.14em;
+  letter-spacing: 0;
+  color: var(--text);
+}
+
+/* Anything that is a measurement rather than a sentence: counts, times, ids,
+   status, durations. Lowercase and slashed, so a row of them reads as one
+   machine-written line instead of four labels. */
+.mono,
+.metric-line {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 ul, ol {
@@ -318,11 +551,15 @@ summary:focus-visible,
    4. CHROME — topbar
    -------------------------------------------------------------------------- */
 
+/* No fill of its own. The ground is the body's, and the three layers between
+   the two — grid, streak, vignette — are only visible because nothing above
+   them paints over the lot. An opaque .app is exactly the bug that hides the
+   light: it covers the viewport at the top of the stack. */
 .app {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: transparent;
 }
 
 .topbar {
@@ -452,6 +689,20 @@ summary:focus-visible,
 
 .bento + .bento { margin-top: var(--gap); }
 
+/* A row where the cards stand at their own height.
+   ------------------------------------------------------------------------
+   A grid row is as tall as its tallest cell, and by default every other cell
+   is stretched to match. That is right when the cards all hold something that
+   wants the room — three charts, three tables — and wrong when one of them
+   holds a table of ten rows and the others hold the sentence "nothing
+   overdue". Stretched, that sentence sits at the top of three hundred pixels
+   of nothing, and the card reads as broken rather than as empty.
+
+   So: the row keeps its height, and a card in it takes only what it needs.
+   The space under a short card is background, which is the honest answer —
+   there is nothing there. */
+.bento--fit { align-items: start; }
+
 .span-1  { grid-column: span 1; }
 .span-2  { grid-column: span 2; }
 .span-3  { grid-column: span 3; }
@@ -517,37 +768,39 @@ summary:focus-visible,
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: var(--panel);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
   color: var(--fg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 22px 60px -30px rgba(0, 0, 0, 0.92);
 }
 
-/* The sage card re-points the palette tokens so every child inherits the
-   inverted scheme without needing its own override. */
-/* The accent surface is distinguished by TEXTURE, not brightness: a
-   cross-section hatch over a barely-lifted base. A called-out region in a
-   technical drawing is hatched, not floodlit — and a full-width slab of light
-   grey was the brightest thing on the screen by a wide margin.
-
-   Because the surface is dark now, it keeps the normal tokens: no inverting
-   --fg/--line/--hot to their on-light variants. */
-.card--sage,
+/* The panel is glass. Three things make it read as glass rather than as a
+   grey box: the fill is translucent so the streak shows through it, the
+   backdrop is blurred so what shows through is a wash rather than a picture,
+   and there is a one-pixel inset highlight along the top edge — the line a
+   sheet of glass catches from a light above it. The shadow is deep and soft
+   and does the rest. */
+/* The highlighted panel. Cards do not use this any more — one surface for all
+   of them, see Card in primitives — and what is left is the first tip in a
+   list of recommendations, which is a small block of text rather than a whole
+   panel and can carry a breath of the accent without a screen of glass
+   looking broken. No hatch — the blur is the texture. */
 .tip--sage {
-  background-color: #141414;
   background-image:
-    repeating-linear-gradient(45deg,  rgba(196, 196, 196, 0.05) 0 1px, transparent 1px 8px),
-    repeating-linear-gradient(-45deg, rgba(196, 196, 196, 0.05) 0 1px, transparent 1px 8px);
-  border-color: #262626;
+    linear-gradient(180deg, rgba(169, 139, 255, 0.07), rgba(169, 139, 255, 0.02) 42%, transparent 72%);
+  border-color: rgba(169, 139, 255, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 1px rgba(169, 139, 255, 0.05),
+    0 18px 50px -24px rgba(169, 139, 255, 0.22),
+    0 22px 60px -30px rgba(0, 0, 0, 0.9);
   color: var(--fg);
-
-  /* Borders inside a hatched card sit on a lifted base (#141414), not on pure
-     black, so the global hairline all but vanishes against it. Only the
-     structural tokens are re-pointed — text keeps the normal palette. */
-  --line:      #2E2E2E;
-  --line-soft: #232323;
-  --card-hi:   #1C1C1C;
 }
 
 .card--pad { padding: var(--pad); }
@@ -576,8 +829,8 @@ summary:focus-visible,
 
 .card__title {
   font-size: 16px;
-  font-weight: 400;
-  letter-spacing: 0;
+  font-weight: 500;
+  letter-spacing: -0.015em;
   line-height: 1.25;
   color: var(--fg);
   overflow-wrap: anywhere;
@@ -724,46 +977,62 @@ summary:focus-visible,
 
 /* --- Pill ---------------------------------------------------------------- */
 
+/* The secondary button, and the default: a translucent dark pill that reads
+   as another piece of the glass. The primary is .pill--go below, and there is
+   at most one of those on a screen. */
 .pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
   padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 12.5px;
+  font-weight: 500;
   line-height: 1.25;
-  color: var(--fg);
-  background: transparent;
-  border: 1px solid var(--line);
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   white-space: nowrap;
   max-width: 100%;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+  transition:
+    background-color 220ms cubic-bezier(0.22, 1, 0.3, 1),
+    border-color 220ms cubic-bezier(0.22, 1, 0.3, 1),
+    color 220ms cubic-bezier(0.22, 1, 0.3, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.3, 1),
+    transform 220ms cubic-bezier(0.22, 1, 0.3, 1);
 }
 
 .pill:hover:not(:disabled) {
-  background: var(--card-hi);
-  border-color: #2C2C2C;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-strong);
 }
 
-.pill:active:not(:disabled) { background: var(--card-hi); }
+.pill:active:not(:disabled) { transform: translateY(1px); }
 
+/* Active is the accent's job: an accent fill, dark ink, and the glow that says
+   the thing under the pointer is the live one. */
 .pill--active,
 .pill.is-active,
 .pill[aria-pressed='true'],
 .pill[aria-expanded='true'] {
-  background: var(--fg);
-  border-color: var(--fg);
-  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 0 20px -4px var(--accent-glow);
 }
 
 .pill--active:hover:not(:disabled),
 .pill.is-active:hover:not(:disabled),
 .pill[aria-pressed='true']:hover:not(:disabled) {
-  background: var(--fg);
-  border-color: var(--fg);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--accent-ink);
 }
+
+/* No separate primary class: the app already marks its one submit button per
+   form with <Pill active>, which is the rule above. Two ways to say the same
+   thing is how a stylesheet starts disagreeing with itself. */
 
 /* Deleted: the inverted active pill only made sense while the card was light.
    On the hatched surface it uses the normal active treatment. */
@@ -877,7 +1146,9 @@ summary:focus-visible,
   min-width: 168px;
   max-width: min(280px, calc(100vw - 24px));
   padding: 6px;
-  background: var(--card-hi);
+  background: var(--overlay);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
@@ -957,7 +1228,9 @@ summary:focus-visible,
   z-index: 200;
   padding: 12px;
   width: 236px;
-  background: var(--card-hi);
+  background: var(--overlay);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
@@ -1222,13 +1495,37 @@ summary:focus-visible,
 .field--boxed .field__input,
 .field--boxed input {
   padding: 8px 12px;
-  background: var(--card-hi);
-  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
 
 .field--boxed .field__input:focus,
-.field--boxed input:focus { border-color: var(--fg); }
+.field--boxed input:focus { border-color: var(--accent-edge); }
+
+/* The focus ring, on every input in the app. An accent halo rather than a border
+   colour change: the border is already carrying the field's shape, and a ring
+   outside it is visible against glass at any size. */
+.field__input:focus,
+.field input:focus,
+.field textarea:focus,
+input[type='text']:focus,
+input[type='search']:focus,
+input[type='number']:focus,
+input[type='date']:focus,
+textarea:focus {
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* The placeholder is a hint about the SHAPE of what goes here, so it is set
+   in the data face like everything else that is not prose. */
+input::placeholder,
+textarea::placeholder {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  color: var(--text-faint);
+  letter-spacing: 0.01em;
+}
 
 /* --- Segmented ----------------------------------------------------------- */
 
@@ -1265,17 +1562,24 @@ summary:focus-visible,
 
 .segmented__item:hover { color: var(--fg); }
 
+/* The fill is the sliding thumb's job (motion.css), which is why there is no
+   background here: the item only changes its ink to sit on the thumb.
+
+   White ink, not the near-black that goes on a solid accent chip: the thumb is
+   a translucent wash now, so what is behind it — glass, and the light moving
+   under that — comes through, and dark text on a moving background is dark
+   text you sometimes cannot read. */
 .segmented__item--active,
 .segmented__item.is-active,
 .segmented__item[aria-selected='true'],
 .segmented__item[aria-pressed='true'] {
-  background: var(--fg);
-  color: var(--bg);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .segmented__item--active:hover,
 .segmented__item.is-active:hover,
-.segmented__item[aria-selected='true']:hover { color: var(--bg); }
+.segmented__item[aria-selected='true']:hover { color: var(--text); }
 
 .segmented--plain {
   background: transparent;
@@ -1341,9 +1645,17 @@ summary:focus-visible,
   min-height: 92px;
 }
 
+/* An empty state is the one place in the app with nothing to report, so it is
+   the one place that can afford a sentence with a voice. The last word of the
+   lead is set in the italic serif — see EmptyState in primitives.jsx, which
+   splits it off — which is what the accent face is for: one word, as a change
+   of register, never a highlight. */
 .empty__lead {
-  font-size: 13px;
-  color: var(--fg-mid);
+  font-size: 17px;
+  font-weight: 450;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+  color: var(--text);
 }
 
 .empty__hint {
@@ -1724,33 +2036,65 @@ summary:focus-visible,
   margin-inline: -10px;
   padding-inline: 10px;
 
+  /* And the same trick vertically, for a different reason. A row lifts a pixel
+     under the pointer and throws a shadow, and the first row sits flush with
+     the top of a box that scrolls — so the lift and the shadow were cut off
+     along a hard edge, which read as the highlight being broken rather than as
+     the row rising. A few pixels of padding gives it the room, and the
+     negative margin gives those pixels back to the layout so nothing moves. */
+  margin-block: -4px;
+  padding-block: 4px;
+
   overflow-y: auto;
   overflow-x: hidden;   /* a title too long to fit truncates rather than scrolls */
   overscroll-behavior: contain;
 }
 
+/* An entry is a node now, not a table row: its own small panel, separated by
+   space rather than by a rule. It lifts a pixel under the pointer and picks up
+   a faint accent edge — the same gesture the reference's workflow nodes make. */
 .entry {
   position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   min-width: 0;
-  padding: 11px 10px;
-  margin: 0 -10px;
+  padding: 11px 12px;
+  margin: 0 0 6px;
   border-radius: var(--radius-sm);
-  border-bottom: 1px solid var(--line-soft);
-  transition: background-color 140ms ease;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  transition:
+    background-color 220ms cubic-bezier(0.22, 1, 0.3, 1),
+    border-color 220ms cubic-bezier(0.22, 1, 0.3, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.3, 1),
+    transform 220ms cubic-bezier(0.22, 1, 0.3, 1),
+    opacity 220ms ease;
 }
 
-.entry:last-child { border-bottom: 0; }
+.entry:last-child { margin-bottom: 0; }
 
 .entry:hover,
-.entry:focus-within { background: var(--card-hi); }
+.entry:focus-within {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border-strong);
+  box-shadow:
+    0 0 0 1px var(--accent-faint),
+    0 10px 26px -14px rgba(0, 0, 0, 0.9),
+    0 0 22px -8px var(--accent-glow);
+}
+
+/* Closed. It keeps its place in the list and gives up everything else. */
+.entry--done {
+  opacity: 0.5;
+  background: transparent;
+}
 
 .entry--done .entry__title {
   color: var(--fg-dim);
   text-decoration: line-through;
-  text-decoration-color: var(--line);
+  text-decoration-color: var(--border-strong);
 }
 
 .entry--overdue .entry__title { color: var(--fg); }
@@ -1818,7 +2162,10 @@ button.entry__title:hover { color: var(--fg); }
   padding: 0 0 2px;
 }
 
+/* Project, due time, flags — the node's subline, in the data face. */
 .entry__meta {
+  font-family: var(--font-mono);
+  letter-spacing: 0.01em;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1962,6 +2309,23 @@ button.entry__title:hover { color: var(--fg); }
   border-bottom-color: var(--fg);
 }
 
+/* No halo on the thing you are typing an entry into.
+   ------------------------------------------------------------------------
+   Every text input in the app takes a three-pixel accent ring on focus, which
+   is right for a form field in a dialog and wrong here: the composer is a bar
+   you land in by default, so the ring was on screen most of the time, and a
+   violet box around a box around a card is two frames too many.
+
+   The focus is still unmistakable — the rule under the field goes from the
+   faint line to full white the moment you are in it, which is this field's
+   own shape changing rather than a box drawn around it. */
+.composer .field__input:focus,
+.composer .field__input:focus-visible,
+.composer input:focus,
+.composer input:focus-visible {
+  box-shadow: none;
+}
+
 .composer__actions {
   flex: none;
   display: inline-flex;
@@ -2014,7 +2378,9 @@ button.entry__title:hover { color: var(--fg); }
   gap: 10px;
   min-width: 0;
   padding: 14px;
-  background: var(--card-hi);
+  background: var(--overlay);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
   color: var(--fg);
@@ -2180,10 +2546,17 @@ button.entry__title:hover { color: var(--fg); }
 .grow   { flex: 1 1 auto; min-width: 0; }
 .spacer { flex: 1 1 auto; }
 
+/* The app's metadata utility, and so the main way the data face reaches the
+   screen: counts, windows, totals, "sample data", "8 open in total". If it is
+   a measurement rather than a sentence it is wearing this class, which is why
+   this one rule does most of the work the brief asks of the mono. */
 .micro {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--fg-mid);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .muted { color: var(--fg-mid); }
@@ -2199,17 +2572,69 @@ button.entry__title:hover { color: var(--fg); }
   white-space: nowrap;
 }
 
+/* A lit dot, not a printed one: the colour is also a glow around it, which is
+   what makes it read as a status light. */
 .status-dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   flex: none;
   border-radius: 50%;
-  background: var(--fg-dim);
+  background: var(--text-faint);
+  box-shadow: 0 0 0 0 transparent;
 }
 
-.status-dot--live     { background: var(--glow); }
-.status-dot--overdue  { background: var(--hot); }
-.status-dot--idle     { background: var(--line); }
+.status-dot--live {
+  background: var(--accent);
+  box-shadow: 0 0 8px 0 var(--accent-glow);
+  animation: statpulse 2s ease-in-out infinite;
+}
+.status-dot--overdue {
+  background: var(--red);
+  box-shadow: 0 0 8px 0 rgba(229, 112, 79, 0.4);
+  animation: statpulse 2s ease-in-out infinite;
+}
+.status-dot--idle { background: var(--border-strong); }
+
+/* Slow enough to be a breath rather than a blink. */
+@keyframes statpulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* --- the status pill ------------------------------------------------------
+   "● all systems normal". A lit dot, then one lowercase monospace phrase, in
+   a pill of the same glass as everything else. It is a readout, so it never
+   takes a pointer and never looks like a button. */
+.statpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.statpill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--tone, var(--text-faint));
+  box-shadow: 0 0 8px 0 var(--tone-glow, transparent);
+  animation: statpulse 2s ease-in-out infinite;
+}
+
+.statpill--ok      { --tone: var(--accent); --tone-glow: var(--accent-glow); color: var(--text); }
+.statpill--soon    { --tone: var(--amber);  --tone-glow: rgba(227, 179, 65, 0.4); color: var(--text); }
+.statpill--overdue { --tone: var(--red);    --tone-glow: rgba(229, 112, 79, 0.4); color: var(--text); }
+.statpill--idle    { --tone: var(--border-strong); animation: none; }
 
 .link {
   color: var(--fg-mid);
@@ -2222,9 +2647,14 @@ button.entry__title:hover { color: var(--fg); }
   border-bottom-color: var(--fg-mid);
 }
 
+/* The screen's name, in the data face: it is a label on the page, not a
+   heading of it. The heading is whatever the first panel says. */
 .section-label {
+  font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--fg-dim);
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  color: var(--text-faint);
   white-space: nowrap;
 }
 
@@ -2500,7 +2930,7 @@ button.entry__title:hover { color: var(--fg); }
   top: var(--at);
   right: 0;
   transform: translateY(-50%);
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.04em;
   color: var(--fg-mid);
@@ -2534,7 +2964,7 @@ button.entry__title:hover { color: var(--fg); }
 }
 
 .sched__dow {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 13px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2542,7 +2972,7 @@ button.entry__title:hover { color: var(--fg); }
 }
 
 .sched__date {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--fg-mid);
   font-variant-numeric: tabular-nums;
@@ -2599,7 +3029,7 @@ button.entry__title:hover { color: var(--fg); }
   inset: 0;
   display: grid;
   place-items: center;
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2652,14 +3082,14 @@ button.entry__title:hover { color: var(--fg); }
 }
 
 .sched__when {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   letter-spacing: 0.03em;
   color: var(--fg-mid);
   flex: none;
 }
 .sched__where {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   letter-spacing: 0.03em;
   color: var(--fg-dim);
@@ -2682,6 +3112,188 @@ button.entry__title:hover { color: var(--fg); }
 }
 .sched__block.is-live .sched__title { color: var(--fg); }
 
+/* --- the entry month -------------------------------------------------------
+   The other calendar on that screen: a month of days, every dated entry in the
+   archive sitting on the one it is due. Where the timetable is a lane per day
+   with time running down it, this is a cell per day with no time in it at all —
+   an entry is dated, not scheduled, and drawing it at an hour would invent a
+   precision the data does not have.
+
+   The two share their chips' readout and their day-name row, and nothing else:
+   they answer different questions and are built to look like it. */
+.month {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.month__dow,
+.month__grid {
+  display: grid;
+  /* minmax(0, 1fr) rather than 1fr: a grid column's default minimum is its
+     content, so one long entry title would push its column wider than the
+     other six and put the day names out of line with the cells under them. */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.month__dowcell {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  padding-left: 2px;
+}
+
+.month__grid {
+  /* Every week the same height, whatever is in it. A row that grew to fit its
+     busiest day would make the month read as a bar chart of how loaded each
+     week is, which is not what a calendar is for. The minimum is CELL_MAX
+     entries plus the "+n more" line plus the day number — change one and the
+     other has to move with it. */
+  grid-auto-rows: minmax(112px, 1fr);
+}
+
+.moncell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 5px 5px 6px;
+
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  /* The cell is a fixed height and the entries past the fourth are counted
+     rather than drawn, so nothing should ever reach this — it is here so that
+     a very long title crops instead of breaking the grid. */
+  overflow: hidden;
+}
+
+/* The days either side of the month. Drawn rather than left blank — the last
+   few days of the month you are leaving are exactly what you want on the first
+   row — but dimmed, so the month you asked for is still the figure. */
+.moncell.is-out { opacity: 0.42; }
+
+.moncell.is-today {
+  border-color: var(--line);
+  background: var(--card-hi);
+}
+
+.moncell__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.moncell__num {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.2;
+  /* The dot-matrix face sets its digits tight enough that a two-digit date
+     reads as one smudged glyph at this size. */
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+}
+.moncell.is-today .moncell__num { color: var(--fg); }
+
+.moncell__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* One entry. A row with a coloured rule down its left edge rather than a
+   filled pill: a cell holds four of these, and four solid chips in a box this
+   small is a colour swatch, not a list you can read. */
+.enttag {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  padding: 1px 4px 1px 5px;
+
+  border: 0;
+  /* The state, and the only place colour appears on this grid. */
+  border-left: 2px solid var(--tag, var(--fg-dim));
+  border-radius: 3px;
+  background: var(--card-hi);
+
+  font-family: var(--font);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--fg-mid);
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+/* is-hot is the chip the readout is currently describing, which is not always
+   the one under the pointer — a keyboard tab through the grid moves it too. */
+.enttag:hover,
+.enttag:focus-visible,
+.enttag.is-hot {
+  background: var(--line);
+  color: var(--fg);
+}
+.enttag:focus-visible {
+  outline: 1px solid var(--tag, var(--fg-dim));
+  outline-offset: 1px;
+}
+
+/* The same four states the case graph and the entry rows use, read off the
+   same function, so a date cannot be amber on one screen and white on another. */
+.enttag--open { --tag: var(--pin-open); }
+.enttag--soon { --tag: var(--pin-soon); }
+.enttag--late { --tag: var(--pin-late); color: var(--fg); }
+.enttag--done {
+  --tag: var(--pin-done);
+  color: var(--fg-dim);
+  text-decoration: line-through;
+}
+
+/* High priority. The wash is the whole of it — the left rule is untouched, so
+   an entry can be "due in a week" and "high" at once and say both things. */
+.enttag.is-high {
+  background: var(--hot-wash);
+  color: var(--fg);
+}
+.enttag.is-high:hover,
+.enttag.is-high:focus-visible,
+.enttag.is-high.is-hot { background: var(--hot-wash-hi); }
+
+/* A closed entry gives the wash up along with everything else: the point of
+   the tint is "this is still owed". Belt and braces — the class is not applied
+   to a done entry in the first place. */
+.enttag--done.is-high {
+  background: transparent;
+  color: var(--fg-dim);
+}
+
+/* Not an entry — a count of the ones the cell could not fit. */
+.enttag--more {
+  border-left-color: transparent;
+  background: transparent;
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  cursor: default;
+}
+
+/* Narrow windows: the cells give up their height before the month gives up a
+   column, because a month with fewer than seven columns is not a month. */
+@media (max-width: 1100px) {
+  .month__grid { grid-auto-rows: minmax(94px, 1fr); }
+  .enttag { font-size: 10px; }
+}
+
 /* --- one piece of course work ---------------------------------------------
    Same chip under a day header and on a class block, so "Quiz 3" reads as the
    same kind of thing wherever it turns up. Outlined rather than filled: a row
@@ -2702,7 +3314,7 @@ button.entry__title:hover { color: var(--fg); }
      lane and today's lighter lane, where a transparent one took whatever was
      behind it and the border did all the work. */
   background: var(--iris-soft);
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   line-height: 1.5;
   letter-spacing: 0.02em;
@@ -2804,7 +3416,7 @@ button.entry__title:hover { color: var(--fg); }
 .agenda__time {
   flex: none;
   width: 58px;
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--fg);
   font-variant-numeric: tabular-nums;
@@ -2819,7 +3431,7 @@ button.entry__title:hover { color: var(--fg); }
 
 .agenda__title { font-size: 12.5px; color: var(--fg); }
 .agenda__meta {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--fg-mid);
 }
@@ -2849,7 +3461,7 @@ button.entry__title:hover { color: var(--fg); }
 .courserow__days,
 .courserow__time,
 .courserow__where {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--fg-mid);
 }
@@ -2889,7 +3501,9 @@ button.entry__title:hover { color: var(--fg); }
   padding: 13px 14px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--card-hi);
+  background: var(--overlay);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
   /* The one place a shadow is used: this floats over content that is otherwise
      the same value, and needs to read as detached rather than inline. */
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.66);
@@ -2910,7 +3524,7 @@ button.entry__title:hover { color: var(--fg); }
 
 .schedtip__state {
   margin-top: 3px;
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2939,7 +3553,7 @@ button.entry__title:hover { color: var(--fg); }
 }
 
 .schedtip__row dt {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2958,7 +3572,7 @@ button.entry__title:hover { color: var(--fg); }
 }
 
 .schedtip__sub {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.03em;
   color: var(--fg-dim);
@@ -3031,7 +3645,7 @@ button.entry__title:hover { color: var(--fg); }
 }
 .fc-panel__sub {
   margin: 3px 0 0;
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--fg-dim);
 }
@@ -3114,7 +3728,7 @@ button.entry__title:hover { color: var(--fg); }
 .fc-rename .field { flex: 1 1 auto; min-width: 0; }
 .fc-group__meta,
 .fc-group__due {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--fg-dim);
 }
@@ -3147,7 +3761,7 @@ button.entry__title:hover { color: var(--fg); }
 .fc-deck__name { font-size: 13.5px; color: var(--fg); }
 .fc-deck__meta,
 .fc-deck__due {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--fg-dim);
 }
@@ -3168,7 +3782,7 @@ button.entry__title:hover { color: var(--fg); }
   width: 100%;
   box-sizing: border-box;
   padding: 8px 10px;
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--fg);
   background: var(--card-hi);
@@ -3180,9 +3794,9 @@ button.entry__title:hover { color: var(--fg); }
 .fc-select:hover { border-color: var(--fg-dim); }
 .fc-select:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: 1px; }
 
-.fc-file { font-family: var(--font-dot); font-size: 11.5px; color: var(--fg-mid); }
+.fc-file { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-mid); }
 .fc-file::file-selector-button {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -3203,7 +3817,7 @@ button.entry__title:hover { color: var(--fg); }
   min-height: 150px;
   resize: vertical;
   padding: 11px 12px;
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.55;
   color: var(--fg);
@@ -3221,7 +3835,7 @@ button.entry__title:hover { color: var(--fg); }
 .fc-status { min-height: 34px; display: flex; align-items: center; }
 .fc-msg {
   margin: 0;
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--fg-dim);
@@ -3252,7 +3866,7 @@ button.entry__title:hover { color: var(--fg); }
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card-hi);
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--fg-mid);
   animation: fc-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -3269,7 +3883,7 @@ button.entry__title:hover { color: var(--fg); }
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--card-hi);
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.65;
   color: var(--fg-mid);
@@ -3302,7 +3916,7 @@ button.entry__title:hover { color: var(--fg); }
 }
 
 .fc-face__tag {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -3355,9 +3969,9 @@ button.entry__title:hover { color: var(--fg); }
 .fc-rate__btn:active { transform: translateY(0); }
 .fc-rate__btn:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: 1px; }
 
-.fc-rate__key { font-family: var(--font-dot); font-size: 10px; color: var(--fg-dim); }
+.fc-rate__key { font-family: var(--font-mono); font-size: 10px; color: var(--fg-dim); }
 .fc-rate__label { font-size: 13px; color: var(--fg); }
-.fc-rate__when { font-family: var(--font-dot); font-size: 10.5px; color: var(--fg-dim); }
+.fc-rate__when { font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-dim); }
 
 /* The same four states the case pins use, so a rating reads the same way here
    as a due date does there. */
@@ -3368,14 +3982,14 @@ button.entry__title:hover { color: var(--fg); }
 
 .fc-done { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .fc-done__n {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 46px;
   line-height: 1;
   color: var(--fg);
   font-variant-numeric: tabular-nums;
 }
 .fc-done__label {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--fg-dim);
 }
@@ -3455,7 +4069,7 @@ button.entry__title:hover { color: var(--fg); }
   background: none;
   color: var(--fg-mid);
   cursor: pointer;
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.02em;
   transition: color 160ms ease, background-color 160ms ease;
@@ -3633,7 +4247,7 @@ button.entry__title:hover { color: var(--fg); }
 }
 .deckhead__sub {
   margin: 2px 0 0;
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--fg-dim);
 }
@@ -3663,7 +4277,7 @@ button.entry__title:hover { color: var(--fg); }
   align-items: center;
   gap: 14px;
   padding-top: 12px;
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--fg-dim);
 }
@@ -3765,6 +4379,17 @@ button.entry__title:hover { color: var(--fg); }
    iris instead of a state colour.
    ========================================================================== */
 
+/* The layer the graph leans on. Promoted once and for all: the lean is written
+   to this element's transform sixty times a second, and a layer that has to be
+   created and thrown away on every gesture is worse than one that simply
+   exists. It carries no paint of its own. */
+.cg__stage {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  will-change: transform;
+}
+
 .cg {
   display: block;
   width: 100%;
@@ -3782,7 +4407,7 @@ button.entry__title:hover { color: var(--fg); }
   min-height: 220px;
 }
 .cg__empty {
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -3844,15 +4469,25 @@ button.entry__title:hover { color: var(--fg); }
    with a second band inside on a case and a sub-case. Drawn as a hairline that
    does not thicken with the zoom, which is what keeps the loops legible as
    loops rather than closing into a blot. */
-.cg__rose {
-  fill: none;
-  stroke: var(--node);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-  opacity: 0.8;
-  transition: stroke 160ms ease, opacity 160ms ease;
+/* The shadow a node casts on the board. Flat black at low opacity — it does
+   not take the state colour, because a shadow is an absence of light and a
+   coloured one reads as a second dot. */
+.cg__shade {
+  fill: #000;
+  opacity: 0.5;
+  pointer-events: none;
 }
-.cg__rose--inner { opacity: 0.55; }
+
+/* The light on top of it: an offset cap, brightest on a hub because a hub is
+   bigger and so catches more of it. With the rim on the dot below, this is
+   what makes a flat circle read as a lit sphere. */
+.cg__cap {
+  fill: #fff;
+  opacity: 0.22;
+  pointer-events: none;
+}
+.cg__node--case .cg__cap,
+.cg__node--subcase .cg__cap { opacity: 0.3; }
 
 /* One custom property per node group, so the dot, its label and its halo all
    read from a single declaration and can never disagree. */
@@ -3882,13 +4517,23 @@ button.entry__title:hover { color: var(--fg); }
   vector-effect: non-scaling-stroke;
 }
 
-/* A hovered node's rosette comes up to full strength with its dot. */
-.cg__node[data-lit='hot'] .cg__rose { opacity: 1; }
-.cg__node[data-lit='near'] .cg__rose { opacity: 0.9; }
+/* A node under the pointer sits up: the shadow deepens and the light on it
+   comes up with it. */
+.cg__node[data-lit='hot'] .cg__shade { opacity: 0.75; }
+.cg__node[data-lit='hot'] .cg__cap { opacity: 0.42; }
+
+/* The dark edge all the way round. It separates the disc from the board at
+   any size and, with the cap above, is the second half of the sphere — and a
+   stroke costs nothing to rasterise next to a gradient fill. */
+.cg__dot {
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
 
 .cg__label {
   text-anchor: middle;
-  font-family: var(--font-dot);
+  font-family: var(--font-mono);
   font-size: 19px;      /* in viewBox units, so it scales with the drawing */
   fill: var(--fg-mid);
   pointer-events: none;
@@ -4015,7 +4660,13 @@ button.entry__title:hover { color: var(--fg); }
 /* Rides out to sit just off the panel's trailing edge, travelling on the same
    clock so the two move as one. */
 .notab[aria-expanded='true'] {
-  transform: translateY(-50%) translateX(calc(var(--notes-w, 620px) + 12px));
+  /* Capped so it never leaves the window: the panel itself is capped at the
+     window's width, and on a narrow screen the tab would otherwise be pushed
+     off the right edge by the full nominal width. */
+  transform: translateY(-50%) translateX(min(
+    calc(var(--notes-w, 620px) + 12px),
+    calc(100vw - var(--notes-gap, 18px) * 2 - 34px)
+  ));
 }
 
 /* --- the page ------------------------------------------------------------ */
@@ -4034,7 +4685,9 @@ button.entry__title:hover { color: var(--fg); }
   box-sizing: border-box;
   padding: 22px 24px;
 
-  background: var(--card);
+  background: var(--overlay);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.66);
@@ -4061,34 +4714,131 @@ button.entry__title:hover { color: var(--fg); }
   pointer-events: auto;
 }
 
-/* The app rings a focused control, and rightly so — but this control is the
-   whole panel, so the ring reads as a second border drawn inside the card
-   rather than as focus on something in it. The page having slid out with a
-   caret blinking in it says where the keyboard is going. */
-.notes .notes__pad:focus,
-.notes .notes__pad:focus-visible { outline: none; box-shadow: none; }
+/* --- the pad: a live markdown editor --------------------------------------
+   CodeMirror injects its own base theme at runtime, after this stylesheet, so
+   anything here that has to win is written one class more specific than its
+   rule. Everything visible is a token. */
+
+/* The pad is no longer the only thing in the drawer — there is a footer under
+   it with the filing button. A column, so the editor takes what is left rather
+   than the 100% it used to be able to assume. */
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
 .notes__pad {
-  display: block;
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
-  border: 0;
-  outline: 0;
-  background: none;
-  resize: none;
-
-  color: var(--fg);
+.notes .md .cm-editor { height: 100%; background: none; color: var(--fg); }
+.notes .md .cm-editor.cm-focused { outline: none; }
+.notes .md .cm-scroller {
   font-family: var(--font);
   font-size: 13.5px;
   line-height: 1.7;
-  /* Wrapping long lines rather than scrolling sideways: this is a pad, not a
-     document with a page width. */
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow: auto;
+}
+.notes .md .cm-content { padding: 0; caret-color: var(--fg); }
+.notes .md .cm-line { padding: 0; }
+.notes .md ::selection,
+.notes .md .cm-content ::selection { background: var(--iris-hi); }
+
+/* Headings keep their size whether or not the line is being edited, so text
+   does not jump as the cursor arrives — only the # marks come and go. */
+.md-h { color: var(--fg); font-weight: 600; }
+.md-h1 { font-size: 1.7em; line-height: 1.3; padding-top: 0.35em !important; }
+.md-h2 { font-size: 1.4em; line-height: 1.35; padding-top: 0.3em !important; }
+.md-h3 { font-size: 1.18em; }
+.md-h4, .md-h5, .md-h6 { font-size: 1em; color: var(--fg-mid); }
+
+.md-strong { font-weight: 700; color: var(--fg); }
+.md-em { font-style: italic; }
+.md-strike { text-decoration: line-through; color: var(--fg-dim); }
+.md-code {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.92em;
+  background: var(--card-hi);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.md-link { color: var(--iris); text-decoration: underline; text-underline-offset: 3px; }
+
+.md-bullet {
+  display: inline-block;
+  width: 1em;
+  color: var(--fg-mid);
+  text-align: center;
+}
+/* Drawn rather than native. The app resets every input to appearance: none
+   with no border and no background, which leaves a native checkbox as literally
+   nothing — the box was in the DOM and invisible. A native one would not belong
+   on this theme anyway. */
+.md-task {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: 13px;
+  height: 13px;
+  margin: 0 0.5em 0 0.1em;
+  vertical-align: -2px;
+  border: 1px solid var(--fg-mid);
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.md-task:hover { border-color: var(--fg); }
+/* Ticking it fills with the accent and throws one pulse of glow — the only animation in
+   the pad, and it fires exactly when something gets finished. */
+.md-task:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  animation: taskpop 420ms cubic-bezier(0.22, 1, 0.3, 1);
+}
+.md-task:checked::after {
+  content: '';
+  width: 3px;
+  height: 7px;
+  /* The tick is cut out of the fill in the ink colour meant for it, not in the
+     page background — the box may be sitting on glass. */
+  border: solid var(--accent-ink);
+  border-width: 0 1.5px 1.5px 0;
+  transform: translate(0, -1px) rotate(45deg);
+}
+
+@keyframes taskpop {
+  0%   { box-shadow: 0 0 0 0 var(--accent-glow); transform: scale(1); }
+  40%  { box-shadow: 0 0 0 5px rgba(169, 139, 255, 0); transform: scale(1.14); }
+  100% { box-shadow: 0 0 0 0 rgba(169, 139, 255, 0); transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-task:checked { animation: none; }
+}
+[data-motion='reduced'] .md-task:checked { animation: none !important; }
+.md-done { color: var(--fg-dim); text-decoration: line-through; }
+
+.md-quote {
+  border-left: 2px solid var(--fg-dim);
+  padding-left: 12px !important;
+  color: var(--fg-mid);
+}
+.md-block {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.92em;
+  background: var(--card-hi);
+  padding: 0 10px !important;
+}
+.md-hr {
+  display: inline-block;
+  width: 100%;
+  border-top: 1px solid var(--line);
+  vertical-align: middle;
 }
 
 /* Catches the click that closes the pad. Invisible on purpose — dimming the
@@ -4102,8 +4852,1730 @@ button.entry__title:hover { color: var(--fg); }
 }
 .notescrim.is-open { pointer-events: auto; }
 
+/* Belt and braces with the data-gramm attributes on the editor: older builds of
+   the extension ignore those and inject their overlay as an element of their
+   own anyway. Nothing of ours is ever named this, so hiding it cannot hide
+   anything real. */
+.notes grammarly-extension,
+.notes grammarly-desktop-integration,
+.notes .grammarly-btn { display: none !important; }
+
 @media (prefers-reduced-motion: reduce) {
   .notes, .notab { transition: none; }
 }
 [data-motion='reduced'] .notes,
 [data-motion='reduced'] .notab { transition: none; }
+
+/* ==========================================================================
+   STANDBY
+   Left alone for a minute, the app goes soft and a clock takes the middle.
+   ========================================================================== */
+
+.standby {
+  position: fixed;
+  inset: 0;
+  z-index: 400;              /* over everything, the scratchpad and its tab included */
+
+  display: grid;
+  grid-template-rows: 1fr auto;
+  place-items: center;
+  padding: 0 24px 34px;
+
+  /* The blur is of what is already on screen rather than a copy of it: one
+     backdrop-filter, no second render of the app. The graph parks its
+     simulation once it settles, so by the time this appears the backdrop is a
+     still image and the blur is rasterised once, not sixty times a second. */
+  backdrop-filter: blur(18px) saturate(0.55) brightness(0.42);
+  -webkit-backdrop-filter: blur(18px) saturate(0.55) brightness(0.42);
+  /* Fallback for an engine without backdrop-filter: dim it, at least. */
+  background:
+    radial-gradient(120% 90% at 50% 45%, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.72) 100%);
+
+  opacity: 0;
+  visibility: hidden;
+  /* Hidden outright when it is off. A transparent full-screen backdrop-filter
+     still costs the compositor a blur on every frame it exists for.
+
+     LEAVING is quicker than arriving: someone who clicks wants the app back,
+     while the arrival is unasked-for and should not snatch the screen. */
+  transition:
+    opacity 460ms cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0s linear 460ms;
+}
+
+.standby.is-on {
+  opacity: 1;
+  visibility: visible;
+  /* A long, single-sided ease — almost all of the movement happens early and
+     then it coasts to a stop, so it settles rather than arrives. */
+  transition:
+    opacity 1100ms cubic-bezier(0.32, 0.72, 0, 1),
+    visibility 0s;
+}
+
+.standby__clock {
+  align-self: center;
+  display: grid;
+  justify-items: center;
+  gap: 20px;
+
+  /* The whole gesture. It grows the last few percent into place as it fades
+     up, and shrinks back the same way on the way out — a settling rather than
+     a slide, which is why nothing about it is directional. Transform and
+     opacity only: no layout, no paint, the compositor does all of it. */
+  transform: scale(0.955);
+  transition: transform 460ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+.standby.is-on .standby__clock {
+  transform: scale(1);
+  /* Longer than the fade, so the movement is still easing gently after the
+     clock is fully there — the last of it is felt more than seen. */
+  transition: transform 1400ms cubic-bezier(0.22, 1, 0.3, 1);
+}
+
+.standby__time {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+
+  /* The app's own face, not the dot-matrix display one. At this size the dots
+     stopped reading as a display and started reading as a texture. */
+  font-family: var(--font);
+  font-weight: 400;
+  /* Big, but never wider than the window: the hour block is the one thing on
+     screen and it should read from across the room. */
+  font-size: clamp(58px, 13vw, 156px);
+  line-height: 0.95;
+  color: var(--pin-open);
+  /* Tightened, because default tracking on a face this size leaves the digits
+     standing apart rather than reading as one number. */
+  letter-spacing: -0.03em;
+  text-shadow: 0 0 44px var(--glow-soft);
+}
+
+/* Tabular figures, or every minute would nudge the whole block sideways. */
+.standby__h,
+.standby__m { font-variant-numeric: tabular-nums; }
+
+.standby__colon {
+  /* Optically centred: a colon sits low in its box, and against digits this
+     size the gap would be obvious. Steady — a blink is a second thing moving
+     on a screen whose whole point is that nothing is happening. */
+  transform: translateY(-0.04em);
+  color: var(--fg-mid);
+}
+
+/* Hung off the end rather than sitting in the row, so what is centred on screen
+   is the hour and minute — the thing being read. In the row it dragged the big
+   digits left of centre and left the date line sitting under the minutes. */
+.standby__tail {
+  position: absolute;
+  left: 100%;
+  bottom: 0.16em;
+  white-space: nowrap;
+
+  margin-left: 0.24em;
+  font-size: 0.19em;          /* relative to the hour block, so it scales with it */
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  text-shadow: none;
+}
+
+.standby__date {
+  font-family: var(--font);
+  font-size: 12.5px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  /* The last letter's tracking would otherwise push the line off centre. */
+  text-indent: 0.32em;
+}
+
+.standby__hint {
+  font-family: var(--font);
+  font-size: 10.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  opacity: 0;
+  /* Arrives after the clock has landed. Someone who is already reaching for the
+     mouse never sees it; someone looking at a blurred screen wondering what
+     happened does. */
+  transition: opacity 600ms ease;
+}
+.standby.is-on .standby__hint { opacity: 0.38; transition: opacity 700ms ease 1100ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .standby,
+  .standby.is-on,
+  .standby__clock,
+  .standby.is-on .standby__clock,
+  .standby__hint,
+  .standby.is-on .standby__hint { transition-duration: 1ms; transition-delay: 0s; }
+  .standby.is-on .standby__clock, .standby__clock { transform: none; }
+}
+
+/* ==========================================================================
+   THE CASE FLOW
+   A case as a flow of steps: a card per node, curved wires between them.
+   HTML cards over one SVG of wires — see CaseFlow.jsx for why it is not all
+   one drawing.
+   ========================================================================== */
+
+.flow {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.flow--empty {
+  display: grid;
+  place-items: center;
+}
+
+.flow__none {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+/* Everything is laid out at one size and scaled as a piece, so a card's
+   proportions never change with how much is on screen. */
+.flow__scene {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.flow__wires {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.flow__line {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.25;
+  transition: stroke 200ms ease;
+}
+
+/* A subtask hangs below the thing it belongs to rather than beside it, and the
+   line says so without needing the label to be read. */
+.flow__wire--subtask .flow__line { stroke-dasharray: 3 4; }
+
+.flow__port {
+  fill: var(--text-faint);
+  transition: fill 200ms ease;
+}
+
+.flow__wire[data-lit='hot'] .flow__line { stroke: var(--accent); }
+.flow__wire[data-lit='hot'] .flow__port { fill: var(--accent); }
+
+/* --- a step ---------------------------------------------------------------
+   The card from the reference: a name, a line of data under it, a lit dot for
+   state, and an edge that comes up when the pointer is on it. */
+.flow__node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  box-sizing: border-box;
+  padding: 0 12px;
+
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(22, 20, 28, 0.9);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 14px 30px -18px rgba(0, 0, 0, 0.95);
+
+  cursor: default;
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    transform 200ms cubic-bezier(0.22, 1, 0.3, 1),
+    opacity 200ms ease;
+}
+
+.flow__node:focus-visible {
+  outline: 1px solid var(--accent-edge);
+  outline-offset: 2px;
+}
+
+.flow__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.flow__dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--tone, var(--text-faint));
+  box-shadow: 0 0 8px 0 var(--tone-glow, transparent);
+}
+
+.flow__title {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.flow__sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 13px;
+}
+
+/* The first card is the case itself: the thing everything else comes off. */
+.flow__node--case {
+  background: rgba(28, 25, 36, 0.92);
+  border-color: var(--border-strong);
+}
+.flow__node--case .flow__title { font-size: 13.5px; }
+
+/* State, and the same four the rest of the app uses. The card sets one
+   property and the dot reads it, so a step cannot disagree with its own dot. */
+.flow__node--structure { --tone: var(--text-muted); }
+.flow__node--normal    { --tone: var(--pin-open); }
+.flow__node--soon      { --tone: var(--amber); --tone-glow: rgba(227, 179, 65, 0.45); }
+.flow__node--urgent    { --tone: var(--pin-late); --tone-glow: rgba(229, 112, 79, 0.45); }
+.flow__node--overdue   { --tone: var(--pin-late); --tone-glow: rgba(229, 112, 79, 0.5); }
+.flow__node--done      { --tone: var(--accent); --tone-glow: var(--accent-glow); }
+
+.flow__node--done .flow__title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
+}
+
+.flow__node--overdue .flow__sub { color: var(--red); }
+
+/* Hovering one step lifts it and dims the rest, so a branch can be followed
+   through a busy case without reading every card on the way. */
+.flow[data-hot] .flow__node { opacity: 0.4; }
+.flow[data-hot] .flow__node[data-lit] { opacity: 1; }
+
+.flow__node[data-lit='hot'] {
+  transform: translateY(-1px);
+  border-color: var(--accent-edge);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 16px 34px -16px rgba(0, 0, 0, 0.95),
+    0 0 26px -10px var(--accent-glow);
+}
+
+/* --- a branch label ------------------------------------------------------
+   The "true" / "else" pill from the reference, on the links where the
+   relationship is worth naming. */
+.flow__tag {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--overlay);
+
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* --- the panel's readout -------------------------------------------------- */
+.flow__meta {
+  position: absolute;
+  left: 2px;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.flow__sep { opacity: 0.5; margin: 0 0.45em; }
+.flow__late { color: var(--red); }
+
+@media (prefers-reduced-motion: reduce) {
+  .flow__node, .flow__line, .flow__port { transition: none; }
+}
+[data-motion='reduced'] .flow__node { transition: none !important; }
+
+/* ==========================================================================
+   THE DASHBOARD
+   A brief on the left and one card at a time on the right. The screen used to
+   be a bento of six panels competing for attention; it reads as a greeting
+   and a thing you page through now.
+   ========================================================================== */
+
+.dash {
+  display: grid;
+  /* The brief is narrow and takes whatever is left; the deck is capped and
+     sits against the right edge of the screen, the way the reference's panel
+     does. The empty middle is the point — that is where the light shows. */
+  grid-template-columns: minmax(260px, 1fr) minmax(0, auto);
+  gap: 28px;
+  align-items: stretch;
+  min-width: 0;
+  /* A definite height, because the deck stacks its cards on top of each other
+     and absolute children cannot size their parent.
+
+     The ROW is as tall as the screen allows. The panel inside it is not — see
+     .dash__stack. A panel as tall as the window is a column; the reference's
+     is a landscape window standing in a room with space above and below it,
+     and the space either side is what makes it an object rather than a
+     section of the page. */
+  height: clamp(520px, calc(100vh - var(--nav-h, 66px) - 120px), 900px);
+}
+
+/* --- the brief ------------------------------------------------------------ */
+
+.dash__brief {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  padding-top: 8px;
+}
+
+.dash__chip { align-self: flex-start; }
+
+.dash__greet {
+  font-size: clamp(34px, 4vw, 52px);
+  font-weight: 500;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+/* The one emphasised word, at the size the serif needs to sit level with a
+   geometric sans two thirds its weight. */
+.dash__greet .serif { font-size: 1.05em; }
+
+.dash__line {
+  max-width: 34ch;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* --- what is coming ------------------------------------------------------- */
+
+.dash__up {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.dash__uphead {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: lowercase;
+  color: var(--text-faint);
+  padding: 0 0 8px 2px;
+}
+
+/* A run-log row: a lit dot, when, what, and where it belongs. Monospace, so
+   the five of them line up as a block rather than as five sentences. */
+.dash__row {
+  display: grid;
+  grid-template-columns: 6px 68px minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  margin: 0 -8px;
+
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  transition: background-color 200ms ease;
+}
+
+.dash__row:hover,
+.dash__row:focus-visible { background: var(--bg-elevated); }
+
+.dash__when { color: var(--text-faint); }
+.dash__what { color: var(--text); font-family: var(--font); font-size: 12.5px; }
+.dash__case { color: var(--text-faint); text-align: right; }
+
+.dash__none {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-faint);
+  padding: 4px 2px;
+}
+
+/* --- the deck ------------------------------------------------------------- */
+
+.dash__deck {
+  position: relative;
+  display: grid;
+  /* The panel floats in the middle of the column rather than filling it. */
+  align-items: center;
+  /* The dots ride on the inner side of the panel, so the panel itself can be
+     flush with the edge of the screen rather than held off it by its own
+     controls. The stack is written first in the markup and placed second
+     here. */
+  grid-template-columns: auto minmax(0, 700px);
+  justify-content: end;
+  gap: 14px;
+  min-width: 0;
+  outline: none;
+}
+
+.dash__deck:focus-visible .dash__stack {
+  outline: 1px solid var(--accent-edge);
+  outline-offset: 10px;
+  border-radius: var(--radius);
+}
+
+.dash__stack {
+  grid-column: 2;
+  position: relative;
+  min-width: 0;
+  /* Its own height, and a landscape one. The column it sits in is as tall as
+     the screen; this is not, and the difference is the air around it. */
+  height: clamp(420px, calc(100vh - var(--nav-h, 66px) - 260px), 600px);
+  /* The room the graph's panel turns in — see the panel-turn rule above. */
+  perspective: 2200px;
+  perspective-origin: 50% 50%;
+}
+
+/* Every card is mounted; only one is in front. Mounting them all is what
+   makes paging instant — a card that had to build its charts on arrival would
+   stutter every time the wheel moved.
+
+   Where each card is, and how much of it there is, is written on the element
+   by the deck itself every frame — see Dashboard.jsx. There is no transition
+   here on purpose: a transition is a fixed journey between two states, and
+   the deck does not have two states. It has a position that can stop anywhere
+   and change direction mid-flight, and a transition fighting that is the
+   thing that made it feel latched. */
+.dash__slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  /* The card is its own height now, so it has to be told where in the frame
+     to stand. The middle: a card that grew from the top edge would read as
+     the deck scrolling rather than as the card being a different size. */
+  align-items: center;
+  opacity: 0;
+  visibility: hidden;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+}
+
+/* Every card in the deck stands at an angle: its right edge swings out of the
+   screen toward you and its left edge leans away, so the panel reads as a
+   thing standing against the right wall of the room rather than as a rectangle
+   printed on the glass. It is a constant, not a reaction — they are at that
+   angle whether or not anyone is pointing at them. The one with the flow on it
+   turns further under the pointer, on top of this.
+
+   Negative, because rotateY sends +x to -z: a negative turn is the one that
+   brings the right edge forward. */
+.dash {
+  --tilt: -11deg;
+}
+
+.dash__card {
+  width: 100%;
+  /* As tall as what is on it, not as tall as the frame.
+     --------------------------------------------------------------------
+     The deck is one frame you page cards through, and a frame that every
+     card is stretched to fill means the card with a single number on it is
+     four fifths empty. Each card takes the height it needs and sits in the
+     middle of the frame, so paging through the deck is a panel changing size
+     rather than a panel whose contents keep sliding to the top of it.
+
+     The frame itself does not move — .dash__stack still has its own height,
+     so the dots, the brief beside it and the page under it all stay put. */
+  height: auto;
+  max-height: 100%;
+  min-height: 0;
+  transform: rotateY(var(--tilt));
+  transform-origin: 50% 50%;
+}
+
+/* With one exception, and it is the drawing. Empty space on a canvas is not
+   dead space — it is where the next step goes, and a case that grows by one
+   entry should not make the panel jump. The flow keeps the whole frame. */
+.dash__card--flow {
+  height: 100%;
+}
+
+/* The flow needs a box with a height to fit itself into. */
+.dash__flow {
+  min-height: 0;
+  display: flex;
+}
+
+/* --- which card ----------------------------------------------------------- */
+
+.dash__dots {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.dash__dot {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--border-strong);
+  cursor: pointer;
+  transition: background-color 200ms ease, transform 200ms ease, box-shadow 200ms ease;
+}
+
+.dash__dot:hover { background: var(--text-faint); transform: scale(1.3); }
+
+.dash__dot.is-on {
+  background: var(--accent);
+  box-shadow: 0 0 10px 0 var(--accent-glow);
+  transform: scale(1.3);
+}
+
+/* Narrow: the brief sits above the deck and the deck keeps its own height.
+   The turn goes with the layout. It was a panel standing against the right
+   wall of a wide room; once the deck is the full width of the screen there is
+   no room and no wall, and all the angle would do is shrink the far edge of
+   the only thing on screen. */
+@media (max-width: 1040px) {
+  .dash {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    height: auto;
+    --tilt: 0deg;
+  }
+  .dash__deck {
+    height: clamp(460px, 68vh, 640px);
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-content: stretch;
+  }
+  .dash__slide { perspective-origin: 50% 50%; }
+  .dash__greet { font-size: clamp(28px, 7vw, 40px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The deck jumps rather than glides, and the jump is handled where the
+     position is: the card arrives in place and nothing travels. */
+  .dash__slide { will-change: auto; }
+}
+
+/* The flow on the Case files deck gets the whole face; the deck already
+   centres and pads it. */
+.deck__flow { min-height: 300px; }
+
+/* --- the flow as a panel ---------------------------------------------------
+   The workflow window from the reference: a title bar with the name on the
+   left and its measurements beside it, a canvas with its tools down the left
+   edge, and a log of what was last done along the bottom. */
+
+.flow {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: visible;
+}
+
+.flow__bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 18px 13px;
+  border-bottom: 1px solid var(--line-soft);
+  min-width: 0;
+}
+
+.flow__name {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  min-width: 0;
+}
+
+/* The measurements beside the name, exactly as the reference sets them:
+   lower case, monospace, slash-separated. */
+.flow__count {
+  display: flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.flow__state { margin-left: auto; flex: none; }
+
+.flow__body {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px 14px 4px;
+}
+
+/* --- the tools ------------------------------------------------------------
+   A strip of small glass squares down the left edge. Three buttons, and all
+   three do something: what the canvas is showing, which case it is of, and
+   where to go to work on it. */
+.flow__tools {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.flow__tool {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+}
+
+.flow__tool:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.flow__tool:disabled { opacity: 0.35; cursor: default; }
+
+/* The three dots, at the size of the icons they stand beside.
+   ------------------------------------------------------------------------
+   The menu button is an IconMenu, which draws its glyph as three elements
+   rather than as an icon — and a three-element glyph in a `display: grid`
+   button gets three ROWS, which stretch to fill the button and push the dots
+   to its edges. In a strip where every other button holds a 14px icon with
+   room around it, that one read as bursting out of its square.
+
+   A column flex box sizes to its contents instead, so the three dots come to
+   exactly the height of a 14px icon and the strip lines up. */
+.flow__tool.iconmenu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5px;
+}
+
+.flow__tool .iconmenu__dot { width: 3px; height: 3px; }
+
+.flow__tool.is-on,
+.flow__tool[aria-expanded='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 0 16px -4px var(--accent-glow);
+}
+
+/* The ring under the toolbar in the reference. It is a mark on the canvas, not
+   a control — the panel's own idle light. */
+.flow__orb {
+  width: 16px;
+  height: 16px;
+  margin-top: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+}
+
+.flow__canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.flow__canvas.is-empty { display: grid; place-items: center; }
+
+/* --- the log --------------------------------------------------------------
+   "last runs" in the reference, and ours has something true to put in it. */
+.flow__runs {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 18px 14px;
+  min-width: 0;
+}
+
+.flow__runhead {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: var(--text-faint);
+  opacity: 0.7;
+  padding-bottom: 4px;
+}
+
+.flow__run {
+  display: grid;
+  grid-template-columns: 6px auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  min-width: 0;
+}
+
+.flow__runat { color: var(--text-muted); }
+.flow__runwhat { min-width: 0; }
+.flow__runnone { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
+
+/* The card holding the panel gives up its own padding — the panel brings its
+   own, and two sets of it would push the canvas into a letterbox. */
+.dash__card--flow > .card__foot {
+  border-top: 1px solid var(--line-soft);
+  transform: translateZ(2px);
+}
+
+/* THE DRAWING COMES OFF THE GLASS.
+   ==========================================================================
+   The panel turns, and until now the drawing on it turned with it as paint on
+   a wall: correct, and flat. What the reference has is a drawing standing off
+   its panel — the step cards float above the surface, catch their own light,
+   and slide against it as the panel moves. That is not a bigger angle, it is
+   a second plane.
+
+   Getting one costs a small amount of structure, because a card cannot be a
+   3D space and a clipping box at the same time. `overflow: hidden` flattens
+   everything inside it, and so does `backdrop-filter`; a card has both. So
+   the flow card gives them up and hands them to a pseudo-element instead: the
+   glass becomes one layer at z = 0 that blurs and clips ITSELF, the furniture
+   sits just off it, and the step cards stand well clear. Nothing is clipped
+   any more — nothing needs to be, because the drawing is measured to fit its
+   box before it is ever laid out. */
+.dash__card--flow {
+  overflow: visible;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transform-style: preserve-3d;
+}
+
+/* The surface itself. Everything the card used to be, moved one element down
+   so the card is free to be a room instead of a box.
+
+   The same glass as every other panel in the app — smoked rather than
+   frosted, so the light behind runs visibly under it. What stops the strands
+   competing with the text is that they arrive softened by a wide blur, not
+   that they are hidden. */
+.dash__card--flow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  background: var(--panel);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
+  border: 1px solid var(--border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 22px 60px -30px rgba(0, 0, 0, 0.92);
+  pointer-events: none;
+}
+
+/* Every layer between the card and the step cards has to pass the third
+   dimension through, or the lift is flattened on the way down. */
+.dash__card--flow > .flow,
+.dash__card--flow .flow__body,
+.dash__card--flow .flow__canvas,
+.dash__card--flow .flow__scene { transform-style: preserve-3d; }
+
+.dash__card--flow > .flow,
+.dash__card--flow .flow__canvas { overflow: visible; }
+
+/* The heights, in one place.
+   ------------------------------------------------------------------------
+   The glass is 0 and the panel's own furniture sits just off it. The DRAWING
+   is one plane well above both — wires, labels and step cards together, at
+   very nearly the same height.
+
+   Together is the part that took a try to get right. Leaving the wires on the
+   glass and lifting only the cards is the more literal reading of the
+   reference, and it tears: a wire ends several pixels short of the card it
+   runs to, and the eye reads a bug rather than a height. A drawing is a thing
+   on a sheet of acetate laid over the board, and the sheet is what floats. */
+.dash__card--flow {
+  --graph: 88px;
+}
+
+.dash__card--flow .flow__bar   { transform: translateZ(3px); }
+.dash__card--flow .flow__tools { transform: translateZ(8px); }
+.dash__card--flow .flow__runs  { transform: translateZ(3px); }
+.dash__card--flow .flow__wires { transform: translateZ(var(--graph)); }
+.dash__card--flow .flow__tag   { transform: translateZ(calc(var(--graph) + 4px)); }
+
+.dash__card--flow .flow__node {
+  /* Set per kind below and read here, so a step cannot be at one height and
+     cast the shadow of another. */
+  transform: translateZ(var(--lift, 88px));
+  /* Nearly solid, over glass that is nearly not: the contrast between the two
+     is most of what says the cards are off the surface, and it does the work
+     at a glance that the parallax only does once you move. */
+  background: rgba(24, 21, 31, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 6px -2px rgba(0, 0, 0, 0.7),
+    0 34px 56px -20px rgba(0, 0, 0, 0.98);
+}
+
+.dash__card--flow .flow__node--case { background: rgba(31, 27, 41, 0.97); }
+
+/* The case is the board's own label and sits nearly on it; the steps hanging
+   off it stand proud. Two heights rather than one is what turns a lifted
+   layer into a drawing with a near edge and a far one. */
+/* A few pixels of relief within the sheet, and no more: enough that the cards
+   sit on the drawing rather than in it, little enough that the wires still
+   meet them. */
+.dash__card--flow .flow__node--case    { --lift: calc(var(--graph) + 5px); }
+.dash__card--flow .flow__node--entry   { --lift: calc(var(--graph) + 10px); }
+.dash__card--flow .flow__node--subtask { --lift: calc(var(--graph) + 14px); }
+.dash__card--flow .flow__node--subcase { --lift: calc(var(--graph) + 8px); }
+
+.dash__card--flow .flow__node[data-lit='hot'] {
+  transform: translateZ(calc(var(--lift, 88px) + 20px));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 3px 7px -2px rgba(0, 0, 0, 0.65),
+    0 40px 60px -26px rgba(0, 0, 0, 0.98),
+    0 0 36px -14px var(--accent-glow);
+}
+
+/* Standing still, standing flat. A lift is motion in the third dimension and
+   it is the motion that was opted out of; the drawing stays on its board. */
+[data-motion='reduced'] .dash__card--flow,
+[data-motion='reduced'] .dash__card--flow > .flow,
+[data-motion='reduced'] .dash__card--flow .flow__body,
+[data-motion='reduced'] .dash__card--flow .flow__canvas,
+[data-motion='reduced'] .dash__card--flow .flow__scene { transform-style: flat; }
+[data-motion='reduced'] .dash__card--flow .flow__node { transform: none; }
+
+
+/* ==========================================================================
+   14. THE CLERK
+   ==========================================================================
+   Four surfaces, one rule: none of them is a new kind of thing. The brief is
+   a paragraph in a column of paragraphs, the chat is a card in the deck, the
+   review sheet is a list of rows, and the draft is a list of pairs. There is
+   no assistant-bubble vocabulary here — no avatar, no speech tail, no gradient
+   on anything — because the clerk is a part of this app rather than a guest
+   in it, and the moment it has its own visual language it reads as a widget
+   somebody bolted on.
+   ========================================================================== */
+
+/* --- the brief, in the dashboard's left column ---------------------------
+   It sits between the headline and what is coming up, and it is set like the
+   headline rather than like a panel: no border, no fill, nothing around it.
+   The accent rule down the left is the only mark, and it is there to say this
+   sentence was written rather than counted — every other line in this column
+   is arithmetic. */
+.dash__read {
+  position: relative;
+  margin: 2px 0 4px;
+  padding-left: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+/* A tick beside the opening line, not a rule down the whole paragraph.
+   ------------------------------------------------------------------------
+   Partly because a full-height bar reads as a blockquote — the brief is not
+   quoting anyone — and partly for a reason that was measured rather than
+   felt: the scratchpad tab is `position: fixed` at the left edge, vertically
+   centred, and below about 1440px the content column starts inside the tab's
+   lane. A rule that grew with the text reached down into it on a 1280-wide
+   window and came out from behind a floating button. A tick one line tall
+   starts where the chip, the greeting and the headline put it — all fixed
+   heights — so it cannot reach the tab however long the brief runs. */
+.dash__read::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  height: 15px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to bottom,
+    var(--accent-edge),
+    color-mix(in srgb, var(--accent) 30%, transparent)
+  );
+}
+
+.dash__readtext {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 13.5px;
+  line-height: 1.62;
+  color: var(--text-muted);
+  text-wrap: pretty;
+}
+
+.dash__readtext--wait { color: var(--text-faint); }
+
+/* The refresh is there when wanted and invisible until then. A button sitting
+   permanently under a sentence invites being pressed, and every press is a
+   model call on a free tier. */
+.dash__readagain {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: none;
+  border: 0;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 220ms ease, color 220ms ease;
+}
+
+.dash__read:hover .dash__readagain,
+.dash__read:focus-within .dash__readagain,
+.dash__read.is-reading .dash__readagain { opacity: 1; }
+
+.dash__readagain:hover:not(:disabled) { color: var(--accent); }
+.dash__readagain:disabled { color: var(--text-faint); }
+
+/* --- the chat card -------------------------------------------------------- */
+
+.dash__card--chat .card__body { min-height: 0; }
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.chat__log {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 22px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* The deck swallows the wheel to page between cards. Inside a scrollable log
+     that would mean one line of scrolling and then the whole card changing, so
+     the log keeps its own gesture. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.chat__log::-webkit-scrollbar { width: 6px; }
+.chat__log::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+.chat__opening {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: auto 0;
+}
+
+.chat__lead {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.chat__seeds {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.chat__seed {
+  font-size: 12.5px;
+  line-height: 1.3;
+  text-align: left;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 6px 13px;
+  max-width: 100%;
+  transition: color 200ms ease, border-color 200ms ease, background-color 200ms ease;
+}
+
+.chat__seed:hover {
+  color: var(--text);
+  border-color: var(--accent-edge);
+  background: var(--accent-faint);
+}
+
+.chat__turn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Who said it, as a label rather than as a bubble. Two columns of alignment
+   would halve the measure on a card this narrow, and a question you can no
+   longer read is a worse trade than a word of attribution. */
+.chat__who {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.chat__turn--assistant .chat__who { color: var(--accent); }
+
+.chat__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.62;
+  color: var(--text);
+  white-space: pre-wrap;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.chat__turn--user .chat__text { color: var(--text-muted); }
+
+.chat__tools {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.chat__error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--hot);
+}
+
+/* Three dots, because the one honest thing to show while waiting on a model is
+   that you are waiting. No progress bar — there is no progress to report. */
+.chat__dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  height: 1.62em;
+}
+
+.chat__dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.35;
+  animation: chat-think 1200ms ease-in-out infinite;
+}
+
+.chat__dots i:nth-child(2) { animation-delay: 160ms; }
+.chat__dots i:nth-child(3) { animation-delay: 320ms; }
+
+@keyframes chat-think {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  40%      { opacity: 1;    transform: translateY(-2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat__dots i { animation: none; opacity: 0.55; }
+}
+[data-motion='reduced'] .chat__dots i { animation: none; opacity: 0.55; }
+
+.chat__ask {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 22px 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.chat__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 2px;
+  transition: border-color 200ms ease;
+}
+
+.chat__input::placeholder { color: var(--text-faint); }
+.chat__input:focus {
+  outline: none;
+  /* The field's own line goes white — the same answer the composer gives, and
+     for the same reason: a violet halo inside a card inside a turning panel is
+     one box too many. */
+  border-bottom-color: var(--fg);
+  box-shadow: none;
+}
+
+.chat__send,
+.chat__clear {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease;
+}
+
+.chat__send:hover:not(:disabled),
+.chat__clear:hover {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.chat__send:disabled { opacity: 0.35; pointer-events: none; }
+
+/* The gap before the server has said whether there is a key. Deliberately
+   empty — a spinner here would be announcing a wait that is a few
+   milliseconds long on every load but the first. */
+.chat--waiting { min-height: 120px; }
+
+.chat--off {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 22px 18px;
+  height: 100%;
+}
+
+.chat__offlead {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.chat__offhint {
+  margin: 0;
+  max-width: 42ch;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-faint);
+}
+
+/* --- the filing review sheet ---------------------------------------------
+   Over the pad rather than beside it. The drawer is already as wide as this
+   app gives a side panel, and putting the proposals next to the text they came
+   from would halve both — when what you actually do is read the rows, and
+   glance back at the pad only if one looks wrong. */
+.notes__review {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: var(--radius);
+  background: var(--overlay);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.filing {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  padding: 20px 22px 18px;
+  gap: 12px;
+}
+
+.filing--none { justify-content: center; align-items: flex-start; gap: 16px; }
+
+.filing__head {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.filing__headline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.filing__count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.filing__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-xs);
+  color: var(--text-faint);
+  background: none;
+  border: 0;
+  transition: color 180ms ease, background-color 180ms ease;
+}
+
+.filing__close:hover { color: var(--text); background: var(--iris-soft); }
+
+.filing__summary {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+  max-width: 62ch;
+}
+
+.filing__note {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.filing__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  margin: 0;
+  /* Negative margin and matching padding, the same trick the entry list uses:
+     a row lifts under the pointer and the lift must not be clipped by the box
+     that scrolls. */
+  margin-inline: -8px;
+  padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.filing__list::-webkit-scrollbar { width: 6px; }
+.filing__list::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+.filing__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: background-color 180ms ease, border-color 180ms ease, opacity 180ms ease;
+}
+
+.filing__row:hover {
+  background: var(--iris-faint);
+  border-color: var(--line-soft);
+}
+
+/* Left out, not deleted. It stays legible so you can see what you declined
+   and put it back — a row that faded to nothing would be indistinguishable
+   from one the clerk never proposed. */
+.filing__row.is-off { opacity: 0.4; }
+
+.filing__row--sub { padding-left: 26px; }
+
+.filing__row--case {
+  background: var(--accent-faint);
+  border-color: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.filing__tick {
+  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--accent-ink);
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.filing__tick[aria-checked='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.filing__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filing__titleline {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.filing__sub,
+.filing__new { flex: 0 0 auto; color: var(--text-faint); }
+.filing__new { color: var(--accent); }
+
+/* The title is an input that does not look like one until you are in it. The
+   row is for reading; it becomes an editor only when you decide to change
+   something, and a column of visible text boxes reads as a form to fill in
+   rather than a list to check. */
+.filing__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  padding: 1px 0;
+  transition: border-color 180ms ease;
+}
+
+.filing__title:hover:not(:disabled) { border-bottom-color: var(--line); }
+.filing__title:focus {
+  outline: none;
+  border-bottom-color: var(--fg);
+  box-shadow: none;
+}
+.filing__title:disabled { color: var(--text-muted); }
+
+.filing__kind {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.filing__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.filing__dateslot { position: relative; display: inline-flex; }
+
+/* Amber and red mean the same here as everywhere else in the app: due soon,
+   and past due. A proposed entry that is already late is almost always the
+   clerk reading a date from last term, and it should catch the eye. */
+.filing__date--soon { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 34%, transparent); }
+.filing__date--late { color: var(--hot); border-color: color-mix(in srgb, var(--hot) 40%, transparent); }
+
+/* The evidence. Set in the serif italic the app uses for a quotation, so it
+   reads as the reader's own words rather than as the clerk's. */
+.filing__why {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-faint);
+  max-width: 60ch;
+}
+
+.filing__why::before { content: '\201C'; }
+.filing__why::after  { content: '\201D'; }
+
+.filing__error {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 12px;
+  color: var(--hot);
+}
+
+.filing__foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.filing__tally {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+/* --- the pad's footer ----------------------------------------------------- */
+
+.notes__foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.notes__hint,
+.notes__filed {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+.notes__filed { color: var(--accent); }
+.notes__filed--bad { color: var(--hot); }
+
+.notes__file { flex: 0 0 auto; }
+
+/* --- the deck draft ------------------------------------------------------- */
+
+.fc-draft {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 52vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.fc-draft::-webkit-scrollbar { width: 6px; }
+.fc-draft::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
+
+.fc-draft__card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-soft);
+  background: var(--iris-faint);
+  transition: opacity 180ms ease, border-color 180ms ease;
+}
+
+.fc-draft__card.is-off {
+  opacity: 0.38;
+  border-style: dashed;
+}
+
+.fc-draft__n {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  padding-top: 4px;
+}
+
+.fc-draft__pair {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Both halves are editable in place and sized to their text. A fixed-height
+   box would hide the end of a long answer, which is exactly the card you need
+   to read before deciding to keep it. */
+.fc-draft__front,
+.fc-draft__back {
+  width: 100%;
+  font: inherit;
+  line-height: 1.5;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  padding: 1px 0;
+  /* `field-sizing` grows the box to its text, which is what a card front and
+     back both need — the long answer is exactly the card you have to read
+     before deciding to keep it. Where it works there is nothing to drag, so
+     the handle is just a pair of diagonal lines in the corner of every row. */
+  resize: none;
+  field-sizing: content;
+}
+
+/* Firefox and older Safari do not have it yet, and there a one-row box would
+   hide the end of a long answer. Give those the handle back. */
+@supports not (field-sizing: content) {
+  .fc-draft__front,
+  .fc-draft__back { resize: vertical; }
+}
+
+.fc-draft__front { font-size: 13px; font-weight: 500; }
+.fc-draft__back  { font-size: 12.5px; color: var(--text-muted); }
+
+.fc-draft__front:focus,
+.fc-draft__back:focus { outline: none; box-shadow: none; }
+
+.fc-draft__cut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-xs);
+  color: var(--text-faint);
+  background: none;
+  border: 0;
+  transition: color 180ms ease, background-color 180ms ease;
+}
+
+.fc-draft__cut:hover { color: var(--hot); background: var(--hot-soft); }
+.fc-draft__cut[aria-pressed='true']:hover { color: var(--accent); background: var(--accent-faint); }
+
+/* --- the providers, on Settings ------------------------------------------- */
+
+.fc-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 14px 0 4px;
+}
+
+.fc-provider {
+  display: grid;
+  grid-template-columns: auto minmax(0, 7rem) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.fc-provider:last-child { border-bottom: 0; }
+
+.fc-provider .status-dot { opacity: 0.3; }
+.fc-provider.is-on .status-dot { opacity: 1; }
+
+.fc-provider__name { font-size: 13px; color: var(--text-muted); }
+.fc-provider.is-on .fc-provider__name { color: var(--text); }
+
+.fc-provider__env {
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-provider__state {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.fc-provider.is-on .fc-provider__state { color: var(--accent); }
+
+.fc-routing { margin-top: 6px; }
+
+/* --- narrow ---------------------------------------------------------------
+   The drawer is nearly the width of a phone, so the review sheet's rows stop
+   trying to hold four controls on one line. */
+@media (max-width: 720px) {
+  .filing__meta { gap: 5px; }
+  .filing__why { font-size: 12px; }
+  .fc-provider {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .fc-provider__env { display: none; }
+}

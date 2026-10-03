@@ -1,22 +1,27 @@
 /**
- * Calendar.jsx — the class timetable, read-only.
+ * Calendar.jsx — two calendars over the same days, read-only.
  *
- *   Next class · Today · Term        — the three things you check between rooms
- *   Week                             — the timetable proper, one column per day
- *   Courses                          — every series, with its days, time and room
+ *   Entries    — a month at a time: every dated entry in the archive, on the day
+ *                it is due, whatever case it belongs to
+ *   Classes    — the timetable proper, a week at a time, one column per day
  *
- * The source of truth is the registrar's own .ics, imported raw and parsed at
- * load. Nothing here is transcribed by hand, which means next term is a file
- * swap: drop the new export over src/data/class-calendar.ics and the whole
- * screen follows — courses, rooms, holidays, term length.
+ * Both sit beside Next class · Today · Term, the three things you check between
+ * rooms, and the switch between them is in the header.
+ *
+ * The timetable's source of truth is the registrar's own .ics, imported raw and
+ * parsed at load. Nothing there is transcribed by hand, which means next term is
+ * a file swap: drop the new export over src/data/class-calendar.ics and the
+ * whole screen follows — courses, rooms, holidays, term length. The entry month
+ * is the archive itself, live from the API like every other screen.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
-import { Card, CardHead, EmptyState, Meter, Metric, Pill } from '../ui/primitives.jsx'
+import { Card, CardHead, EmptyState, Meter, Metric, Pill, Segmented } from '../ui/primitives.jsx'
 import { addDays, fmtTime, minutesOf, parseCalendar, sameDay, startOfDay, weekStartOf } from '../lib/ics.js'
+import { statusTone } from '../lib/metrics.js'
 import sampleIcs from '../data/class-calendar.ics?raw'
 
 /* The repo ships a fictional sample so a fresh clone builds and this screen has
@@ -91,7 +96,11 @@ const KIND_LABEL = {
 function workLabel(item, nowTs) {
   const when = item.due.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
   const kind = KIND_LABEL[item.kind] || 'Entry'
-  return `${kind}: ${item.title}. ${item.course}, ${when} — ${workStanding(item, nowTs).text}`
+  /* The wash that marks a high-priority entry on the month grid is colour and
+     nothing else, so it has to be said here or it does not exist for anyone
+     reading with the screen off. */
+  const flag = item.priority === 'high' ? ' High priority.' : ''
+  return `${kind}: ${item.title}.${flag} ${item.course}, ${when} — ${workStanding(item, nowTs).text}`
 }
 
 function workStanding(item, nowTs) {
@@ -123,6 +132,110 @@ function dayKeyOf(date) {
 
 function fmtDay(date) {
   return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+}
+
+/* ---- the entry month ------------------------------------------------------
+   The timetable is about course work: entries on cases named after a course,
+   hung on the class they belong to. The month asks the opposite question —
+   what is due, on what day — and so it takes every dated entry in the archive
+   whether or not its case has a class attached to it. */
+
+function startOfMonth(ts) {
+  const d = new Date(ts)
+  return new Date(d.getFullYear(), d.getMonth(), 1)
+}
+
+/* How many entries a cell lists before it starts counting them instead. This
+   and the cell's minimum height in the stylesheet are one decision in two
+   places: the cell holds CELL_MAX rows plus the "+n more" line, and it has to
+   be a fixed height or the weeks stop being the same size as each other. */
+const CELL_MAX = 4
+
+/* What colours a chip. statusTone is the app's one definition of the deadline
+   window — the same call the entry rows and the case graph make — so a date
+   that reads amber on the dashboard cannot read white here. */
+function entryTone(item, nowTs) {
+  if (item.done) return 'done'
+  const tone = statusTone(item.due.getTime(), nowTs)
+  if (tone === 'overdue') return 'late'
+  if (tone === 'soon') return 'soon'
+  return 'open'
+}
+
+/**
+ * The month grid.
+ *
+ * Days from the months either side are drawn rather than left blank, dimmed and
+ * with their entries still on them: the last three days of the month you are
+ * leaving are exactly what you want to see on the first row of the next one.
+ */
+function MonthGrid({ month, nowTs, hot, onEnter, onLeave, onOpen }) {
+  return (
+    <div className="month">
+      <div className="month__dow" aria-hidden="true">
+        {WEEK_ORDER.map((d) => (
+          <span key={d} className="month__dowcell">{DAY_LABEL[d]}</span>
+        ))}
+      </div>
+
+      <div className="month__grid">
+        {month.cells.map((cell) => (
+          <div
+            key={cell.date.getTime()}
+            className={cx('moncell', cell.out && 'is-out', cell.today && 'is-today')}
+          >
+            <div className="moncell__head">
+              <span className="moncell__num">{cell.date.getDate()}</span>
+            </div>
+
+            <div className="moncell__list">
+              {cell.items.slice(0, CELL_MAX).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={cx(
+                    'enttag',
+                    `enttag--${entryTone(item, nowTs)}`,
+                    /* Priority is a second thing about an entry, so it is drawn
+                       in a second channel: the left rule keeps saying when this
+                       is due, and the wash behind it says it is a high one.
+                       Only while it is open — a closed entry has no priority
+                       worth shouting about. */
+                    item.priority === 'high' && !item.done && 'is-high',
+                    hot && hot.work === item && 'is-hot'
+                  )}
+                  /* The readout is decoration for the pointer; this is what
+                     actually reaches assistive tech, and it is the same
+                     sentence the chips on the timetable carry. */
+                  aria-label={workLabel(item, nowTs)}
+                  onMouseEnter={(e) => onEnter(item, e.currentTarget)}
+                  onMouseLeave={onLeave}
+                  onFocus={(e) => onEnter(item, e.currentTarget)}
+                  onBlur={onLeave}
+                  onClick={() => onOpen(item)}
+                >
+                  {chipLabel(item.title)}
+                </button>
+              ))}
+
+              {/* The cell is a fixed height — it has to be, or the weeks stop
+                  matching each other — so the entries past the fourth are
+                  counted rather than left to slide out of a hidden overflow
+                  where nothing says they exist. */}
+              {cell.items.length > CELL_MAX ? (
+                <span
+                  className="enttag enttag--more"
+                  title={cell.items.slice(CELL_MAX).map((i) => i.title).join(', ')}
+                >
+                  {`+${cell.items.length - CELL_MAX} more`}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -316,6 +429,12 @@ function WorkTip({ item, anchor, nowTs }) {
           <dt>Course</dt>
           <dd>{item.course}</dd>
         </div>
+        {item.priority === 'high' ? (
+          <div className="schedtip__row">
+            <dt>Priority</dt>
+            <dd className="hot">High</dd>
+          </div>
+        ) : null}
         <div className="schedtip__row">
           <dt>{ON_CLASS.has(item.kind) ? 'On' : 'Due'}</dt>
           <dd>
@@ -400,7 +519,7 @@ function ScheduleTip({ meeting, series, anchor, nowTs }) {
   )
 }
 
-export default function Calendar({ now, projects }) {
+export default function Calendar({ now, projects, onSelectCase }) {
   const nowTs = Number.isFinite(now) ? now : Date.now()
   const usingSample = Object.keys(overrides).length === 0
 
@@ -434,6 +553,7 @@ export default function Calendar({ now, projects }) {
           title: task.title,
           kind,
           done: !!task.completed,
+          priority: task.priority || 'normal',
           course: project.name,
           due: new Date(task.dueDate),
         }
@@ -448,6 +568,128 @@ export default function Calendar({ now, projects }) {
     }
     return map
   }, [projects, series])
+
+  /* Every dated entry in the archive, bucketed by the day it falls on — the
+     month grid's whole source. Deliberately not the `work` map above: that one
+     is limited to cases named after a course and splits by whether the thing
+     happens AT a class, which is the timetable's question and not this one.
+     Subtasks carry their own dates, so they are entries here too. */
+  const dated = useMemo(() => {
+    const map = new Map()
+    const put = (task, project) => {
+      if (!task.dueDate) return
+      const due = new Date(task.dueDate)
+      if (Number.isNaN(due.getTime())) return
+      const item = {
+        id: task.id,
+        title: task.title,
+        kind: kindOf(task.title),
+        done: !!task.completed,
+        priority: task.priority || 'normal',
+        course: project.name,
+        projectId: project.id,
+        due,
+      }
+      const key = dayKeyOf(due)
+      const list = map.get(key)
+      if (list) list.push(item)
+      else map.set(key, [item])
+    }
+    for (const project of projects || []) {
+      for (const task of project.tasks || []) {
+        put(task, project)
+        for (const sub of task.subtasks || []) put(sub, project)
+      }
+    }
+    /* Still-open first and, among those, high priority first: a day with more
+       entries than the cell can draw should spend its rows on the ones that are
+       still owed, and on the ones that matter most among them. */
+    const rank = (x) => (x.done ? 2 : x.priority === 'high' ? 0 : 1)
+    for (const list of map.values()) {
+      list.sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title))
+    }
+    return map
+  }, [projects])
+
+  const datedCount = useMemo(() => {
+    let n = 0
+    for (const list of dated.values()) n += list.length
+    return n
+  }, [dated])
+
+  /* An entry opens the case it belongs to — and for one filed under a sub-case,
+     the case at the top of that chain, because the case bar lists roots and
+     handing it a sub-case id would land on whichever case happened to be
+     first. The depth guard is for a parent chain that somehow points at
+     itself; a cycle here would hang the screen rather than mis-route a click. */
+  const rootOf = useMemo(() => {
+    const byId = new Map((projects || []).map((x) => [x.id, x]))
+    const map = new Map()
+    for (const project of projects || []) {
+      let at = project
+      for (let i = 0; i < 8 && at && at.parentId; i += 1) at = byId.get(at.parentId) || at
+      map.set(project.id, at ? at.id : project.id)
+    }
+    return map
+  }, [projects])
+
+  const openEntry = useCallback(
+    (item) => {
+      if (!onSelectCase) return
+      onSelectCase(rootOf.get(item.projectId) || item.projectId)
+    },
+    [onSelectCase, rootOf]
+  )
+
+  /* Which of the two calendars is showing. Entries is the default: it is the
+     one that answers "what is due", and the timetable repeats itself every week
+     anyway, so it is the thing you look up rather than the thing you check. */
+  const [mode, setMode] = useState('entries')
+
+  const [monthTs, setMonthTs] = useState(() => startOfMonth(nowTs).getTime())
+
+  const shiftMonth = useCallback((n) => {
+    setMonthTs((ts) => {
+      const d = new Date(ts)
+      return new Date(d.getFullYear(), d.getMonth() + n, 1).getTime()
+    })
+  }, [])
+
+  const jumpMonthToToday = useCallback(() => {
+    setMonthTs(startOfMonth(nowTs).getTime())
+  }, [nowTs])
+
+  const month = useMemo(() => {
+    const first = new Date(monthTs)
+    const y = first.getFullYear()
+    const m = first.getMonth()
+    /* Monday-first, to match the timetable and the rest of the app's week. */
+    const lead = (first.getDay() + 6) % 7
+    const start = addDays(first, -lead)
+    const length = new Date(y, m + 1, 0).getDate()
+    /* Only as many weeks as this month actually needs: a February that starts
+       on a Monday is four rows, and padding it to six would leave a band of
+       empty cells implying days that are not there. */
+    const weeks = Math.ceil((lead + length) / 7)
+    const today = new Date(nowTs)
+
+    const cells = []
+    let count = 0
+    for (let i = 0; i < weeks * 7; i += 1) {
+      const date = addDays(start, i)
+      const items = dated.get(dayKeyOf(date)) || []
+      const out = date.getMonth() !== m
+      if (!out) count += items.length
+      cells.push({ date, out, items, today: sameDay(date, today) })
+    }
+
+    return {
+      cells,
+      count,
+      label: first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+      isNow: y === today.getFullYear() && m === today.getMonth(),
+    }
+  }, [monthTs, dated, nowTs])
 
   const term = useMemo(() => {
     if (!meetings.length) return null
@@ -606,23 +848,114 @@ export default function Calendar({ now, projects }) {
     [meetings, nowTs]
   )
 
+  /* Built once and used by both returns below. The switch has to be reachable
+     even when the timetable has nothing in it — a calendar file that holds no
+     events is no reason to withhold the entries. */
+  const head = (
+    <div className="viewhead">
+      <div className="viewhead__left">
+        <span className="section-label">Calendar</span>
+        <Segmented
+          items={[
+            { value: 'entries', label: 'Entries' },
+            { value: 'classes', label: 'Classes' },
+          ]}
+          value={mode}
+          onChange={setMode}
+          label="Which calendar"
+        />
+        {mode === 'classes' ? (
+          <span className="micro dim">{termLabel || calendarName || 'Schedule'}</span>
+        ) : null}
+        {mode === 'classes' && usingSample ? (
+          <span className="micro dim" title="Add src/data/class-calendar.local.ics to use your own">
+            sample data
+          </span>
+        ) : null}
+      </div>
+      <div className="viewhead__right">
+        {mode === 'entries' ? (
+          <span className="micro muted">
+            {datedCount} dated {datedCount === 1 ? 'entry' : 'entries'}
+          </span>
+        ) : (
+          <>
+            <span className="micro muted">{series.length} courses</span>
+            <span className="micro dim">·</span>
+            <span className="micro muted">{meetings.length} meetings</span>
+          </>
+        )}
+      </div>
+    </div>
+  )
+
+  /* The month card, which both returns place — on its own when there is no
+     timetable to sit beside, and in the nine columns next to the class cards
+     when there is. */
+  const monthCard = (klass) => (
+    <Card className={klass} aria-label="Entries by month">
+      <CardHead
+        className="card__head"
+        title={month.label}
+        subtitle={
+          month.count
+            ? `${month.count} ${month.count === 1 ? 'entry' : 'entries'} due`
+            : 'Nothing due this month'
+        }
+        right={
+          <span className="row" style={{ gap: '6px' }}>
+            <Pill className="pill--micro" onClick={() => shiftMonth(-1)} aria-label="Previous month">
+              <ChevronLeft size={13} strokeWidth={1.5} aria-hidden="true" />
+            </Pill>
+            <Pill className="pill--micro" onClick={jumpMonthToToday} disabled={month.isNow}>
+              <span className="pill__label">Today</span>
+            </Pill>
+            <Pill className="pill--micro" onClick={() => shiftMonth(1)} aria-label="Next month">
+              <ChevronRight size={13} strokeWidth={1.5} aria-hidden="true" />
+            </Pill>
+          </span>
+        }
+      />
+      <div className="card__body">
+        {datedCount === 0 ? (
+          <EmptyState
+            lead="Nothing has a date on it."
+            hint="Give an entry a due date and it turns up here."
+          />
+        ) : (
+          <MonthGrid
+            month={month}
+            nowTs={nowTs}
+            hot={hot}
+            onEnter={showWork}
+            onLeave={hideTip}
+            onOpen={openEntry}
+          />
+        )}
+      </div>
+    </Card>
+  )
+
   if (!term) {
     return (
       <>
-        <div className="viewhead">
-          <div className="viewhead__left"><span className="section-label">Class calendar</span></div>
-        </div>
+        {head}
         <div className="bento">
-          <Card className="span-12">
-            <CardHead className="card__head" title="No schedule" subtitle="The calendar file holds no events" />
-            <div className="card__body">
-              <EmptyState
-                lead="Nothing to show."
-                hint="Replace src/data/class-calendar.ics with a registrar export."
-              />
-            </div>
-          </Card>
+          {mode === 'entries' ? (
+            monthCard('span-12')
+          ) : (
+            <Card className="span-12">
+              <CardHead className="card__head" title="No schedule" subtitle="The calendar file holds no events" />
+              <div className="card__body">
+                <EmptyState
+                  lead="Nothing to show."
+                  hint="Replace src/data/class-calendar.ics with a registrar export."
+                />
+              </div>
+            </Card>
+          )}
         </div>
+        {hot && hot.work ? <WorkTip item={hot.work} anchor={hot.anchor} nowTs={nowTs} /> : null}
       </>
     )
   }
@@ -645,27 +978,12 @@ export default function Calendar({ now, projects }) {
 
   return (
     <>
-      <div className="viewhead">
-        <div className="viewhead__left">
-          <span className="section-label">Class calendar</span>
-          <span className="micro dim">{termLabel || calendarName || 'Schedule'}</span>
-          {usingSample ? (
-            <span className="micro dim" title="Add src/data/class-calendar.local.ics to use your own">
-              sample data
-            </span>
-          ) : null}
-        </div>
-        <div className="viewhead__right">
-          <span className="micro muted">{series.length} courses</span>
-          <span className="micro dim">·</span>
-          <span className="micro muted">{meetings.length} meetings</span>
-        </div>
-      </div>
+      {head}
 
       <div className="bento">
         {/* ---------------- left column ---------------- */}
         <div className="span-3 stack">
-          <Card tone="sage">
+          <Card>
             <CardHead
               className="card__head"
               title={live ? 'In class now' : 'Next class'}
@@ -731,7 +1049,8 @@ export default function Calendar({ now, projects }) {
           </Card>
         </div>
 
-        {/* ---------------- the timetable ---------------- */}
+        {/* ---------------- the calendar itself ---------------- */}
+        {mode === 'entries' ? monthCard('span-9') : (
         <Card className="span-9" aria-label="Weekly timetable">
           <CardHead
             className="card__head"
@@ -900,8 +1219,12 @@ export default function Calendar({ now, projects }) {
             </div>
           </div>
         </Card>
+        )}
 
-        {/* ---------------- the courses ---------------- */}
+        {/* ---------------- the courses ----------------
+            Every meeting pattern in the term, which is furniture for the
+            timetable and has nothing to say about a month of due dates. */}
+        {mode === 'classes' ? (
         <Card className="span-12">
           <CardHead
             className="card__head"
@@ -923,6 +1246,7 @@ export default function Calendar({ now, projects }) {
             ))}
           </div>
         </Card>
+        ) : null}
       </div>
 
       {hot && hot.work ? <WorkTip item={hot.work} anchor={hot.anchor} nowTs={nowTs} /> : null}

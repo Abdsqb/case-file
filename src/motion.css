@@ -1,7 +1,7 @@
 /* ==========================================================================
    ASSEMBLY MOTION
-   Screens are BUILT, not faded in. A light sweeps across each card, then the
-   contents rise and the data grows into place. Borders are never highlighted —
+   Screens are BUILT, not faded in. The cards arrive in order, then the data
+   grows into place. Borders are never highlighted —
    the frame is simply present. The vocabulary is instrument-panel: fast, precise, layered, no bounce.
 
    Orchestration is entirely CSS. `.view` is remounted with a React key on each
@@ -12,11 +12,6 @@
 
 @keyframes bld-fade   { from { opacity: 0; } to { opacity: 1; } }
 @keyframes bld-rise   { from { opacity: 0; transform: translate3d(0, 14px, 0); } to { opacity: 1; transform: none; } }
-@keyframes bld-scan   {
-  0%   { transform: translate3d(-120%, 0, 0); opacity: 0; }
-  14%  { opacity: 1; }
-  100% { transform: translate3d(120%, 0, 0); opacity: 0; }
-}
 @keyframes bld-grow   { from { transform: scaleY(0.03); } to { transform: scaleY(1); } }
 @keyframes bld-fill   { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes bld-pop    { from { opacity: 0; transform: scale(0.55); } to { opacity: 1; transform: scale(1); } }
@@ -91,15 +86,50 @@
 [data-motion='reduced'] .view.is-building .col > .card { animation: none !important; }
 
 /* --- 2. a light sweeps the surface --------------------------------------- */
-.view.is-building .card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background: linear-gradient(100deg, transparent 42%, rgba(196,196,196,0.06) 50%, transparent 58%);
-  animation: bld-scan 780ms ease-out calc(var(--d) + 160ms) both;
+/* Gone, deliberately. A band of light used to travel across every card as the
+   screen built. It made sense when the cards were the brightest thing on the
+   page; now there is a real light behind them, moving the whole time, and a
+   second scripted one crossing each panel on arrival read as a glitch in the
+   glass rather than as the screen being assembled. The cards still arrive —
+   see section 1 — they just arrive without being polished on the way in. */
+
+/* --- 2b. the dashboard arrives ------------------------------------------
+   The dashboard is not a bento. Its brief and its deck are not `.bento > *`,
+   so every arrival rule above walked straight past them and the screen simply
+   appeared — which was fine while a light was sweeping each card, and became
+   nothing at all once that went.
+
+   It reads left to right, the way it is written: the chip, the greeting, the
+   line under it, then what is coming, and the panel standing up last. The
+   panel's own arrival is the only one that is not a plain rise — it comes in
+   from further out and settles, because it is the thing in the room that has
+   a position rather than a place on a page. */
+@keyframes dash-stand {
+  from { opacity: 0; transform: translate3d(34px, 12px, 0) scale(0.97); }
+  to   { opacity: 1; transform: none; }
 }
+
+.view.is-building .dash__chip  { animation: bld-rise 460ms var(--e-arrive) 40ms both; }
+.view.is-building .dash__greet { animation: bld-rise 560ms var(--e-arrive) 100ms both; }
+.view.is-building .dash__line  { animation: bld-rise 520ms var(--e-arrive) 200ms both; }
+.view.is-building .dash__up    { animation: bld-rise 540ms var(--e-arrive) 280ms both; }
+.view.is-building .dash__stack { animation: dash-stand 820ms var(--e-arrive) 220ms both; }
+.view.is-building .dash__dots  { animation: bld-fade 600ms var(--e-arrive) 620ms both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .view.is-building .dash__chip,
+  .view.is-building .dash__greet,
+  .view.is-building .dash__line,
+  .view.is-building .dash__up,
+  .view.is-building .dash__stack,
+  .view.is-building .dash__dots { animation: none !important; }
+}
+[data-motion='reduced'] .view.is-building .dash__chip,
+[data-motion='reduced'] .view.is-building .dash__greet,
+[data-motion='reduced'] .view.is-building .dash__line,
+[data-motion='reduced'] .view.is-building .dash__up,
+[data-motion='reduced'] .view.is-building .dash__stack,
+[data-motion='reduced'] .view.is-building .dash__dots { animation: none !important; }
 
 /* --- 3. contents rise ---------------------------------------------------- */
 /* Deliberately empty. card__head / card__body / card__foot and .subpanel all
@@ -256,14 +286,12 @@
 }
 
 /* ==========================================================================
-   REDUCED MOTION — the screen simply IS built. No trace, no sweep, no rise.
+   REDUCED MOTION — the screen simply IS built. No trace, no rise.
+
+   Nothing left to turn off here: what this section used to switch off was the
+   sweep across each card, and the sweep is gone for everyone. The arrival
+   animations are each switched off beside the rule that sets them.
    ========================================================================== */
-
-@media (prefers-reduced-motion: reduce) {
-  .view.is-building .card::after { display: none; }
-}
-
-[data-motion="reduced"] .view.is-building .card::after { display: none; }
 
 /* ==========================================================================
    SEGMENTED — one thumb that slides, instead of each option lighting its own
@@ -287,7 +315,20 @@
   left: 0;
   z-index: 0;
   border-radius: var(--radius-pill);
-  background: var(--fg);
+  /* The sliding thumb IS the active state — the item under it only changes
+     ink — so this is where the accent goes, with the glow that says it is the
+     live one.
+
+     A wash and a hairline rather than a solid chip. Solid accent is for a
+     control you press; this is a thing you have SELECTED, and a selection
+     should let you see what it is sitting on. The hairline is an inset shadow
+     rather than a border so the thumb keeps the exact size it is positioned
+     at — it is measured against the option underneath it, and a border would
+     put it a pixel out at both ends. */
+  background: var(--accent-wash);
+  box-shadow:
+    inset 0 0 0 1px var(--accent-edge),
+    0 0 20px -6px var(--accent-glow);
   pointer-events: none;
   will-change: transform, width;
   transition:
@@ -338,6 +379,18 @@
    Sized to its contents rather than the viewport, centred, and sticky so
    navigation stays reachable while a screen scrolls under it.
    ========================================================================== */
+
+/* The status pill rides beside the nav, far enough off it to read as its own
+   object. It is a readout, so it never takes the pointer. */
+.topbar__standing {
+  pointer-events: none;
+  margin-left: 10px;
+  align-self: center;
+}
+
+@media (max-width: 760px) {
+  .topbar__standing { display: none; }
+}
 
 .topbar {
   /* fixed, not sticky: it is hidden most of the time, so it must not reserve a
@@ -397,19 +450,40 @@
     background-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
     color 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.navlink:hover { color: var(--fg); background: var(--fill-hover); }
+/* --fill-hover was never defined anywhere, so this was a colour change and
+   nothing else. Given a real surface now. */
+.navlink:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
 
-/* Matches the Segmented control's active treatment, so "the thing you are on"
-   looks the same everywhere in the app. */
+/* The nav is the one place the active state is NOT an accent fill. A bar of
+   six links with one of them filled in would be the loudest thing on screen,
+   and it is not the thing you came to look at. It gets the full-strength ink
+   and a lit dot under it instead. */
 .navlink--active,
 .navlink.is-active,
 .navlink[aria-current='page'] {
-  background: var(--fg);
-  color: var(--bg);
+  background: transparent;
+  color: var(--text);
 }
 .navlink--active:hover,
 .navlink.is-active:hover,
-.navlink[aria-current='page']:hover { background: var(--fg); color: var(--bg); }
+.navlink[aria-current='page']:hover { background: transparent; color: var(--text); }
+
+.navlink { position: relative; }
+
+.navlink--active::after,
+.navlink.is-active::after,
+.navlink[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px 0 var(--accent-glow);
+}
 
 
 @media (max-width: 560px) {

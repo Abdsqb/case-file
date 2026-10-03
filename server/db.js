@@ -3,7 +3,21 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, 'case-file.sqlite');
+
+/* Where the archive lives.
+ *
+ * Normally right here, next to this file, and that is the only path anyone
+ * running the app needs to know about. CASE_FILE_DB overrides it, and exists
+ * for one reason: this database holds real work, and anything that writes —
+ * a test of the filing path, a scratch run, a migration being tried out —
+ * must be able to point somewhere else WITHOUT editing code. A test suite
+ * that has to remember to clean up after itself against the live file is one
+ * forgotten DELETE away from costing you a case.
+ *
+ * A fresh path is created and seeded on first open, so pointing at a new file
+ * gives a working app with sample data rather than an error. */
+const dbPath = (process.env.CASE_FILE_DB || '').trim()
+  || path.join(__dirname, 'case-file.sqlite');
 
 export const db = new DatabaseSync(dbPath);
 

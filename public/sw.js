@@ -1,6 +1,11 @@
-// Bumped for the Halftone Dossier overhaul. Without this, an installed user is
-// served the old shell and the stale favicon from cache forever.
-const CACHE = 'case-file-v4';
+// Bumped whenever the shell or the icons change. Without this, an installed
+// user is served the old shell and the stale favicon from cache forever: the
+// fetch handler is network-first and would catch up on its own, but the SHELL
+// below is only re-fetched on install, and install only runs when THIS file
+// differs from the one the browser already has.
+//
+// v5: the mark became the orb on a disc — see public/favicon.svg.
+const CACHE = 'case-file-v5';
 const SHELL = ['/', '/index.html', '/manifest.json', '/favicon.svg', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', event => {

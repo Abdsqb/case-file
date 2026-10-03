@@ -4,11 +4,16 @@
  *
  *   Library — folders of decks, each with its size and how much is due
  *   Import  — a .json file or pasted text, with the parse error shown inline
+ *   Write   — lecture notes in, a draft deck out, reviewed before it lands
  *   Source  — the file a deck came from, and the option to replace it
  *   Study   — one card at a time: front, reveal, rate, reschedule, next
  *
- * This screen never calls a model. Card files are written elsewhere and only
- * read here; the whole of the intelligence is the SM-2 schedule in lib/flashcards.
+ * The scheduling is still the only intelligence that runs here: SM-2, in
+ * lib/flashcards, offline, unchanged. Writing a deck is a separate step that
+ * happens BEFORE a deck exists — the clerk drafts cards from a piece of source
+ * material, you cut the bad ones, and what gets imported is an ordinary deck
+ * with the source text kept beside it exactly as an imported file would be.
+ * Nothing in the library, the queue or a review ever calls a model.
  *
  * The screens are one view with a mode rather than four routes, because a study
  * session is transient — leaving and coming back should land you on the library,
@@ -20,11 +25,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Check, ChevronRight, FileText, FolderPlus, Layers, Plus, RotateCcw, Trash2, Upload, X,
+  Check, ChevronRight, FileText, FolderPlus, Layers, Pencil, Plus, RotateCcw, Trash2, Upload, X,
 } from 'lucide-react'
 
 import { EmptyState, Field, IconMenu, Meter, Pill } from '../ui/primitives.jsx'
 import * as api from '../lib/api.js'
+import * as clerk from '../lib/clerk.js'
 import {
   ImportError, RATINGS, deckNameFromFile, parseDeckFile, previewIntervals, scheduleCard,
 } from '../lib/flashcards.js'
@@ -212,6 +218,241 @@ function ImportPanel({ folders, onImported, onCancel, busy }) {
               {busy ? 'Importing…' : `Import${ready ? ` ${preview.cards.length}` : ''}`}
             </span>
           </Pill>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+/* ------------------------------------------------------------------ *
+ * write a deck from source material                                   *
+ * ------------------------------------------------------------------ */
+
+/* Two steps, and the second one is the point.
+ *
+ * A model will happily write forty cards from one lecture, and perhaps thirty
+ * of them are worth reviewing. The rest are an aside the lecturer made, a
+ * slide title turned into a question with no answer in it, and the same fact
+ * asked twice in different words. Importing all forty does not cost you ten
+ * bad cards once — it costs you them on a spaced schedule, for months, and
+ * the schedule preferentially shows you the cards you keep failing, which
+ * will be exactly those ten.
+ *
+ * So the draft is a draft. You read it, you cut, and what lands in the library
+ * is a deck you have looked at. The source material is kept the way an
+ * imported file's is, so a deck written this way is no less traceable than one
+ * that came out of a .json.
+ */
+function WritePanel({ folders, onImported, onCancel, busy }) {
+  const [text, setText] = useState('')
+  const [name, setName] = useState('')
+  const [folderId, setFolderId] = useState('')
+  const [count, setCount] = useState('')
+  const [sourceName, setSourceName] = useState('')
+
+  const [drafting, setDrafting] = useState(false)
+  const [draft, setDraft] = useState(null)
+  const [error, setError] = useState(null)
+
+  const onFile = (e) => {
+    const f = e.target.files && e.target.files[0]
+    if (!f) return
+    setSourceName(f.name)
+    const reader = new FileReader()
+    reader.onerror = () => setError('That file could not be read.')
+    reader.onload = () => {
+      setText(String(reader.result || ''))
+      if (!name.trim()) setName(deckNameFromFile(f.name))
+    }
+    reader.readAsText(f)
+  }
+
+  const write = async () => {
+    const body = text.trim()
+    if (!body || drafting) return
+    setDrafting(true)
+    setError(null)
+    try {
+      const res = await clerk.buildDeck(body, { name: name.trim(), count: Number(count) || 0 })
+      setDraft({
+        name: res.name,
+        cards: res.cards.map((c, i) => ({ ...c, id: `c${i}`, keep: true })),
+      })
+      if (!name.trim() && res.name) setName(res.name)
+    } catch (err) {
+      setError(err.message || 'the clerk could not build a deck from that.')
+    } finally {
+      setDrafting(false)
+    }
+  }
+
+  const patch = (id, next) => {
+    setDraft((d) => (d ? { ...d, cards: d.cards.map((c) => (c.id === id ? { ...c, ...next } : c)) } : d))
+  }
+
+  const kept = draft ? draft.cards.filter((c) => c.keep && c.front.trim() && c.back.trim()) : []
+
+  const submit = async () => {
+    if (!kept.length) return
+    const finalName = name.trim() || (draft && draft.name) || 'Untitled deck'
+    await onImported(
+      finalName,
+      kept.map((c) => ({ front: c.front.trim(), back: c.back.trim() })),
+      {
+        folderId: folderId || null,
+        /* The material, not the generated cards. "Show me what this came from"
+           should give back the lecture — the cards themselves are already in
+           the library, and a dump of them is not a source. */
+        sourceText: text,
+        sourceName: sourceName || null,
+      },
+    )
+  }
+
+  return (
+    <Panel
+      title="Write a deck"
+      subtitle="Lecture notes, a chapter, a summary — the clerk drafts the cards and you cut them"
+      right={
+        <Pill className="pill--ghost" onClick={onCancel}>
+          <X size={13} strokeWidth={1.5} aria-hidden="true" />
+          <span className="pill__label">Cancel</span>
+        </Pill>
+      }
+    >
+      <div className="fc-form">
+        <div className="fc-form__row">
+          <Field
+            label="Deck name"
+            value={name}
+            onChange={setName}
+            placeholder={draft && draft.name ? draft.name : 'The clerk will suggest one'}
+          />
+          <label className="field" htmlFor="fc-write-folder">
+            <span className="field__label">Folder</span>
+            <select
+              id="fc-write-folder"
+              className="fc-select"
+              value={folderId}
+              onChange={(e) => setFolderId(e.target.value)}
+            >
+              <option value="">No folder</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {draft ? null : (
+          <>
+            <div className="fc-form__file">
+              <span className="field__label">Source file</span>
+              <input
+                type="file"
+                accept=".txt,.md,.markdown,text/plain,text/markdown"
+                onChange={onFile}
+                className="fc-file"
+                aria-label="Choose a text or markdown file"
+              />
+              {sourceName ? <span className="micro dim truncate">{sourceName}</span> : null}
+            </div>
+
+            <label className="field" htmlFor="fc-write-src">
+              <span className="field__label">Or paste the material</span>
+              <textarea
+                id="fc-write-src"
+                className="fc-paste"
+                value={text}
+                spellCheck="false"
+                placeholder="Paste a lecture, a chapter, a set of notes…"
+                onChange={(e) => setText(e.target.value)}
+              />
+            </label>
+
+            <div className="fc-form__row">
+              <Field
+                label="About how many cards"
+                value={count}
+                onChange={(v) => setCount(String(v).replace(/[^0-9]/g, '').slice(0, 2))}
+                placeholder="As many as the material supports"
+              />
+            </div>
+          </>
+        )}
+
+        <div className="fc-status" role={error ? 'alert' : undefined}>
+          {error ? (
+            <p className="fc-msg fc-msg--bad">{error}</p>
+          ) : draft ? (
+            <p className="fc-msg fc-msg--good">
+              {plural(kept.length, 'card', 'cards')} of {draft.cards.length} kept — read them before importing.
+            </p>
+          ) : (
+            <p className="fc-msg">
+              The material is sent to the model. Nothing is imported until you have read the draft.
+            </p>
+          )}
+        </div>
+
+        {draft ? (
+          <ul className="fc-draft">
+            {draft.cards.map((c, i) => (
+              <li key={c.id} className={cx('fc-draft__card', !c.keep && 'is-off')}>
+                <span className="fc-draft__n">{String(i + 1).padStart(2, '0')}</span>
+                <div className="fc-draft__pair">
+                  <textarea
+                    className="fc-draft__front"
+                    value={c.front}
+                    rows={1}
+                    spellCheck="false"
+                    disabled={!c.keep}
+                    aria-label={`Front of card ${i + 1}`}
+                    onChange={(e) => patch(c.id, { front: e.target.value })}
+                  />
+                  <textarea
+                    className="fc-draft__back"
+                    value={c.back}
+                    rows={2}
+                    spellCheck="false"
+                    disabled={!c.keep}
+                    aria-label={`Back of card ${i + 1}`}
+                    onChange={(e) => patch(c.id, { back: e.target.value })}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="fc-draft__cut"
+                  onClick={() => patch(c.id, { keep: !c.keep })}
+                  title={c.keep ? 'Cut this card' : 'Keep this card'}
+                  aria-pressed={!c.keep}
+                >
+                  {c.keep ? <X size={13} aria-hidden="true" /> : <RotateCcw size={13} aria-hidden="true" />}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <div className="row" style={{ gap: '8px' }}>
+          {draft ? (
+            <>
+              <Pill active onClick={submit} disabled={!kept.length || busy}>
+                <Upload size={13} strokeWidth={1.5} aria-hidden="true" />
+                <span className="pill__label">
+                  {busy ? 'Importing…' : `Import ${kept.length}`}
+                </span>
+              </Pill>
+              <Pill onClick={() => setDraft(null)} disabled={busy}>
+                <span className="pill__label">Back to the source</span>
+              </Pill>
+            </>
+          ) : (
+            <Pill active onClick={write} disabled={!text.trim() || drafting}>
+              <Pencil size={13} strokeWidth={1.5} aria-hidden="true" />
+              <span className="pill__label">{drafting ? 'Drafting…' : 'Draft the deck'}</span>
+            </Pill>
+          )}
         </div>
       </div>
     </Panel>
@@ -478,7 +719,16 @@ export default function Flashcards() {
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [mode, setMode] = useState('library')      // library | import | source | study
+  const [mode, setMode] = useState('library')      // library | import | write | source | study
+
+  /* Whether to offer writing a deck at all. Null until the server answers, so
+     the button does not appear and then vanish on a machine with no key. */
+  const [clerkOn, setClerkOn] = useState(null)
+  useEffect(() => {
+    let alive = true
+    clerk.status().then((st) => { if (alive) setClerkOn(!!st.ready) })
+    return () => { alive = false }
+  }, [])
   const [confirm, setConfirm] = useState(null)     // {kind:'deck'|'folder', id}
   const [sourceDeck, setSourceDeck] = useState(null)
   const [newFolder, setNewFolder] = useState(false)
@@ -723,6 +973,13 @@ export default function Flashcards() {
             onCancel={() => setMode('library')}
             busy={busy}
           />
+        ) : mode === 'write' ? (
+          <WritePanel
+            folders={folders}
+            onImported={doImport}
+            onCancel={() => setMode('library')}
+            busy={busy}
+          />
         ) : mode === 'source' && sourceDeck ? (
           <SourcePanel
             deck={sourceDeck}
@@ -759,6 +1016,12 @@ export default function Flashcards() {
                 <Plus size={13} strokeWidth={1.5} aria-hidden="true" />
                 <span className="pill__label">Import a deck</span>
               </Pill>
+              {clerkOn ? (
+                <Pill onClick={() => setMode('write')}>
+                  <Pencil size={13} strokeWidth={1.5} aria-hidden="true" />
+                  <span className="pill__label">Write a deck</span>
+                </Pill>
+              ) : null}
               <Pill onClick={() => setNewFolder((v) => !v)}>
                 <FolderPlus size={13} strokeWidth={1.5} aria-hidden="true" />
                 <span className="pill__label">New folder</span>
@@ -790,12 +1053,22 @@ export default function Flashcards() {
               <Panel>
                 <EmptyState
                   lead="No decks yet."
-                  hint="Import a .json file of cards to start studying."
+                  hint={clerkOn
+                    ? 'Import a .json file of cards, or paste a lecture and let the clerk draft a deck from it.'
+                    : 'Import a .json file of cards to start studying.'}
                   action={
-                    <Pill active onClick={() => setMode('import')}>
-                      <Plus size={13} strokeWidth={1.5} aria-hidden="true" />
-                      <span className="pill__label">Import a deck</span>
-                    </Pill>
+                    <>
+                      <Pill active onClick={() => setMode('import')}>
+                        <Plus size={13} strokeWidth={1.5} aria-hidden="true" />
+                        <span className="pill__label">Import a deck</span>
+                      </Pill>
+                      {clerkOn ? (
+                        <Pill onClick={() => setMode('write')}>
+                          <Pencil size={13} strokeWidth={1.5} aria-hidden="true" />
+                          <span className="pill__label">Write a deck</span>
+                        </Pill>
+                      ) : null}
+                    </>
                   }
                 />
               </Panel>

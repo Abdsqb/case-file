@@ -59,10 +59,13 @@
    nothing against the card's own arrival. */
 .view.is-building .card { animation: bld-rise 520ms var(--e-arrive) var(--d) both; }
 
-/* --- 2b. the flanking columns arrive from their own side -------------------
-   On Case files the centre is the deck and the two span-3 stacks flank it, so
-   they arrive from the edge they live on rather than rising like everything
-   else. Within a column each card follows the one above it.
+/* --- 2b. a column arrives from its own side --------------------------------
+   A card in a flanking column arrives from the edge it lives on rather than
+   rising like everything else. On Case files that is the entries, which are
+   the whole left of the screen; the board opposite them is not in a column,
+   because an arrival that ends at `transform: none` would flatten the angle it
+   stands at and then snap it back. Within a column each card follows the one
+   above it.
 
    --d is per BENTO CHILD, which here is the whole column — so the per-card
    offset has to be added on top of it, or all four would land together. Still
@@ -84,6 +87,123 @@
   .view.is-building .col > .card { animation: none !important; }
 }
 [data-motion='reduced'] .view.is-building .col > .card { animation: none !important; }
+
+/* --- 2c. the panels that stand at an angle arrive standing -----------------
+
+   A card with the case drawing on it does not sit flat on the page; it stands
+   at --tilt, and so do the readings beside it. Every arrival above ends at
+   `transform: none`, which is the right ending for a card that is flat and the
+   wrong one for a card that is not: the animation overwrites the angle, and
+   `fill-mode: both` then HOLDS the overwrite for as long as the class is
+   there. Measured before this existed: the board appeared at 375ms, stood flat
+   for 2008ms while the rest of the screen assembled around it, and jumped from
+   0 to 11 degrees in a single frame when .is-building came off at 2300ms. Not
+   a transition — a snap, because the value did not change until the animation
+   stopped filling.
+
+   The fix is to stop animating `transform` on these cards at all. The angle
+   lives there and only there; the ARRIVAL goes in the individual translate /
+   rotate / scale properties, which the browser composes with `transform`
+   instead of replacing it. So the keyframe never mentions the angle, cannot
+   overwrite it, and cannot leave it overwritten.
+
+   And since `rotate` is now free, the arrival uses it: --swing turns the panel
+   back toward flat at the start, so it swings INTO its standing angle as it
+   comes in rather than arriving at the angle it will hold. It is the same
+   gesture the rest of the screen makes — something coming to rest — said in
+   the one dimension this card has that the others do not. --swing is 0 where
+   --tilt is, so a screen too narrow for any of this gets a plain arrival. */
+@keyframes stand-in {
+  from {
+    opacity: 0;
+    translate: 34px 10px;
+    scale: 0.97;
+    rotate: y var(--swing, 0deg);
+  }
+  to {
+    opacity: 1;
+    translate: none;
+    scale: 1;
+    rotate: none;
+  }
+}
+
+/* After `.view.is-building .card` above, which it overrides at equal
+   specificity. The reading cards win on their own.
+
+   Case files only, and the dashboard's absence from this list is not an
+   oversight. Its deck never had the bug: --d is defined on `.bento > *` and
+   the dashboard has no bento, so `var(--d)` in the arrival shorthand above is
+   invalid at computed-value time and the whole declaration drops — which
+   means its cards were never animated and so their angle was never overwritten
+   in the first place. What arrives there is `.dash__stack`, one element up,
+   carrying the whole deck in. Listing .dash__card here would be a selector
+   that silently does nothing, for the same reason. */
+.view.is-building .caseboard,
+.view.is-building .readdeck__slide > .card {
+  animation: stand-in 680ms var(--e-arrive) var(--d) both;
+}
+
+/* --- 2d. ...and the board arrives with its drawing already off the glass ----
+
+   The fade above cannot go on the board. Opacity is a grouping property: on a
+   preserve-3d element it forces `flat`, and the board is the root of the 3D
+   space the step cards stand in. While `stand-in` was in effect — which,
+   filling `both`, is the whole of .is-building, not just its 680ms — the card
+   stood at its angle with the drawing printed flat on it. Measured: flat at
+   1200ms, the arrival long finished; standing at 3200ms. It lifted in one
+   frame when the class came off at 2300ms.
+
+   So the board's arrival is motion only, and the fade goes to the things that
+   have nothing 3D inside them: the glass, the head and foot, and each wire and
+   step card on the scene. One animated number on the board drives all of them
+   — registered, so it interpolates rather than flipping at the halfway mark,
+   and inherited, so the layers read it without each running an animation of
+   their own (the nesting section 1 measured). The 3D layers in between — the
+   flow, its body, canvas and scene — are never given an opacity at all.
+
+   Scoped to .is-building because the step cards have an opacity of their own:
+   the hover dim in styles.css. Their 200ms transition covers the hand-back. */
+@property --arrive {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
+@keyframes board-in {
+  from {
+    --arrive: 0;
+    translate: 34px 10px;
+    scale: 0.97;
+    rotate: y var(--swing, 0deg);
+  }
+  to {
+    --arrive: 1;
+    translate: none;
+    scale: 1;
+    rotate: none;
+  }
+}
+
+.view.is-building .caseboard {
+  animation-name: board-in;
+}
+
+.view.is-building .caseboard::before,
+.view.is-building .caseboard > :not(.flow),
+.view.is-building .caseboard > .flow > :not(.flow__body),
+.view.is-building .caseboard .flow__body > :not(.flow__canvas),
+.view.is-building .caseboard .flow__canvas > :not(.flow__scene),
+.view.is-building .caseboard .flow__scene > * {
+  opacity: var(--arrive);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view.is-building .caseboard,
+  .view.is-building .readdeck__slide > .card { animation: none !important; }
+}
+[data-motion='reduced'] .view.is-building .caseboard,
+[data-motion='reduced'] .view.is-building .readdeck__slide > .card { animation: none !important; }
 
 /* --- 2. a light sweeps the surface --------------------------------------- */
 /* Gone, deliberately. A band of light used to travel across every card as the
@@ -247,17 +367,20 @@
 .bento.is-swapping .col > .card:nth-child(4) { animation-delay: 250ms; }
 .bento.is-swapping .col > .card:nth-child(5) { animation-delay: 325ms; }
 
-/* Only the title block, never .deck__body — the body holds the diagram, and
-   animating an ancestor of ~790 SVG nodes re-rasterises every one of them for
-   the length of the animation, on top of the morph already running inside. */
-.bento.is-swapping .deckhead__titles { animation: bld-rise 460ms var(--e-arrive) 40ms both; }
+/* Only the board's head, never the card itself — the card holds the diagram,
+   and animating an ancestor of ~790 SVG nodes re-rasterises every one of them
+   for the length of the animation, on top of the morph already running inside.
+   Animating the card would also overwrite the angle it stands at, and the
+   board sitting up straight for half a second on every case switch is a bigger
+   movement than the one being announced. */
+.bento.is-swapping .caseboard > .card__head { animation: bld-rise 460ms var(--e-arrive) 40ms both; }
 
 @media (prefers-reduced-motion: reduce) {
   .bento.is-swapping .col > .card,
-  .bento.is-swapping .deckhead__titles { animation: none !important; }
+  .bento.is-swapping .caseboard > .card__head { animation: none !important; }
 }
 [data-motion='reduced'] .bento.is-swapping .col > .card,
-[data-motion='reduced'] .bento.is-swapping .deckhead__titles { animation: none !important; }
+[data-motion='reduced'] .bento.is-swapping .caseboard > .card__head { animation: none !important; }
 
 /* --- 6. the digit settle ------------------------------------------------- */
 /* Metric cycles its glyphs briefly on arrival, so a number reads as a readout

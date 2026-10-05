@@ -347,13 +347,30 @@ body::after {
   z-index: 2;
 }
 
-/* Under reduced motion nothing follows anything: App.jsx stops writing the
-   field, and this makes sure a stale value cannot leave a panel parked off
-   its own grid position. */
+/* Under reduced motion nothing FOLLOWS anything: App.jsx stops writing the
+   field, and this makes sure a stale value cannot leave a panel parked off its
+   own grid position.
+
+   It holds its resting angle, though, and that is the whole change here. This
+   used to flatten the panel outright, which confuses two different things: a
+   constant angle is not movement, it is where the object is. Flattening it
+   also left the panel alone among its neighbours — six tilted cards and one
+   flat one on the dashboard, a flat board over seven tilted readings on Case
+   files — so the accommodation read as a bug. What reduced motion is owed is
+   that nothing moves, and nothing here does: the resting turn is held, and the
+   hover rule is overridden so the pointer cannot change it. */
 @media (prefers-reduced-motion: reduce) {
-  .card:has(.flow) { transform: none; transition: none; }
+  .card:has(.flow),
+  .card:has(.flow):hover {
+    transform: rotateY(var(--tilt, 0deg));
+    transition: none;
+  }
 }
-[data-motion='reduced'] .card:has(.flow) { transform: none !important; }
+[data-motion='reduced'] .card:has(.flow),
+[data-motion='reduced'] .card:has(.flow):hover {
+  transform: rotateY(var(--tilt, 0deg)) !important;
+  transition: none !important;
+}
 
 /* The light itself. Fixed, behind the vignette, and never in the way of a
    pointer. The canvas paints nothing but light — the ground beneath it is the
@@ -4144,205 +4161,271 @@ button.entry__title:hover { color: var(--fg); }
 [data-motion="reduced"] .casefold__chev { transition: none !important; }
 
 /* --------------------------------------------------------------------------
-   THE DECK — case structure and entries sharing one slot
-   Two panels stacked in the same box. The wheel is read as a direction and
-   spent on a transition rather than on scrolling: down slides the structure up
-   and out and brings the entries up from below, up reverses it.
+   CASE FILES — the entries, the board, and the readings
 
-   Both panels are always mounted and only transformed, so the diagram keeps its
-   state across a flip — remounting it would replay the whole build animation
-   every time you glanced at your entries.
+   The screen used to be three columns: a stack of small panels, a deck in the
+   middle holding the entries and the diagram folded over each other, and
+   another stack of small panels. Three problems in one shape. The entries —
+   the only thing on this screen you actually DO anything to — had the middle
+   third and had to share even that with the drawing, so reading the list meant
+   flipping the card the drawing was on. The drawing had no frame, and a
+   drawing with no frame cannot be turned, so the one object on the screen that
+   could have stood up was printed flat. And seven measurements sat around the
+   edges at once, none of them answering which one you were meant to read.
+
+   So: the entries take the left and keep it, the drawing takes the right as a
+   card that stands at an angle, and the seven measurements take turns in the
+   space under it. Nothing is hidden behind anything else any more.
    -------------------------------------------------------------------------- */
 
-.deck {
-  position: relative;
-  overflow: hidden;
+/* --- the two sides -------------------------------------------------------- */
+
+/* One number sets the height of the screen, and it is on the RIGHT-hand
+   column. That side is the one with a shape of its own — a board with a
+   definite height and a frame of readings under it — while the left is a list
+   that will take any height it is given. So the right is measured and the left
+   stretches to it, which is `align-items: stretch` doing its ordinary job.
+
+   The subtraction is the chrome above and below: the fixed nav, the shell's
+   own padding, and the case strip with the gap under it. */
+.casework__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
   min-width: 0;
-  border-radius: var(--radius);
-  /* Without a floor the row would collapse to whichever panel is shorter, and
-     the height would jump on every flip. */
-  min-height: 560px;
-  /* The two panels are hinged at opposite edges of this box and fold through
-     each other, so the box needs depth for the fold to read as one. */
+  height: clamp(624px, calc(100vh - var(--nav-h, 66px) - 190px), 900px);
+
+  /* ITS OWN ROOM, and that is the whole reason the board reads as standing.
+     ----------------------------------------------------------------------
+     The bento has one lens for the whole grid, and it is a long one — 2200px,
+     chosen so that a dozen panels across a wide screen are turned rather than
+     sheared. Foreshortening is the whole of what the eye reads as depth, and a
+     long lens has very little of it to give.
+
+     Measured at 1600px, as the difference in painted height between the card's
+     near edge and its far one:
+
+       grid's lens, 2200px centred, −11deg  →  460 vs 436   24px   5.5%
+       its own lens, 1500px at −20%, −11deg  →  466 vs 431   35px   8.1%
+
+     Half again as much, from nothing but moving the eye. So this column steps
+     out of the grid's room and keeps its own, the way the dashboard's deck
+     does: a shorter lens with the eye off to the LEFT, out over the entries
+     where the reader actually is rather than squarely in front of the panel.
+     That off-centre eye is what gives the near edge its height and the far
+     edge its recession.
+
+     `flat` rather than preserve-3d, overriding `.bento > *`: the column has to
+     stop passing the grid's lens through before it can hand its own to the
+     card. The card itself goes back to preserve-3d — see `.flowcard` — so the
+     step cards still stand off the glass inside it. */
+  transform-style: flat;
   perspective: 1500px;
-  perspective-origin: 50% 50%;
+  perspective-origin: -20% 50%;
+
+  /* THE ANGLE EVERYTHING ON THIS SIDE STANDS AT.
+     ----------------------------------------------------------------------
+     Declared here rather than on the board, because the readings under it
+     stand at it too and two numbers that have to be equal should be one
+     number. Negative, because rotateY sends +x to −z: a negative turn is the
+     one that brings the right edge forward, which is the right way round for
+     a panel against the right wall of the room.
+
+     Read by `.card:has(.flow)` for the board and by `.readdeck__slide > .card`
+     for the readings. Neither rule knows about the other; they only agree
+     about where the value comes from.
+
+     --swing is how far back toward flat the arrival starts from, read by the
+     stand-in keyframe in motion.css. It sits next to --tilt so that the two
+     cannot disagree about whether this screen turns: set one to zero and the
+     other goes with it. */
+  --tilt: -11deg;
+  --swing: 9deg;
 }
 
-.deck__panel {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  /* transform + opacity only — this runs on the compositor, and the diagram
-     inside is ~790 SVG nodes that must not be re-rastered mid-fold. */
-  transition:
-    transform 640ms cubic-bezier(0.22, 1, 0.30, 1),
-    opacity 380ms cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform, opacity;
-  backface-visibility: hidden;
-}
+.casework__main { min-width: 0; }
 
-/* Each panel keeps ONE transform-origin across both states — its own hinge.
-   Animating the origin instead would swing the panel along a path nobody
-   asked for, because the pivot moves while the rotation runs.
+/* --- the entries ---------------------------------------------------------- */
 
-   The entries lead, so they take the top hinge and fold away over their own top
-   edge; the structure is hinged at its bottom and folds up into place from
-   below. Two leaves of a flip board sharing one frame. The hinges swapped when
-   the panels did, or the second panel would have arrived from the same side the
-   first one left by. */
-.deck__panel--entries   { transform-origin: 50% 0%; }
-.deck__panel--structure { transform-origin: 50% 100%; }
-
-/* entries showing: the structure waits folded down out of sight */
-.deck[data-show='entries'] .deck__panel--entries {
-  transform: none;
-  opacity: 1;
-}
-.deck[data-show='entries'] .deck__panel--structure {
-  transform: translateY(28%) rotateX(-78deg) scale(0.92);
-  opacity: 0;
-}
-
-/* structure showing: the entries have folded up and away over their own top */
-.deck[data-show='structure'] .deck__panel--entries {
-  transform: translateY(-28%) rotateX(78deg) scale(0.92);
-  opacity: 0;
-}
-.deck[data-show='structure'] .deck__panel--structure {
-  transform: none;
-  opacity: 1;
-}
-
-/* A panel that is off screen must not be tabbable or hoverable. */
-.deck__panel[aria-hidden='true'] { pointer-events: none; }
-
-/* --- the structure panel: no frame --------------------------------------- */
-
-.deck__panel--structure {
-  border: 0;
-  background: none;
-  padding: 18px 20px 16px;
-  gap: 4px;
-}
-
-.deckhead {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 2px;
-  padding: 0 96px;           /* room for the aside, so centring is true */
-  min-width: 0;
-}
-.deckhead__titles { min-width: 0; max-width: 100%; }
-.deckhead__title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 400;
-  letter-spacing: 0.01em;
-  color: var(--fg);
-}
-.deckhead__sub {
-  margin: 2px 0 0;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--fg-dim);
-}
-
-/* Out of the centring flow entirely, so a long case name cannot shove the
-   title off-centre. */
-.deckhead__aside {
-  position: absolute;
-  top: 0;
-  right: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.deck__body {
+.casecard {
   flex: 1 1 auto;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.deck__body--center { align-items: center; justify-content: center; }
-
-.deck__foot {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding-top: 12px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--fg-dim);
 }
 
-/* --- the entries panel keeps its card ------------------------------------ */
-
-/* The panel itself does not scroll. It used to carry overflow-y: auto, but the
-   card inside is pinned to the slot by min-height: 100% and inherits the card
-   rule's overflow: hidden — so a long list was clipped INSIDE the card and the
-   panel never saw anything sticking out of it. Measured: panel 240/240 with the
-   card's own content at 476, and entries rendering 217px below the deck where
-   nothing could reach them. The scroll belongs on the list. */
-.deck__panel--entries { overflow: hidden; }
-
-.deck__card {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--card);
-  min-height: 100%;
-  max-height: 100%;
-  box-sizing: border-box;
-}
 /* A flex column only lets a child shrink below its content if the child is
    allowed to — without this the body keeps its full content height and pushes
    the list straight back out through the bottom of the card. */
-.deck__card .card__body { min-height: 0; }
+.casecard .card__body { min-height: 0; }
 
-/* --- the dots ------------------------------------------------------------- */
+/* --- the board ------------------------------------------------------------ */
 
-.deck__dots {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  z-index: 3;
+/* The same angle and the same lens as the dashboard's deck, because it is the
+   same object doing the same job on a different screen. The rule that turns it
+   is `.card:has(.flow)` in section 2, which is also what makes the hover turn
+   the BOARD'S alone: the readings beside it stand at the resting angle and do
+   not react, so the one panel with the drawing on it is still the one thing on
+   the screen that moves when you point at it. */
+.caseboard {
+  flex: 1 1 auto;
+  min-height: 300px;
+}
+
+/* The flow fills what is left between the head and the foot. `.flow` is
+   `height: 100%`, which in a flex column resolves against a parent that has no
+   definite height to give — so it is a flex child here instead. */
+.caseboard__flow {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+
+.caseboard__meter {
+  flex: 0 1 220px;
+  min-width: 120px;
+}
+
+/* --- the readings --------------------------------------------------------- */
+
+/* A frame with one card in it and the rest waiting behind. Its height is
+   fixed, the cards inside it are not: each one is as tall as what is on it and
+   sits in the middle of the frame, so paging through is a panel changing size
+   rather than a panel whose contents keep sliding to the top of it.
+
+   Its height is the TALLEST reading plus a little, not an average of them.
+   Every card is capped at the frame and a card is `overflow: hidden`, so a
+   frame sized for the typical one does not make the chart card scroll — it
+   cuts the bottom off it silently. Measured: the entries chart stands 248px,
+   which is 50 more than the three count cards and is the number this is for.
+   On top of that the frame carries the 18px the turn adds and the dots under
+   it. The floor matters as much as the ceiling, because 30vh on a short laptop
+   window is less than the chart needs. */
+.readdeck {
+  flex: 0 0 clamp(296px, 30vh, 348px);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
+  min-width: 0;
+  outline: none;
 }
 
-.deck__dot {
+.readdeck:focus-visible .readdeck__stack {
+  outline: 1px solid var(--accent-edge);
+  outline-offset: 8px;
+  border-radius: var(--radius);
+}
+
+.readdeck__stack {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Every card is mounted; only one is in front. Where each one is and how much
+   of it there is gets written onto the element by useDeck every frame, which
+   is why there is no transition here: a transition is a fixed journey between
+   two states, and this does not have two states. It has a position that can
+   stop anywhere and change direction mid-flight. */
+.readdeck__slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  visibility: hidden;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+
+  /* The lens for the card inside, and it is on the SLIDE rather than on the
+     stack because perspective reaches exactly one generation. The card is the
+     slide's child and the stack's grandchild, so a lens on the stack is spent
+     on the slide and the card comes out flattened — an orthographic squash,
+     which is the difference between a panel that is turned and a panel that is
+     merely narrower down one side.
+
+     Same numbers as the column's own lens above, so the readings are seen from
+     the same eye as the board standing over them. Two panels in one column at
+     one angle but through two different lenses would not look like two panels
+     in a room; they would look like a mistake. */
+  perspective: 1500px;
+  perspective-origin: -20% 50%;
+}
+
+/* The deck's motion is on the slide and the angle is on the card, which is the
+   same split the dashboard uses. It has to be two elements: the slide's
+   transform is rewritten sixty times a second as the deck glides, and a turn
+   living in that string would have to be rewritten with it — sixty times a
+   second, to say the same thing every time. */
+.readdeck__slide > .card {
+  width: 100%;
+  height: auto;
+  /* Short of the frame by the amount the turn adds. A turned panel is TALLER
+     than its box — the near edge grows by about as much as the far edge
+     shrinks — and a card capped at the full frame would paint its near corners
+     down over the dots. */
+  max-height: calc(100% - 18px);
+  min-height: 0;
+  transform: rotateY(var(--tilt, 0deg));
+  transform-origin: 50% 50%;
+}
+
+/* Under the stack rather than beside it, so the cards keep the full width of
+   the column and line up with the board standing above them. */
+.readdeck__dots {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.readdeck__dot {
   width: 6px;
-  height: 18px;
+  height: 6px;
   padding: 0;
   border: 0;
-  border-radius: 999px;
-  background: var(--line);
+  border-radius: 50%;
+  background: var(--border-strong);
   cursor: pointer;
-  transition: background-color 200ms ease, height 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 200ms ease, transform 200ms ease, box-shadow 200ms ease;
 }
-.deck__dot:hover { background: var(--fg-dim); }
-.deck__dot.is-on { background: var(--fg-mid); height: 26px; }
-.deck__dot:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: 2px; }
+
+.readdeck__dot:hover { background: var(--text-faint); transform: scale(1.3); }
+
+.readdeck__dot.is-on {
+  background: var(--accent);
+  box-shadow: 0 0 10px 0 var(--accent-glow);
+  transform: scale(1.3);
+}
+
+.readdeck__dot:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: 3px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .deck__panel, .deck__dot { transition: none !important; }
+  .readdeck__dot { transition: none !important; }
+  .readdeck__slide { will-change: auto; }
 }
-[data-motion='reduced'] .deck__panel,
-[data-motion='reduced'] .deck__dot { transition: none !important; }
+[data-motion='reduced'] .readdeck__dot { transition: none !important; }
+[data-motion='reduced'] .readdeck__slide { will-change: auto; }
 
-@media (max-width: 1100px) {
-  /* Stacked at this width the slot is much shorter, and a 560px floor would
-     leave the diagram swimming in empty space. */
-  .deck { min-height: 480px; }
-  .deckhead { padding: 0 76px; }
+/* Below 1180px the bento collapses to six columns and both sides go full
+   width, one under the other. The side column stops being a side, so it gives
+   up the height it was holding for the left-hand list and the turn goes with
+   it — an angle on the only thing across the screen has nothing to be at an
+   angle TO, and all it would do is shorten one edge. */
+@media (max-width: 1180px) {
+  .casework__side {
+    height: auto;
+  }
+  .casework__side { --tilt: 0deg; --swing: 0deg; }
+  .caseboard {
+    flex: none;
+    height: clamp(380px, 52vh, 520px);
+  }
+  .casecard {
+    height: clamp(460px, 62vh, 680px);
+  }
 }
+
 
 /* The case bar wrapping to a second line used to teleport everything below it
    down by a row. The height here is written from a ResizeObserver on the head
@@ -5269,6 +5352,12 @@ button.entry__title:hover { color: var(--fg); }
   gap: 18px;
   min-width: 0;
   padding-top: 8px;
+
+  /* The scratchpad tab's lane, and where this column starts relative to the
+     window. Read by the brief and by up next — see .dash__read for the whole
+     story of why anything in this column has to step around the tab. */
+  --tab-lane: calc(var(--notes-gap, 18px) + 34px + 12px);
+  --page-left: max(var(--shell-x), (100vw - 1560px) / 2 + var(--shell-x));
 }
 
 .dash__chip { align-self: flex-start; }
@@ -5300,6 +5389,11 @@ button.entry__title:hover { color: var(--fg); }
   gap: 2px;
   margin-top: 6px;
   min-width: 0;
+  /* Up next steps around the tab too. Where it lands depends on how long
+     today's brief ran, so on a short window it can be anywhere in the tab's
+     band — the label went straight behind it at 1366x768. Zero on a window
+     wide enough that the tab is clear of the column, as the brief's is. */
+  padding-left: max(0px, calc(var(--tab-lane) - var(--page-left)));
 }
 
 .dash__uphead {
@@ -5414,9 +5508,14 @@ button.entry__title:hover { color: var(--fg); }
    turns further under the pointer, on top of this.
 
    Negative, because rotateY sends +x to -z: a negative turn is the one that
-   brings the right edge forward. */
+   brings the right edge forward.
+
+   --swing is the arrival: how far back toward flat the card starts, so it
+   turns into its angle as it comes in instead of appearing already at it. See
+   the stand-in keyframe in motion.css. */
 .dash {
   --tilt: -11deg;
+  --swing: 9deg;
 }
 
 .dash__card {
@@ -5440,7 +5539,10 @@ button.entry__title:hover { color: var(--fg); }
 
 /* With one exception, and it is the drawing. Empty space on a canvas is not
    dead space — it is where the next step goes, and a case that grows by one
-   entry should not make the panel jump. The flow keeps the whole frame. */
+   entry should not make the panel jump. The flow keeps the whole frame.
+
+   The only thing left under this name: everything else the drawing's card does
+   is `.flowcard` now, because Case files stands one too. */
 .dash__card--flow {
   height: 100%;
 }
@@ -5482,6 +5584,25 @@ button.entry__title:hover { color: var(--fg); }
   transform: scale(1.3);
 }
 
+/* A short window, where the column is the thing under pressure rather than the
+   row. The brief can now run to four sentences, which on a 1280x720 laptop is
+   eight lines in a 468px column — and eight lines plus a greeting plus five
+   rows of what is coming needs more height than that window has to give.
+
+   The gaps are what give way, not the content. 18px between five blocks is
+   72px of air, and it is there to separate a heading from a paragraph from a
+   list on a screen with room to spare; on one without, the separation still
+   reads at 11px and the 28px it returns is most of what was missing. Nothing
+   is dropped, nothing is clipped, and nothing has to be smaller.
+
+   10px rather than a rounder 12, because the four gaps are the last four
+   pixels: at 12 the longest brief still ran 4px past the frame, which is
+   nothing to look at and still a column that does not fit its own row. */
+@media (max-height: 820px) {
+  .dash__brief { gap: 10px; }
+  .dash__read { margin: 0; }
+}
+
 /* Narrow: the brief sits above the deck and the deck keeps its own height.
    The turn goes with the layout. It was a panel standing against the right
    wall of a wide room; once the deck is the full width of the screen there is
@@ -5493,6 +5614,7 @@ button.entry__title:hover { color: var(--fg); }
     gap: 24px;
     height: auto;
     --tilt: 0deg;
+    --swing: 0deg;
   }
   .dash__deck {
     height: clamp(460px, 68vh, 640px);
@@ -5509,9 +5631,10 @@ button.entry__title:hover { color: var(--fg); }
   .dash__slide { will-change: auto; }
 }
 
-/* The flow on the Case files deck gets the whole face; the deck already
-   centres and pads it. */
-.deck__flow { min-height: 300px; }
+/* The flow on the Case files board. Its own floor, because the board's is a
+   floor on the CARD — head and foot included — and the drawing is what the
+   height is actually for. */
+.caseboard__flow { min-height: 240px; }
 
 /* --- the flow as a panel ---------------------------------------------------
    The workflow window from the reference: a title bar with the name on the
@@ -5686,10 +5809,28 @@ button.entry__title:hover { color: var(--fg); }
 .flow__runwhat { min-width: 0; }
 .flow__runnone { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
 
+/* --- THE CARD THE DRAWING STANDS ON --------------------------------------
+   Worn by the dashboard's structure card and by the board on Case files. It
+   was written for the first and generalised when the second wanted the same
+   thing — a drawing standing off its panel is the app's one piece of real
+   depth, and having it on one screen and a flat copy on the other would have
+   read as the second screen being the lesser one.
+
+   Nothing in here positions anything. Where the card goes, how big it is and
+   what angle it stands at belong to the screen it is on. */
+
 /* The card holding the panel gives up its own padding — the panel brings its
    own, and two sets of it would push the canvas into a letterbox. */
-.dash__card--flow > .card__foot {
+.flowcard > .card__foot {
   border-top: 1px solid var(--line-soft);
+  transform: translateZ(2px);
+}
+
+/* The dashboard's card has no head — the flow brings its own title bar there.
+   Case files turns that bar off and puts a card head on instead, which has to
+   be lifted off the glass by the same couple of pixels or it would be the one
+   thing on the panel still printed on it. */
+.flowcard > .card__head {
   transform: translateZ(2px);
 }
 
@@ -5709,7 +5850,7 @@ button.entry__title:hover { color: var(--fg); }
    sits just off it, and the step cards stand well clear. Nothing is clipped
    any more — nothing needs to be, because the drawing is measured to fit its
    box before it is ever laid out. */
-.dash__card--flow {
+.flowcard {
   overflow: visible;
   background: transparent;
   border-color: transparent;
@@ -5726,7 +5867,7 @@ button.entry__title:hover { color: var(--fg); }
    frosted, so the light behind runs visibly under it. What stops the strands
    competing with the text is that they arrive softened by a wide blur, not
    that they are hidden. */
-.dash__card--flow::before {
+.flowcard::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -5743,13 +5884,13 @@ button.entry__title:hover { color: var(--fg); }
 
 /* Every layer between the card and the step cards has to pass the third
    dimension through, or the lift is flattened on the way down. */
-.dash__card--flow > .flow,
-.dash__card--flow .flow__body,
-.dash__card--flow .flow__canvas,
-.dash__card--flow .flow__scene { transform-style: preserve-3d; }
+.flowcard > .flow,
+.flowcard .flow__body,
+.flowcard .flow__canvas,
+.flowcard .flow__scene { transform-style: preserve-3d; }
 
-.dash__card--flow > .flow,
-.dash__card--flow .flow__canvas { overflow: visible; }
+.flowcard > .flow,
+.flowcard .flow__canvas { overflow: visible; }
 
 /* The heights, in one place.
    ------------------------------------------------------------------------
@@ -5762,17 +5903,17 @@ button.entry__title:hover { color: var(--fg); }
    reference, and it tears: a wire ends several pixels short of the card it
    runs to, and the eye reads a bug rather than a height. A drawing is a thing
    on a sheet of acetate laid over the board, and the sheet is what floats. */
-.dash__card--flow {
+.flowcard {
   --graph: 88px;
 }
 
-.dash__card--flow .flow__bar   { transform: translateZ(3px); }
-.dash__card--flow .flow__tools { transform: translateZ(8px); }
-.dash__card--flow .flow__runs  { transform: translateZ(3px); }
-.dash__card--flow .flow__wires { transform: translateZ(var(--graph)); }
-.dash__card--flow .flow__tag   { transform: translateZ(calc(var(--graph) + 4px)); }
+.flowcard .flow__bar   { transform: translateZ(3px); }
+.flowcard .flow__tools { transform: translateZ(8px); }
+.flowcard .flow__runs  { transform: translateZ(3px); }
+.flowcard .flow__wires { transform: translateZ(var(--graph)); }
+.flowcard .flow__tag   { transform: translateZ(calc(var(--graph) + 4px)); }
 
-.dash__card--flow .flow__node {
+.flowcard .flow__node {
   /* Set per kind below and read here, so a step cannot be at one height and
      cast the shadow of another. */
   transform: translateZ(var(--lift, 88px));
@@ -5786,7 +5927,7 @@ button.entry__title:hover { color: var(--fg); }
     0 34px 56px -20px rgba(0, 0, 0, 0.98);
 }
 
-.dash__card--flow .flow__node--case { background: rgba(31, 27, 41, 0.97); }
+.flowcard .flow__node--case { background: rgba(31, 27, 41, 0.97); }
 
 /* The case is the board's own label and sits nearly on it; the steps hanging
    off it stand proud. Two heights rather than one is what turns a lifted
@@ -5794,12 +5935,12 @@ button.entry__title:hover { color: var(--fg); }
 /* A few pixels of relief within the sheet, and no more: enough that the cards
    sit on the drawing rather than in it, little enough that the wires still
    meet them. */
-.dash__card--flow .flow__node--case    { --lift: calc(var(--graph) + 5px); }
-.dash__card--flow .flow__node--entry   { --lift: calc(var(--graph) + 10px); }
-.dash__card--flow .flow__node--subtask { --lift: calc(var(--graph) + 14px); }
-.dash__card--flow .flow__node--subcase { --lift: calc(var(--graph) + 8px); }
+.flowcard .flow__node--case    { --lift: calc(var(--graph) + 5px); }
+.flowcard .flow__node--entry   { --lift: calc(var(--graph) + 10px); }
+.flowcard .flow__node--subtask { --lift: calc(var(--graph) + 14px); }
+.flowcard .flow__node--subcase { --lift: calc(var(--graph) + 8px); }
 
-.dash__card--flow .flow__node[data-lit='hot'] {
+.flowcard .flow__node[data-lit='hot'] {
   transform: translateZ(calc(var(--lift, 88px) + 20px));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.07),
@@ -5810,12 +5951,12 @@ button.entry__title:hover { color: var(--fg); }
 
 /* Standing still, standing flat. A lift is motion in the third dimension and
    it is the motion that was opted out of; the drawing stays on its board. */
-[data-motion='reduced'] .dash__card--flow,
-[data-motion='reduced'] .dash__card--flow > .flow,
-[data-motion='reduced'] .dash__card--flow .flow__body,
-[data-motion='reduced'] .dash__card--flow .flow__canvas,
-[data-motion='reduced'] .dash__card--flow .flow__scene { transform-style: flat; }
-[data-motion='reduced'] .dash__card--flow .flow__node { transform: none; }
+[data-motion='reduced'] .flowcard,
+[data-motion='reduced'] .flowcard > .flow,
+[data-motion='reduced'] .flowcard .flow__body,
+[data-motion='reduced'] .flowcard .flow__canvas,
+[data-motion='reduced'] .flowcard .flow__scene { transform-style: flat; }
+[data-motion='reduced'] .flowcard .flow__node { transform: none; }
 
 
 /* ==========================================================================
@@ -5839,7 +5980,29 @@ button.entry__title:hover { color: var(--fg); }
 .dash__read {
   position: relative;
   margin: 2px 0 4px;
-  padding-left: 13px;
+
+  /* 13px for the tick, plus however much of the scratchpad tab's lane reaches
+     into this column — which is a number that depends on the window.
+     ------------------------------------------------------------------------
+     The tab is `position: fixed` at the left edge and vertically centred, so
+     it floats over whatever is at x=18..52 half way down the page. Nothing
+     ever was: this column's only other content is a heading at the top and a
+     list at the bottom, and the brief used to be three lines that stopped well
+     short of the middle. Giving the brief a fourth sentence pushed it into
+     that band, and measured at 1366x768 the tab sat over three lines of type,
+     9px into each.
+
+     It was already possible before — a four-line brief at 1280x720 caught one
+     line — it just needed an unusually long day to happen. It is routine now,
+     so the lane is reserved rather than hoped about.
+
+     The subtraction is what keeps this from being a change to a design that
+     did not need one: the indent is exactly the part of the tab's lane that
+     the page's own margin does not already clear, so it is 13px on a wide
+     window — unchanged — and grows only as the window narrows enough for the
+     tab to actually be in the way. No breakpoint, because there is no width at
+     which the answer jumps. */
+  padding-left: max(13px, calc(var(--tab-lane) - var(--page-left)));
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -5881,6 +6044,28 @@ button.entry__title:hover { color: var(--fg); }
 }
 
 .dash__readtext--wait { color: var(--text-faint); }
+
+/* The news is the second paragraph and the quieter one: it is about the
+   world, not about the reader's day, so it steps back a shade and says where
+   it came from in the same mono caps the rest of the app labels things with.
+   The tick stays on the first paragraph — that is the one written for you. */
+.dash__readnews {
+  margin-top: 4px;
+  color: var(--text-faint);
+}
+
+/* Inline, not on a line of its own: a whole line for two words would make the
+   brief taller than the single paragraph it replaced, in a column whose
+   height is already spoken for (see BRIEF_CHARS in server/clerk.js). */
+.dash__readkicker {
+  margin-right: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  opacity: 0.8;
+}
 
 /* The refresh is there when wanted and invisible until then. A button sitting
    permanently under a sentence invites being pressed, and every press is a

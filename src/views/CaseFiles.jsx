@@ -18,6 +18,7 @@ import {
 } from '../ui/primitives.jsx'
 import { DotMatrix, MiniBars } from '../ui/charts.jsx'
 import CaseFlow from '../ui/CaseFlow.jsx'
+import useDeck from '../ui/useDeck.js'
 import { buildGraph } from '../lib/graph.js'
 import api from '../lib/api.js'
 import { applyWalk, siblingWalk } from '../lib/reorder.js'
@@ -721,22 +722,6 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     }
   })
 
-  /* The centre slot is a deck of two panels sharing one space: the entries
-     first, because they are what the screen is for, and the structure behind
-     them as the picture of the same thing.
-
-     The wheel used to flip between them. It no longer does: a page where
-     scrolling silently swaps one panel for another gives you no way to simply
-     read a long list, and the gesture was doing two jobs badly. The list now
-     scrolls the way a list scrolls, and the pair of dots at the corner is the
-     only thing that switches panels. */
-  const [deckView, setDeckView] = useState('entries')
-  const deckRef = useRef(null)
-
-  const showDeck = useCallback((next) => {
-    setDeckView((cur) => (cur === next ? cur : next))
-  }, [])
-
   /* Expanding a folder can push the case bar onto a second line, and the whole
      page below it used to jump by exactly one row height. Nothing animates an
      auto height, so the head's measured height is written onto a wrapper that
@@ -1288,6 +1273,210 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     onClick: () => setSort(s.value),
   }))
 
+  /* THE READINGS.
+     ======================================================================
+     Seven measurements of the open case, and they used to flank the screen in
+     two columns of small panels. All seven at once is seven things asking to
+     be read and no answer to which one you were meant to read first — and six
+     of them are a number and a word, laid out as though they were charts.
+
+     So they take turns. One at a time, each at its own height, paged with the
+     wheel — the same deck the dashboard runs, from the same hook. What that
+     buys is the room: the entries take the left of the screen and the drawing
+     takes the right, and the measurements sit under the drawing rather than
+     having two columns cut out of both.
+
+     The order is the order you would ask them in: how far along, what is open,
+     what is late, what is nested under it, the shape of the last month, the
+     shape of the last few weeks, and last the one that is written rather than
+     counted. */
+  const readings = [
+    { key: 'completion', label: 'Completion', node: (
+        <Card aria-label="Completion">
+          <CardHead
+            className="card__head"
+            title="Completion"
+            subtitle={caseName}
+            right={
+              <IconMenu
+                items={[
+                  { key: 'done', label: 'Show closed only', onClick: () => setFilter('done') },
+                  { key: 'open', label: 'Show open only', onClick: () => setFilter('open') },
+                  { key: 'all', label: 'Show everything', onClick: () => setFilter('all') },
+                ]}
+                label="Completion actions"
+              />
+            }
+          />
+          <div className="card__body">
+            {/* The % rides inside the value so it hugs the digits. `unit` is
+                spaced off the number, which is right for a word and wrong
+                for a symbol. */}
+            <Metric
+              value={`${pct}%`}
+              sub={`${stats.done}/${stats.total} entries closed`}
+              tone="sage"
+            />
+            <div className="micro">
+              {stats.open} open · {stats.overdue} late
+            </div>
+          </div>
+        </Card>
+      ) },
+
+    { key: 'open', label: 'Open', node: (
+        <Card aria-label="Open">
+          <CardHead
+            className="card__head"
+            title="Open"
+            subtitle={caseName}
+            right={
+              <HeadRight>
+                <Trend dir={seriesDir(series.opened)} />
+                <IconMenu items={filterMenu('open')} label="Open entries actions" />
+              </HeadRight>
+            }
+          />
+          <div className="card__body card__body--tight">
+            <Metric value={stats.open} unit="entries" sub={`${stats.total} logged`} />
+          </div>
+        </Card>
+      ) },
+
+    { key: 'overdue', label: 'Overdue', node: (
+        <Card aria-label="Overdue">
+          <CardHead
+            className="card__head"
+            title="Overdue"
+            subtitle={caseName}
+            right={
+              <HeadRight>
+                <Trend dir={seriesDir(series.overdue)} />
+                <IconMenu items={filterMenu('overdue')} label="Overdue actions" />
+              </HeadRight>
+            }
+          />
+          <div className="card__body card__body--tight">
+            <Metric
+              tone={stats.overdue > 0 ? 'hot' : undefined}
+              value={stats.overdue}
+              unit="entries"
+              sub={`${stats.dueSoon} due soon`}
+            />
+          </div>
+        </Card>
+      ) },
+
+    { key: 'subtasks', label: 'Subtasks', node: (
+        <Card aria-label="Subtasks">
+          <CardHead
+            className="card__head"
+            title="Subtasks"
+            subtitle={caseName}
+            right={
+              <HeadRight>
+                <Trend dir={subDir} />
+                <IconMenu
+                  items={[
+                    { key: 'expand', label: 'Expand all subtasks', onClick: () => setCollapsed([]) },
+                    {
+                      key: 'collapse',
+                      label: 'Collapse all subtasks',
+                      onClick: () => setCollapsed(rows.map((r) => r.task.id)),
+                    },
+                  ]}
+                  label="Subtask actions"
+                />
+              </HeadRight>
+            }
+          />
+          <div className="card__body card__body--tight">
+            <Metric value={stats.subs} unit="nested" sub={`under ${rows.length} entries`} />
+          </div>
+        </Card>
+      ) },
+
+    { key: 'logged', label: 'Open entries', node: (
+        <Card aria-label="Open entries">
+          <CardHead
+            className="card__head"
+            title="Open entries"
+            subtitle="Logged per day · 30d"
+            right={<Trend dir={seriesDir(series.opened)} />}
+          />
+          <div className="card__body card__body--tight">
+            <MiniBars
+              data={series.opened}
+              height={72}
+              label={`Entries logged per day over the last 30 days in ${caseName}`}
+            />
+            <Metric
+              value={stats.open}
+              unit="open"
+              sub={`${openedRange.label} logged per day`}
+            />
+          </div>
+        </Card>
+      ) },
+
+    { key: 'matrix', label: 'Entries / week', node: (
+        <Card aria-label="Entries per week">
+          <CardHead
+            className="card__head"
+            title="Entries / week"
+            subtitle="Logged per day"
+            right={
+              <PillSelect
+                value={matrixDays}
+                options={MATRIX_OPTIONS}
+                onChange={setMatrixDays}
+                label="Matrix window"
+                align="end"
+              />
+            }
+          />
+          <div className="card__body">
+            {/* Ten rows rather than the eight it had in a quarter-width
+                column: the block is as wide as the board above it now, and
+                eight rows across that width is a strip rather than a matrix.
+                DotMatrix places its columns proportionally, so this is the
+                only number that had to change. */}
+            <DotMatrix
+              columns={matrixColumns}
+              rows={10}
+              labels={matrixLabels}
+              label={`Entries logged per day over the last ${matrixDays} days`}
+            />
+          </div>
+        </Card>
+      ) },
+
+    { key: 'analysis', label: 'Analysis', node: (
+        <Card aria-label="Analysis">
+          <CardHead className="card__head" title="Analysis" subtitle="Read from this case" />
+          <div className="card__body">
+            {tip ? (
+              <div className="tip">
+                <div className="tip__body">{tip.body}</div>
+                <div className="tip__meta">
+                  <span>{tip.meta}</span>
+                  <span className="tip__note">{tip.note}</span>
+                </div>
+                {tip.ref ? <div className="tip__note truncate">{tip.ref}</div> : null}
+              </div>
+            ) : (
+              <EmptyState lead="Nothing to report." hint="Log an entry and the read updates." />
+            )}
+          </div>
+        </Card>
+      ) },
+  ]
+
+  /* A shorter throw than the dashboard's. That deck is a full-height panel and
+     62px of offset is a fraction of it; this frame is a third the height, and
+     the same number would have thrown the card behind clean out of the top. */
+  const reading = useDeck(readings.length, { shift: 34 })
+
   /* ---- render ------------------------------------------------------ */
 
   return (
@@ -1537,143 +1726,23 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
         </div>
       ) : (
         /* Deliberately NOT keyed on the case. Keying remounted every panel on
-           the strip, which meant a switch tore the whole screen down and rebuilt
-           it — cards flashing, numbers re-settling, the diagram re-assembling —
-           when almost all of it was about to show the same thing in the same
-           place. Now only what actually differs re-renders, and the ground in
-           Case structure flows from one case's shape to the next. The one thing
-           the remount did want is preserved: see the key on Composer. */
-        <div className="bento" ref={bentoRef}>
-          {/* ---------------- left column ---------------- */}
-          <div className="span-3 stack col col--left">
-            <Card>
-              <CardHead
-                className="card__head"
-                title="Completion"
-                subtitle={caseName}
-                right={
-                  <IconMenu
-                    items={[
-                      { key: 'done', label: 'Show closed only', onClick: () => setFilter('done') },
-                      { key: 'open', label: 'Show open only', onClick: () => setFilter('open') },
-                      { key: 'all', label: 'Show everything', onClick: () => setFilter('all') },
-                    ]}
-                    label="Completion actions"
-                  />
-                }
-              />
-              <div className="card__body">
-                {/* The % rides inside the value so it hugs the digits. `unit` is
-                    spaced off the number, which is right for a word and wrong
-                    for a symbol. */}
-                <Metric
-                  value={`${pct}%`}
-                  sub={`${stats.done}/${stats.total} entries closed`}
-                  tone="sage"
-                />
-                <div className="micro">
-                  {stats.open} open · {stats.overdue} late
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <CardHead
-                className="card__head"
-                title="Open entries"
-                subtitle="Logged per day · 30d"
-                right={<Trend dir={seriesDir(series.opened)} />}
-              />
-              <div className="card__body card__body--tight">
-                <MiniBars
-                  data={series.opened}
-                  height={64}
-                  label={`Entries logged per day over the last 30 days in ${caseName}`}
-                />
-                <Metric
-                  value={stats.open}
-                  unit="open"
-                  sub={`${openedRange.label} logged per day`}
-                />
-              </div>
-            </Card>
-
-            <Card>
-              <CardHead className="card__head" title="Analysis" subtitle="Read from this case" />
-              <div className="card__body">
-                {tip ? (
-                  <div className="tip">
-                    <div className="tip__body">{tip.body}</div>
-                    <div className="tip__meta">
-                      <span>{tip.meta}</span>
-                      <span className="tip__note">{tip.note}</span>
-                    </div>
-                    {tip.ref ? <div className="tip__note truncate">{tip.ref}</div> : null}
-                  </div>
-                ) : (
-                  <EmptyState lead="Nothing to report." hint="Log an entry and the read updates." />
-                )}
-              </div>
-            </Card>
-          </div>
-
-          {/* ---------------- centre: the deck ---------------- */}
-          <div
-            ref={deckRef}
-            className="deck span-6"
-            data-show={deckView}
-            role="region"
-            aria-label="Case structure and entries"
-          >
-            {/* No frame on this one, deliberately: the diagram is the object, and
-                a box around it was competing with the thing inside it. */}
-            <section
-              className="deck__panel deck__panel--structure"
-              aria-hidden={deckView !== 'structure'}
-            >
-              <header className="deckhead">
-                <div className="deckhead__titles">
-                  <h2 className="deckhead__title truncate">{caseName}</h2>
-                  <p className="deckhead__sub">Case structure</p>
-                </div>
-                {/* Absolutely placed, so the title stays optically centred in the
-                    panel rather than centred in whatever is left beside them. */}
-                <div className="deckhead__aside">
-                  <span className="micro dim nowrap">
-                    {graph.nodes.length} {graph.nodes.length === 1 ? 'step' : 'steps'}
-                  </span>
-                  <IconMenu items={caseMenu} label={`Actions for ${caseName}`} />
-                </div>
-              </header>
-
-              <div className="deck__body deck__body--center">
-                {/* The same flow the dashboard draws, from the same builder:
-                    two screens showing one case must not disagree about its
-                    shape. No width cap — the flow lays itself out and scales
-                    to whatever box it is handed. */}
-                <CaseFlow
-                  cases={list}
-                  rootId={activeId}
-                  now={now}
-                  focus={filter === 'open'}
-                  chrome={false}
-                  className="deck__flow"
-                />
-              </div>
-
-              <div className="deck__foot">
-                <span className="nowrap">{nextDueText}</span>
-                <span style={{ flex: '0 1 220px', minWidth: '120px' }}>
-                  <Meter value={stats.completion} label={`Completion of ${caseName}`} />
-                </span>
-              </div>
-            </section>
-
-            <section
-              className="deck__panel deck__panel--entries"
-              aria-hidden={deckView !== 'entries'}
-            >
-            <Card className="deck__card">
+           the screen, which meant a switch tore the whole thing down and
+           rebuilt it — cards flashing, numbers re-settling, the diagram
+           re-assembling — when almost all of it was about to show the same
+           thing in the same place. Now only what actually differs re-renders,
+           and the ground in the case board flows from one case's shape to the
+           next. The one thing the remount did want is preserved: see the key
+           on Composer. */
+        <div className="bento casework" ref={bentoRef}>
+          {/* ---------------- left: the case itself ---------------- */}
+          {/* The entries are what this screen is FOR, and for most of its life
+              they shared a slot with the diagram — two panels folding over
+              each other, one visible at a time. Having to flip a card over to
+              read the list on the back of it was the cost of fitting both into
+              the middle third of the page. They are not in the middle third
+              any more, so neither of them has to hide. */}
+          <div className="span-7 col col--left casework__main">
+            <Card className="casecard">
               <CardHead
                 className="card__head"
                 title="Entries"
@@ -1819,126 +1888,97 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
                 )}
               </div>
             </Card>
-            </section>
-
-            {/* The only way to switch panels, now that the wheel does not. */}
-            <div className="deck__dots" role="tablist" aria-label="Switch panel">
-              {[['entries', 'Entries'], ['structure', 'Case structure']].map(([k, lbl]) => (
-                <button
-                  key={k}
-                  type="button"
-                  role="tab"
-                  aria-selected={deckView === k}
-                  aria-label={lbl}
-                  title={lbl}
-                  className={cx('deck__dot', deckView === k && 'is-on')}
-                  onClick={() => showDeck(k)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); showDeck('structure') }
-                    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); showDeck('entries') }
-                  }}
-                />
-              ))}
-            </div>
           </div>
 
-          {/* ---------------- right column ---------------- */}
-          <div className="span-3 stack col col--right">
-            <Card>
+          {/* ---------------- right: the drawing, and one reading at a time ---- */}
+          <div className="span-5 casework__side">
+            {/* The board. A card now rather than a bare panel, which is what
+                lets it stand: the turn in section 2 is `.card:has(.flow)`, and
+                it is a card it looks for because a turn needs an edge you can
+                see turning. A drawing shearing on its own, with no frame
+                around it to say why, is the stretch that rule exists to
+                prevent. */}
+            <Card className="flowcard caseboard" aria-label="Case structure">
               <CardHead
                 className="card__head"
-                title="Open"
+                title="Case structure"
+                subtitle={caseName}
                 right={
                   <HeadRight>
-                    <Trend dir={seriesDir(series.opened)} />
-                    <IconMenu items={filterMenu('open')} label="Open entries actions" />
+                    <span className="micro dim nowrap">
+                      {graph.nodes.length} {graph.nodes.length === 1 ? 'step' : 'steps'}
+                    </span>
+                    <IconMenu items={caseMenu} label={`Actions for ${caseName}`} />
                   </HeadRight>
                 }
               />
-              <div className="card__body card__body--tight">
-                <Metric size="sm" value={stats.open} unit="entries" sub={`${stats.total} logged`} />
-              </div>
-            </Card>
 
-            <Card>
-              <CardHead
-                className="card__head"
-                title="Overdue"
-                right={
-                  <HeadRight>
-                    <Trend dir={seriesDir(series.overdue)} />
-                    <IconMenu items={filterMenu('overdue')} label="Overdue actions" />
-                  </HeadRight>
-                }
+              {/* A direct child of the card, not wrapped in a body: the rules
+                  that carry the third dimension down to the step cards run
+                  `.flowcard > .flow`, and a padded box in between would both
+                  break the chain and letterbox the canvas.
+
+                  The same flow the dashboard draws, from the same builder —
+                  two screens showing one case must not disagree about its
+                  shape. No width cap: the flow lays itself out and scales to
+                  whatever box it is handed. */}
+              <CaseFlow
+                cases={list}
+                rootId={activeId}
+                now={now}
+                focus={filter === 'open'}
+                chrome={false}
+                className="caseboard__flow"
               />
-              <div className="card__body card__body--tight">
-                <Metric
-                  size="sm"
-                  tone={stats.overdue > 0 ? 'hot' : undefined}
-                  value={stats.overdue}
-                  unit="entries"
-                  sub={`${stats.dueSoon} due soon`}
-                />
+
+              <div className="card__foot">
+                <span className="nowrap">{nextDueText}</span>
+                <span className="caseboard__meter">
+                  <Meter value={stats.completion} label={`Completion of ${caseName}`} />
+                </span>
               </div>
             </Card>
 
-            <Card>
-              <CardHead
-                className="card__head"
-                title="Subtasks"
-                right={
-                  <HeadRight>
-                    <Trend dir={subDir} />
-                    <IconMenu
-                      items={[
-                        { key: 'expand', label: 'Expand all subtasks', onClick: () => setCollapsed([]) },
-                        {
-                          key: 'collapse',
-                          label: 'Collapse all subtasks',
-                          onClick: () => setCollapsed(rows.map((r) => r.task.id)),
-                        },
-                      ]}
-                      label="Subtask actions"
-                    />
-                  </HeadRight>
-                }
-              />
-              <div className="card__body card__body--tight">
-                <Metric size="sm" value={stats.subs} unit="nested" sub={`under ${rows.length} entries`} />
+            {/* The readings, one at a time. Built above; this is only the
+                frame they are paged in. */}
+            <section
+              className="readdeck"
+              ref={reading.frameRef}
+              onKeyDown={reading.onKeyDown}
+              tabIndex={0}
+              aria-roledescription="carousel"
+              aria-label="Readings from this case"
+            >
+              <div className="readdeck__stack" ref={reading.stackRef}>
+                {readings.map((r, i) => (
+                  <div
+                    key={r.key}
+                    className={cx('readdeck__slide', i === reading.index && 'is-on')}
+                    aria-hidden={i === reading.index ? undefined : true}
+                    /* Out of the tab order while it is behind, or the keyboard
+                       would walk into six cards nobody can see. */
+                    inert={i === reading.index ? undefined : true}
+                  >
+                    {r.node}
+                  </div>
+                ))}
               </div>
-            </Card>
 
-            {/* The matrix lives in this column rather than on a full-width row
-                of its own: at 12 columns wide it was mostly empty ground, and
-                the space under Subtasks was going unused. DotMatrix places its
-                columns proportionally, so it reflows to the narrow slot. Rows
-                drop from 12 to 8 to keep the block in proportion here. */}
-            <Card>
-              <CardHead
-                className="card__head"
-                title="Entries / week"
-                subtitle="Logged per day"
-                right={
-                  <PillSelect
-                    value={matrixDays}
-                    options={MATRIX_OPTIONS}
-                    onChange={setMatrixDays}
-                    label="Matrix window"
-                    align="end"
+              <nav className="readdeck__dots" aria-label="Choose a reading">
+                {readings.map((r, i) => (
+                  <button
+                    key={r.key}
+                    type="button"
+                    className={cx('readdeck__dot', i === reading.index && 'is-on')}
+                    aria-current={i === reading.index ? 'true' : undefined}
+                    aria-label={r.label}
+                    title={r.label}
+                    onClick={() => reading.goTo(i)}
                   />
-                }
-              />
-              <div className="card__body">
-                <DotMatrix
-                  columns={matrixColumns}
-                  rows={8}
-                  labels={matrixLabels}
-                  label={`Entries logged per day over the last ${matrixDays} days`}
-                />
-              </div>
-            </Card>
+                ))}
+              </nav>
+            </section>
           </div>
-
         </div>
       )}
     </>

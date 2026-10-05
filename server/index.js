@@ -1,9 +1,10 @@
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db } from './db.js';
+import { db, dbPath } from './db.js';
 import { getHeadlines, resolveHeadlineLocation } from './news.js';
 import { loadProjects, projectRowToJson, taskRowToJson } from './archive.js';
 import * as clerk from './clerk.js';
@@ -804,6 +805,35 @@ app.post('/api/clerk/deck', async (req, res) => {
   } catch (err) {
     clerkFail(res, err, 'build a deck');
   }
+});
+
+/* What this app is costing the machine, for the panel in Settings.
+ *
+ * Only what the server can actually see: its own process, the archive on disk,
+ * and the machine's RAM for scale. The browser tab is a separate process the
+ * server knows nothing about, so the page measures that half itself.
+ *
+ * rss is the number Task Manager shows for node.exe — everything resident,
+ * not just the JavaScript heap. The database is the file plus its journal
+ * sidecars, which exist only while SQLite is mid-write but are part of the
+ * same archive when they do. */
+app.get('/api/system/memory', (req, res) => {
+  const mem = process.memoryUsage();
+  let dbBytes = 0;
+  for (const suffix of ['', '-wal', '-shm', '-journal']) {
+    try { dbBytes += fs.statSync(dbPath + suffix).size; } catch { /* absent is normal */ }
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    server: {
+      rss: mem.rss,
+      heapUsed: mem.heapUsed,
+      heapTotal: mem.heapTotal,
+      uptime: Math.round(process.uptime()),
+    },
+    database: { bytes: dbBytes },
+    machine: { total: os.totalmem(), free: os.freemem() },
+  });
 });
 
 // serve the built frontend too, so the installed app runs from a single origin without

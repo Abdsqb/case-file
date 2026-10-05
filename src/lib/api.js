@@ -32,6 +32,7 @@
  *   POST   /api/folders                  { name }
  *   PATCH  /api/folders/:id              { name }
  *   DELETE /api/folders/:id              decks are unfiled, never deleted
+ *   GET    /api/system/memory            the server process, the archive on disk, the machine
  *
  * Paths are relative, so this works behind the Vite dev proxy and from the
  * Express server that serves the built app, with no configuration.
@@ -320,6 +321,13 @@ export function listDueCards(scope = {}) {
 /** Persist one review. The caller computes the new state with scheduleCard. */
 export function updateCard(cardId, state) {
   return request('PATCH', `/cards/${enc(cardId)}`, state);
+}
+
+/* --------------------------------- system --------------------------------- */
+
+/** What the server and the archive are using right now. Never cached. */
+export function getMemory() {
+  return request('GET', '/system/memory');
 }
 
 export default api;

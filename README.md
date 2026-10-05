@@ -1,3 +1,5 @@
+<img src="public/icon-192.png" width="72" height="72" alt="">
+
 # Case
 
 A local-first case tracker. Work is grouped into **cases**, each holding **entries** with
@@ -22,16 +24,21 @@ logged. It does nothing until you put an API key in `.env` yourself — see
 | | |
 |---|---|
 | **Dashboard** | A greeting and what is coming on the left; one card at a time on the right, paged with the wheel. The case structure comes first, then workload, recommendations, tracking, the weekly report and the completion rate. |
-| **Case files** | The working screen. Create, rename, reorder and delete cases; add sub-cases; log entries with dates and priorities; nest subtasks under an entry. |
+| **Case files** | The working screen. Create, rename, reorder and delete cases; add sub-cases; log entries with dates and priorities; nest subtasks under an entry. The entries take the left of the screen; the case structure stands on the right as a turned panel, with the seven readings of the case paged one at a time underneath it at the same angle. Only the one with the drawing on it turns further under the pointer. |
 | **Reporting** | Every open entry bucketed by due day — Overdue / This week / Later — plus a world-news feed from public RSS. |
 | **Calendar** | Two calendars over the same days. **Entries** is a month grid of every dated entry in the archive, coloured by how its deadline stands, and clicking one opens its case. **Classes** is a weekly timetable parsed from `src/data/class-calendar.ics`, with next class, today's agenda and term progress. |
 | **Flashcards** | Import a deck from a `.json` file or pasted text — or paste a lecture and have the clerk draft one — file it under a course, and review it on an SM-2 spaced schedule. The scheduling is offline SM-2 and always has been; only drafting a new deck calls a model, and only when you ask it to. |
-| **Settings** | Motion preferences, including a reduced-motion override. |
+| **Settings** | Motion preferences, including a reduced-motion override; what this install holds; a live reading of how much memory the app is using; and what the clerk sends where. |
+
+*Every screenshot here is of the sample archive a fresh install seeds, not anyone's real
+cases.*
 
 A scratchpad sits behind a tab on the left edge of every screen: a page slides out with
 nothing on it but somewhere to type. It saves as you go and follows you between screens.
 With a key configured it is also where filing happens: **File it** hands the pad to the
 clerk, which proposes entries you review before anything is written.
+
+![The scratchpad, open over the dashboard](docs/screenshots/notes.png)
 
 ![Case files](docs/screenshots/case-files.png)
 
@@ -66,10 +73,66 @@ of real words needs all three. The whole thing is laid out at its own size and s
 fit as one piece — measured off the layout box rather than the painted one, because this
 panel is routinely painted through a transform and the painted box is a lie.
 
-**The panel it sits on turns.** It carries the only 3D in the app: a `perspective` on the
-grid, and this one card rotating several degrees to face the pointer while every other
-panel holds still. One panel turning against eleven still ones is unmistakably an object
-standing in front of them; a whole room moving together is a wobble.
+**The panel it sits on turns**, on both screens, and it carries the only 3D in the app.
+It stands at a constant angle — the right edge swung forward, the left leaning away — and
+turns further to face the pointer when you are actually over it, while every other panel
+holds still. One panel turning against eleven still ones is unmistakably an object standing
+in front of them; a whole room moving together is a wobble.
+
+The drawing on it is a second plane: the step cards sit some 90px off the glass, catch
+their own light and slide against the surface as the panel moves. That costs a little
+structure, because a card cannot be a 3D space and a clipping box at the same time —
+`overflow: hidden` flattens everything inside it, and so does `backdrop-filter`, and an
+ordinary card has both. So the card gives them up and hands them to a pseudo-element: the
+glass becomes one layer at z = 0 that blurs and clips itself, and the drawing stands clear
+above it. Nothing needs clipping, because the flow measures itself to fit its box before it
+is laid out.
+
+The panel also has to be at that angle on its first frame. It fades in when the screen
+is built, and a fade on a 3D element flattens it: anything with `opacity` below 1 is
+painted as one flat picture, which is why the drawing used to lie flat for a second and
+then snap upright once the fade finished. So the board itself never fades. A registered
+custom property is animated from 0 to 1 on it instead, and only the flat layers inside
+(the glass, the wires, the labels) read it as their opacity. The cards stay standing the
+whole way in.
+
+### The other screens
+
+![Reporting](docs/screenshots/reporting.png)
+
+**Reporting** sorts every open entry into Overdue, This week or Later. Below that is a page
+of wire headlines from public RSS, and the brief's one line of news is picked from the same
+feed.
+
+![The calendar, entries view](docs/screenshots/calendar.png)
+
+![The calendar, classes view](docs/screenshots/classes.png)
+
+**Calendar** shows the same days two ways. Entries puts the archive on a month grid.
+Classes is the term's timetable from the `.ics` file, with the next class and how far
+through the term you are on the left.
+
+![A flashcard review](docs/screenshots/flashcards.png)
+
+**Flashcards** is SM-2 spaced repetition. Each grade button shows what it will do to the
+card before you press it, so *Good* reads "1 day" and *Easy* reads "4 days". The number
+keys 1–4 grade the card and space shows the answer.
+
+![Settings, with the memory reading](docs/screenshots/settings.png)
+
+**Settings** includes a **Memory** panel that refreshes every five seconds while it is
+open:
+
+- **Server** is the Node process's whole resident set, the same number Task Manager shows.
+- **This tab** is the page's JavaScript heap.
+- **Together** is those two added up, also shown as a share of the machine's RAM.
+- **Database** is the SQLite file plus its write-ahead log, which live on disk rather than
+  in memory.
+
+The tab's figure covers JavaScript only. The browser's drawing is on top of it, and Chrome's
+own task manager (Shift+Esc) shows the whole tab. The tab reading is Chromium-only: other
+browsers don't expose their heap, so there the tile shows a dash and says it was not
+reported, rather than guessing. Polling stops while the tab is hidden.
 
 ---
 
@@ -86,11 +149,17 @@ one carries the few words from your own text that produced it. Edit a date, drop
 accept the rest. The pad is never cleared — the same notes are often filed twice as a week
 goes on.
 
-**The brief — the dashboard.** Two or three sentences under the headline, saying the thing
-the counts cannot: which one to do first, and whether there is actually room for it between
-today's classes. Cached against the facts that produced it, so opening the dashboard four
-times before lunch costs one call, and ticking something overdue off is what makes it
-rewrite.
+**The brief — the dashboard.** Two short paragraphs under the headline, written the way a
+friend would say it rather than a report. The first is about your work: which thing to do
+first, and whether there is actually room for it between today's classes. The second,
+marked *on the wire*, is one headline from the news feed, and it is left out entirely when
+the feed is down. The model returns the two as separate fields, so the news can never get
+mixed into the advice. The brief is cached against the facts that produced it. Opening the
+dashboard four times before lunch costs one call, and ticking off something overdue is what
+makes it rewrite. Casual is only the tone: it still says nothing it was not given, and it
+only knows today's classes, so it never guesses at the rest of the week.
+
+![The clerk's chat card](docs/screenshots/clerk-chat.png)
 
 **The chat card — second in the dashboard deck.** Questions about the archive, answered out
 of it. It can open a case, search the entries and read the timetable before answering, and
@@ -282,6 +351,17 @@ hard, and that panel is unmistakably an object standing in front of the others. 
 be a rotation rather than a slide, too — a flat translate has no foreshortening in it, and
 foreshortening is the only thing the eye accepts as depth.
 
+The rule that does it is `.card:has(.flow)`, not a class, so the turn follows the drawing
+wherever the drawing is put — the dashboard's deck and the Case files board get it without
+either screen knowing the rule exists. It looks for a CARD on purpose: a turn needs an edge
+you can see turning, and a drawing shearing on its own with no frame around it to say why
+reads as a stretched picture rather than a panel at an angle. The lens matters as much as
+the angle. The grid's is long (2200px) so that a dozen panels across a wide screen are
+turned rather than sheared, and through a lens that long a single card at 11 degrees is
+just a card that is slightly narrower down one side. So the column holding the board keeps
+a room of its own — a much shorter lens with the eye off to the left, out over the page
+where the reader is rather than squarely in front of the panel.
+
 One listener on the window writes the pointer as `--px` and `--py` on the root element;
 the turn, the vanishing point and the streak's own drift all read those two numbers, so
 there is exactly one listener and no re-render.
@@ -308,6 +388,6 @@ Three conventions are load-bearing, and breaking any of them shows immediately:
   visible rather than stranded at `opacity: 0`.
 
 `prefers-reduced-motion` is honoured throughout, and can be forced on from Settings. The
-graph honours it by running its simulation to convergence in one synchronous pass and
-painting the settled result — a reduced-motion reader gets the same graph, not an empty
-box.
+flow is laid out rather than simulated, so a reduced-motion reader gets the same drawing on
+the first frame. The panel keeps its resting angle, because an angle that never changes is
+not movement, but it no longer turns toward the pointer.

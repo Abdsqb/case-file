@@ -16,7 +16,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  *
  * A fresh path is created and seeded on first open, so pointing at a new file
  * gives a working app with sample data rather than an error. */
-const dbPath = (process.env.CASE_FILE_DB || '').trim()
+export const dbPath = (process.env.CASE_FILE_DB || '').trim()
   || path.join(__dirname, 'case-file.sqlite');
 
 export const db = new DatabaseSync(dbPath);

@@ -10,7 +10,7 @@
  *   GET  /api/clerk              → { ready, providers[], routing }
  *   POST /api/clerk/file         { text }              → { summary, proposals[] }
  *   POST /api/clerk/apply        { proposals }         → { cases, entries, subtasks }
- *   GET  /api/clerk/brief[?force=1]                    → { body, model, madeAt, cached }
+ *   GET  /api/clerk/brief[?force=1]                    → { work, news, body, model, madeAt, cached }
  *   POST /api/clerk/chat         { messages }          → { reply, toolsUsed }
  *   POST /api/clerk/deck         { text, name, count } → { name, cards[] }
  */

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
   Card,
@@ -15,6 +15,7 @@ import {
 import { MiniBars, TimelineDots, WeekTable } from '../ui/charts.jsx'
 import CaseFlow from '../ui/CaseFlow.jsx'
 import ClerkChat from '../ui/ClerkChat.jsx'
+import useDeck from '../ui/useDeck.js'
 import * as clerk from '../lib/clerk.js'
 import { buildGraph } from '../lib/graph.js'
 import {
@@ -347,7 +348,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
      same work from another angle. */
   const slides = [
     { key: 'structure', label: 'Case structure', node: (
-        <Card className="dash__card dash__card--flow" aria-label="Case structure">
+        <Card className="dash__card dash__card--flow flowcard" aria-label="Case structure">
           {/* No card head and no body padding: the flow IS the panel — its own
               title bar, its own tools, its own log along the bottom. A card
               header above a panel header is a panel arguing with itself. */}
@@ -559,155 +560,12 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
       ) },
   ]
 
-  /* THE DECK GLIDES.
-     ======================================================================
-     It used to latch: one card per gesture, and anything you did inside the
-     next 420ms was thrown away. That is the right behaviour for a deck you
-     flick through on a trackpad and the wrong one for a wheel — keep turning
-     the wheel and the deck ignored most of it, so a six-card deck took six
-     deliberate gestures and felt stuck between each of them.
-
-     So there is no latch. The deck has a position, which is a REAL number,
-     and the wheel moves where that position is aiming for. The position
-     itself chases the aim a fraction of the remaining distance every frame,
-     which is what makes a long scroll one continuous movement through the
-     deck rather than six separate jumps: spin the wheel and the aim runs
-     ahead, and the cards stream after it and catch up when you stop.
-
-     Everything on the way is drawn straight onto the elements. A card's
-     opacity and offset are a function of how far it is from the position, and
-     recomputing that in React sixty times a second would be sixty renders of
-     six cards to move two numbers. The only thing that goes through state is
-     WHICH card is settled on, which changes once per card and decides the
-     dots, the tab order and what a screen reader is told. */
-  const [at, setAt] = useState(0)
-  const index = Math.min(at, slides.length - 1)
-
-  const stackRef = useRef(null)
-  const posRef = useRef(0)
-  const aimRef = useRef(0)
-  const rafRef = useRef(0)
-  const settleRef = useRef(0)
-
-  /* How much wheel is one card. A mouse notch arrives as a single large delta
-     and is worth exactly one card; a trackpad arrives as a stream of small
-     ones and accumulates, or a flick would throw the deck end to end. */
-  const NOTCH = 90
-  const GLIDE = 170
-
-  const lay = useCallback(() => {
-    const stack = stackRef.current
-    if (!stack) return
-    const pos = posRef.current
-    const kids = stack.children
-    for (let i = 0; i < kids.length; i += 1) {
-      const el = kids[i]
-      const d = i - pos
-      const m = Math.abs(d)
-      /* Two cards either side is all anyone can see through; the rest are not
-         worth a style write per frame. */
-      if (m > 1.3) {
-        if (el.style.visibility !== 'hidden') {
-          el.style.visibility = 'hidden'
-          el.style.opacity = '0'
-        }
-        continue
-      }
-      el.style.visibility = 'visible'
-      el.style.opacity = String(Math.max(0, 1 - m * 1.15).toFixed(3))
-      el.style.transform = `translateY(${(d * 62).toFixed(1)}px) scale(${(1 - Math.min(m, 1) * 0.055).toFixed(4)})`
-    }
-  }, [])
-
-  const tick = useCallback(() => {
-    rafRef.current = 0
-    const aim = aimRef.current
-    const gap = aim - posRef.current
-    /* A fifth of what is left, every frame. Fast enough to keep up with a
-       wheel being spun and slow enough that stopping is a glide rather than a
-       stop. */
-    posRef.current = Math.abs(gap) < 0.0015 ? aim : posRef.current + gap * 0.19
-    lay()
-    const now = Math.round(posRef.current)
-    setAt((v) => (v === now ? v : now))
-    if (posRef.current !== aim) rafRef.current = requestAnimationFrame(tick)
-  }, [lay])
-
-  const aimAt = useCallback(
-    (next) => {
-      const n = slides.length
-      aimRef.current = Math.max(0, Math.min(n - 1, next))
-      const still =
-        document.documentElement.dataset.motion === 'reduced' ||
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      if (still) {
-        /* No glide to watch: the position is the aim, and the only thing left
-           is to put the cards where they belong. */
-        posRef.current = aimRef.current
-        lay()
-        setAt(Math.round(posRef.current))
-        return
-      }
-      if (!rafRef.current) rafRef.current = requestAnimationFrame(tick)
-    },
-    [lay, slides.length, tick]
-  )
-
-  const onWheel = useCallback(
-    (e) => {
-      const step = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX
-      if (!step) return
-      e.preventDefault()
-      const bump = Math.abs(step) >= NOTCH ? Math.sign(step) : step / GLIDE
-      aimAt(aimRef.current + bump)
-      /* A trackpad can leave the aim between two cards. Once it stops coming,
-         the deck takes the nearer one. A wheel never needs this — its notches
-         are whole cards — but it costs nothing to let it settle too. */
-      clearTimeout(settleRef.current)
-      settleRef.current = setTimeout(() => aimAt(Math.round(aimRef.current)), 150)
-    },
-    [aimAt]
-  )
-
-  /* preventDefault has to be told it is coming, and React's onWheel is
-     passive, so the listener is attached by hand. */
-  const deckRef = useRef(null)
-  useEffect(() => {
-    const el = deckRef.current
-    if (!el) return undefined
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [onWheel])
-
-  useEffect(
-    () => () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      clearTimeout(settleRef.current)
-    },
-    []
-  )
-
-  /* Where the cards start, and where they go if the deck changes length under
-     them. Before paint, so the first card is never seen arriving. */
-  useLayoutEffect(() => {
-    const n = slides.length
-    if (posRef.current > n - 1) {
-      posRef.current = n - 1
-      aimRef.current = n - 1
-    }
-    lay()
-  }, [lay, slides.length])
-
-  const onKey = useCallback(
-    (e) => {
-      const back = e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp'
-      const fwd = e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown'
-      if (!back && !fwd) return
-      e.preventDefault()
-      aimAt(Math.round(aimRef.current) + (fwd ? 1 : -1))
-    },
-    [aimAt]
-  )
+  /* One card on screen at a time, and the wheel is how you get to the next
+     one. The arithmetic that makes that a glide rather than a latch is in
+     useDeck — Case files pages its readings with the same hook, and two decks
+     in one app that disagree about what a wheel notch is worth would be two
+     decks that feel like different apps. */
+  const { index, frameRef, stackRef, goTo, onKeyDown } = useDeck(slides.length)
 
   return (
     <div className="dash">
@@ -735,7 +593,15 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
           <div className={cx('dash__read', readBusy && 'is-reading')}>
             {read ? (
               <>
-                <p className="dash__readtext">{read.body}</p>
+                {/* Two parts: the day, then the news. A brief cached before
+                    the split has only `body`, which is all day. */}
+                <p className="dash__readtext">{read.work ?? read.body}</p>
+                {read.news ? (
+                  <p className="dash__readtext dash__readnews">
+                    <span className="dash__readkicker">on the wire</span>
+                    {read.news}
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   className="dash__readagain"
@@ -784,8 +650,8 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
       {/* ---- right: one card at a time ------------------------------------- */}
       <section
         className="dash__deck"
-        ref={deckRef}
-        onKeyDown={onKey}
+        ref={frameRef}
+        onKeyDown={onKeyDown}
         tabIndex={0}
         aria-roledescription="carousel"
         aria-label="Dashboard cards"
@@ -814,7 +680,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
               aria-current={i === index ? 'true' : undefined}
               aria-label={sl.label}
               title={sl.label}
-              onClick={() => aimAt(i)}
+              onClick={() => goTo(i)}
             />
           ))}
         </nav>

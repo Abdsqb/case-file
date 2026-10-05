@@ -23,7 +23,7 @@
  *
  * The jobs:
  *   file(text)   unstructured text in, proposed cases/entries/subtasks out
- *   brief(now)   two or three sentences on where the day stands
+ *   brief(now)   the day in two sentences, then one thing off the news wire
  *   ask(turns)   the chat card — questions about the archive, answered from it
  *   deck(text)   lecture notes in, proposed flashcards out
  */
@@ -31,7 +31,8 @@
 import { randomUUID } from 'node:crypto';
 
 import { db } from './db.js';
-import { complete, AiError, ready, status } from './ai.js';
+import { complete, ready, status, AiError } from './ai.js';
+import { getHeadlines } from './news.js';
 import {
   classWeek, classesOn, courses, loadCaseFolders, loadProjects, snapshot,
 } from './archive.js';
@@ -55,6 +56,69 @@ const VOICE = `You write in the app's own voice: plain lowercase sentences, an e
 where a comma is too quick, no exclamation marks, no emoji, no headings, no
 preamble and no sign-off. Never say "I" unless asked something about yourself.
 Never congratulate or encourage. State what is true and what to do about it.`;
+
+/* The brief gets its own, and only the brief.
+   --------------------------------------------------------------------------
+   VOICE above is written for the other three jobs, where the clerk is
+   transcribing: filing is a list of proposed rows, chat is an answer to a
+   question, a deck is pairs of cards. Flat is right for all of those — a
+   personality in a proposed row is a personality getting between the reader
+   and a thing they are about to approve.
+
+   The brief is the one place the clerk writes rather than transcribes. It is
+   two or three sentences a person reads once a day, in the only column of
+   prose on the screen, and "state what is true" produced exactly what you
+   would expect: competent, correct and completely inert. Read four days
+   running it was the same sentence with different nouns in it.
+
+   So: character. The first pass at it was dry and blunt — a clerk with a
+   view — and it read as a sharp colleague: correct, a little cold, still
+   somebody at work. What the reader asked for is a friend: the person who
+   read your file over your shoulder and texts you what they think. Warm
+   without being a cheerleader, honest without being a manager, and allowed a
+   joke when the facts hand it one.
+
+   The guard rails are the two ways that goes wrong. One is the assistant
+   voice — "it is recommended", "please note" — which is the professional
+   register by another name. The other is the motivational poster — "you've
+   got this" — which is what a stranger says, not a friend. */
+const BRIEF_VOICE = `You're the reader's friend — the one who has actually read their whole case
+file — and they've just asked you "ok, what's my day looking like". Answer the
+way you'd text them back: casual, warm, honest, and a bit funny when the facts
+hand you something funny. Contractions, plain words, short sentences. Talk to
+them as "you". You can say "I" when it's natural ("I'd start with HW 5").
+
+Be specific like a friend who was paying attention: the name of the entry, the
+hour of the gap, the course it's for. Have an opinion about what to do first
+and say why in normal words. If something has been sitting there for weeks,
+you can tease them about it a little. If the day is light, say so and tell
+them to enjoy it. If something got finished, a quick "nice" is fine.
+
+You are NOT:
+- a professional. no assistant voice, no "it is recommended", "please note",
+  "ensure", "prioritize", "consider", no report language.
+- a cheerleader. no "you've got this", "you can do it", "stay focused", no
+  motivational lines, no lectures about productivity.
+- a nag. no "don't forget", no "make sure", and don't pile on when something
+  is going badly — say it straight once, like a friend would, and move on.
+
+Write in lower case, like a text — a sentence doesn't get a capital just for
+being first. Names keep their own capitals exactly as written (Intro to
+Marketing, HW 5, OpenAI). No emoji, no hashtags, at most one exclamation mark
+in the whole thing, no headings, no sign-off.
+
+The screen already says good morning and gives the counts right above you, so
+don't open with a greeting, the date, the weekday or a number.
+
+The tone, from made-up days — never reuse these words or these names:
+
+  ok so the Stats problem set is the one. it's due tomorrow and you've got two
+  free hours after lunch, which is basically made for it.
+
+  honestly not much on today. the History essay has been sitting there 12 days
+  though, it's starting to look a little lonely.
+
+  also, apparently Apple's pushing the new Siri back again.`;
 
 const ROLE = `You are the clerk of Case File, a local case tracker. Work is grouped into
 cases; each case holds entries with due dates and priorities; an entry can hold
@@ -780,11 +844,49 @@ export function apply(list, now = Date.now()) {
    clock. Opening the dashboard four times before lunch should not spend four
    calls; ticking something overdue off SHOULD change what it says. The
    fingerprint is the handful of numbers a sentence about the day depends on —
-   anything finer and it would regenerate while you typed. */
-function briefKey(snap) {
+   anything finer and it would regenerate while you typed.
+
+   The wire is in the fingerprint too, and only its lead story from each beat.
+   That is the right grain for the same reason the rest of it is: the brief
+   spends one sentence on the news, so it goes out of date exactly when the
+   story it spent that sentence on stops being the top one — a few times a day,
+   not every five minutes when the feed refreshes and item forty moves. */
+/* Bumped whenever the brief changes shape or voice, so a brief written under
+   the old rules is not served as if it had been written under the new ones.
+   v2: two parts, and the friend's voice. */
+const BRIEF_VERSION = 'v2';
+
+function briefKey(snap, wire) {
   const head = snap.dueNext.slice(0, 3).map((e) => `${e.id}:${e.state}`).join(',');
   const cls = snap.classesToday.map((c) => c.from).join(',');
-  return [snap.today, snap.counts.overdue, snap.counts.open, snap.counts.dueSoon, head, cls].join('|');
+  const lead = [wire.tech[0]?.id || '-', wire.world[0]?.id || '-'].join(',');
+  return [BRIEF_VERSION, snap.today, snap.counts.overdue, snap.counts.open, snap.counts.dueSoon, head, cls, lead].join('|');
+}
+
+/* The brief is two parts — the day, then the news — and the table has one
+   column for it. So the column holds JSON, and anything that is not JSON is a
+   brief from before the split: all of it is the day, and there is no news. */
+function briefParts(stored) {
+  try {
+    const value = JSON.parse(stored);
+    if (value && typeof value.work === 'string') {
+      return { work: value.work, news: typeof value.news === 'string' ? value.news : '' };
+    }
+  } catch { /* a v1 brief: plain text */ }
+  return { work: String(stored || ''), news: '' };
+}
+
+function briefOut(row, cached) {
+  const { work, news } = briefParts(row.body);
+  return {
+    work,
+    news,
+    /* Both parts as one paragraph, for anything that still reads `body`. */
+    body: news ? `${work} ${news}` : work,
+    model: row.model,
+    madeAt: row.made_at,
+    cached,
+  };
 }
 
 db.exec(`
@@ -801,30 +903,115 @@ db.exec(`
    makes that a fact rather than a request.
  *
  * It is a layout constraint as much as an editorial one. The brief is set in
- * the dashboard's left column, and the scratchpad tab floats over the middle
- * of that column — so a brief that runs to a paragraph reaches down into the
- * tab's lane on a 1280-wide window and the accent rule comes out from behind
- * a floating button. Measured, at six viewport sizes.
+ * the dashboard's left column, above what is coming up, inside a column whose
+ * height is fixed — so every line it gains is a line pushed toward the bottom
+ * of that column, and past a point it pushes what is coming up out of the
+ * frame. 430 is what fits at the SHORTEST window the dashboard supports, not
+ * at a comfortable one; measured at five viewport heights with the longest
+ * brief the budget allows.
  *
  * Trimmed on sentence boundaries, never mid-word: a brief that stops in the
  * middle of a clause reads as broken software, which is a worse failure than
- * saying one thing less. */
-const BRIEF_CHARS = 320;
+ * saying one thing less.
+ *
+ * Split between the two parts now, and the split sums to a little under the
+ * old 430: the news is its own paragraph, and the gap between the two costs
+ * about one line's height of the same column. */
+const WORK_CHARS = 270;
+const NEWS_CHARS = 150;
 
-function trimToSentences(text) {
-  if (text.length <= BRIEF_CHARS) return text;
+/* THE REGISTER, ENFORCED.
+   --------------------------------------------------------------------------
+   The prompt asks for lower case and mostly gets it; "mostly" is not a style.
+   Measured over a run of briefs, roughly one in three came back in sentence
+   case — correct, well written, and visibly not this app, sitting directly
+   under a headline that is lower case.
+
+   So it is enforced here, the way the length is. The hard part is that a
+   blanket lowercase would be worse than the drift: it would turn "the MIDTERM
+   for Intro to Marketing" into noise and rewrite the name of a company. Only
+   the word that OPENS a sentence is touched, and only when nothing says it is
+   a name:
+
+     - it appears capitalised in the facts the brief was written from, which is
+       where every entry title, course, case and headline comes from;
+     - it carries a capital that is not the first letter (OpenAI, iPhone,
+       TechCrunch), which is never an accident;
+     - it is all capitals (AI, NASA, EU, and entry titles written that way).
+
+   Everything else is a word that got a capital for standing first, which is
+   the one thing this app does not do. */
+/* Every name the brief is entitled to write, spelled the way the archive spells
+   it. Taken from the snapshot and the wire STRUCTURALLY rather than by reading
+   capitals out of the prompt text, because the prompt text also contains the
+   words Today, Open, Classes and Tech, and none of those is a name. */
+function namesOf(snap, wire) {
+  const out = new Set();
+  const add = (v) => { const t = String(v || '').trim(); if (t) out.add(t); };
+
+  for (const e of [...snap.dueNext, ...snap.undated]) { add(e.title); add(e.case); }
+  for (const c of snap.cases || []) add(c.name);
+  for (const c of snap.classesToday) add(c.course);
+
+  /* Out of a headline, only the words that are unmistakably a name on their
+     own: an internal capital is never an accident of position. Taking every
+     capitalised word in a headline would take the first word of every one. */
+  for (const h of [...wire.tech, ...wire.world]) {
+    for (const w of h.title.match(/[A-Za-z][\w'’-]*/g) || []) {
+      if (/[A-Z]/.test(w.slice(1))) add(w);
+    }
+  }
+  return [...out];
+}
+
+/* A name is safe to restore only if it cannot also be an ordinary word in an
+   ordinary sentence. Multi-word phrases, internal capitals and all-capitals
+   qualify; a lone, plainly capitalised word does not, and that exclusion is
+   load-bearing — this archive has cases called "Case" and "Granny", and
+   restoring those would rewrite "the case is open" into something absurd. */
+const distinct = (n) =>
+  /\s/.test(n) || /[A-Z]/.test(n.slice(1)) || (n.length > 1 && n === n.toUpperCase());
+
+const escapeRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function houseCase(text, facts, names = []) {
+  /* First the names, wherever they fell. The prompt asks for them as written
+     and mostly complies; "mostly" turned "OpenAI" into "openai" in three briefs
+     out of five, and this reader's own course into "intro to marketing".
+     Longest first, so "Intro to Marketing" is settled before "Marketing" can
+     match inside it. */
+  let out = text;
+  for (const name of names.filter(distinct).sort((a, b) => b.length - a.length)) {
+    out = out.replace(new RegExp(`(?<![\\w'’-])${escapeRe(name)}(?![\\w'’-])`, 'gi'), name);
+  }
+
+  /* Then the word that only got a capital for standing first. */
+  const known = new Set(facts.match(/\b[A-Z][\w'’-]*/g) || []);
+
+  return out.replace(/(^|[.?!]["')’]?\s+)([A-Za-z][\w'’-]*)/g, (whole, lead, word) => {
+    if (known.has(word)) return whole;
+    /* The friend is allowed "I", and "i'd start with" is a typo, not a register. */
+    if (/^I(['’]\w+)?$/.test(word)) return whole;
+    if (/[A-Z]/.test(word.slice(1))) return whole;
+    if (word.length > 1 && word === word.toUpperCase()) return whole;
+    return `${lead}${word.charAt(0).toLowerCase()}${word.slice(1)}`;
+  });
+}
+
+function trimToSentences(text, budget) {
+  if (text.length <= budget) return text;
 
   let out = '';
   for (const piece of text.split(/(?<=[.?!])\s+/)) {
-    if (out && (out.length + 1 + piece.length) > BRIEF_CHARS) break;
+    if (out && (out.length + 1 + piece.length) > budget) break;
     out = out ? `${out} ${piece}` : piece;
   }
 
   /* The first sentence is always taken, because taking none would be worse —
      which means one sentence longer than the entire budget gets through the
      loop untouched. Cut it on a word boundary and let the ellipsis say so. */
-  if (out.length > BRIEF_CHARS) {
-    const head = out.slice(0, BRIEF_CHARS);
+  if (out.length > budget) {
+    const head = out.slice(0, budget);
     const space = head.lastIndexOf(' ');
     out = `${(space > 0 ? head.slice(0, space) : head).replace(/[,;:.]$/, '')}…`;
   }
@@ -832,15 +1019,96 @@ function trimToSentences(text) {
   return out;
 }
 
+/**
+ * The last brief, for the one case where the model could not be reached.
+ *
+ * Deliberately NOT matched against the fingerprint. Its only caller is the
+ * route's catch, where the alternative is an error box; a sentence written an
+ * hour ago under slightly different numbers beats that, and the route marks it
+ * stale so nothing pretends otherwise. The one thing it will not do is serve
+ * yesterday's: a brief opens by saying what today is.
+ */
+/* How many headlines the brief is shown. Enough that it has a choice and few
+   enough that it cannot spend the request reading the news: the model gets one
+   sentence out of this, so a longer list is tokens bought to be thrown away —
+   and on Groq's free tier the cap is tokens per minute, which is the one the
+   brief would hit first. Titles only, no summaries, for the same reason. */
+const WIRE_TECH = 8;
+const WIRE_WORLD = 4;
+
+/**
+ * The wire, or an empty one.
+ *
+ * The brief is about the reader's day and the news is the last sentence of it,
+ * so an outlet being down is not a reason to fail: it is a reason to write two
+ * sentences instead of three. getHeadlines already serves stale rather than
+ * blanking, and this is the belt to that braces.
+ */
+async function readWire() {
+  try {
+    const [tech, world] = await Promise.all([getHeadlines('tech'), getHeadlines('world')]);
+    return { tech: tech.slice(0, WIRE_TECH), world: world.slice(0, WIRE_WORLD) };
+  } catch (err) {
+    console.warn('Clerk: the wire is down, writing the brief without it —', err.message);
+    return { tech: [], world: [] };
+  }
+}
+
+function wireBlock(wire) {
+  if (!wire.tech.length && !wire.world.length) {
+    return 'The wire is down right now, so there is no news to report. Leave "news" empty.';
+  }
+  const list = (items) => items.map((h) => `  [${h.source}] ${h.title}`).join('\n');
+  return `On the wire right now. These are real headlines, newest first. Pick ONE of
+them for "news" — tech unless there is nothing in it:
+
+Tech:
+${wire.tech.length ? list(wire.tech) : '  nothing on the tech wire'}
+
+World:
+${wire.world.length ? list(wire.world) : '  nothing on the world wire'}`;
+}
+
 export function cachedBrief(now = Date.now()) {
   const row = db.prepare('SELECT * FROM clerk_brief WHERE id = 1').get();
   if (!row) return null;
-  if (row.cache_key !== briefKey(snapshot(now))) return null;
-  return { body: row.body, model: row.model, madeAt: row.made_at, cached: true };
+  const sameDay = new Date(row.made_at).toDateString() === new Date(now).toDateString();
+  if (!sameDay) return null;
+  return briefOut(row, true);
+}
+
+const BRIEF_SCHEMA = {
+  name: 'brief',
+  schema: {
+    type: 'object',
+    properties: {
+      work: { type: 'string' },
+      news: { type: 'string' },
+    },
+    required: ['work', 'news'],
+  },
+};
+
+/* One part of the brief, cleaned the way the whole of it used to be — and
+   finished: a paragraph that just stops reads as cut off, even when it isn't. */
+function briefPart(text, budget, facts, names) {
+  const out = trimToSentences(
+    houseCase(
+      String(text || '')
+        .trim()
+        .replace(/^["'`]+|["'`]+$/g, '')
+        .replace(/\s+/g, ' '),
+      facts,
+      names,
+    ),
+    budget,
+  );
+  return out && !/[.?!…]["')’]?$/.test(out) ? `${out}.` : out;
 }
 
 /**
- * Two or three sentences about the day, on the dashboard's left column.
+ * The day in two sentences, then one thing off the wire, on the dashboard's
+ * left column.
  *
  * It is handed the numbers and told not to count. Everything in the brief that
  * is a quantity came from the app's own arithmetic; the model's contribution is
@@ -849,37 +1117,53 @@ export function cachedBrief(now = Date.now()) {
  */
 export async function brief(now = Date.now(), { force = false } = {}) {
   const snap = snapshot(now, { limit: 10 });
-  const key = briefKey(snap);
+  const wire = await readWire();
+  const key = briefKey(snap, wire);
 
   if (!force) {
     const row = db.prepare('SELECT * FROM clerk_brief WHERE id = 1').get();
-    if (row && row.cache_key === key) {
-      return { body: row.body, model: row.model, madeAt: row.made_at, cached: true };
-    }
+    if (row && row.cache_key === key) return briefOut(row, true);
   }
 
   const system = `${ROLE}
 
-${VOICE}
+${BRIEF_VOICE}
 
-Write the reader's standing for today. Two sentences, three at the very most,
-and under fifty words in total. This sits under a one-line headline that has
-already given the counts, so do not repeat them back.
+The brief has two parts, and they are shown as two separate paragraphs.
 
-What it is for: saying the thing the numbers cannot. Which one thing to do
-first and why that one. When there is actually room to do it, given the classes.
-What is quietly going wrong — something stalled, a pile landing on one day.
+"work" — their day. Two sentences, under fifty words. Which one thing to do
+first and why that one. When there's actually room to do it, given the
+classes. Anything quietly going wrong — something stalled, a pile landing on
+one day. Say the thing the numbers can't; the numbers are already on screen.
+If there's genuinely nothing pressing, say that in one sentence.
+
+"news" — one thing from the wire, the way you'd mention it to a friend
+("also, apparently ..."). One or two short sentences, under thirty words.
+Lead with tech — that's what this reader follows. Say what the story IS: the
+company, the thing, what happened. "there's news about ai" is a category, not
+news. Use the world list only if nothing in tech is worth it. If the wire is
+empty, "news" is an empty string. "news" doesn't go back over their to-do list.
+
+Connect a headline to their work ONLY when the link is really there — a
+course that's about the thing in the story, an entry it actually bears on.
+Most days there's no link, and then you just tell them the story. Don't
+explain why there's no link.
 
 Hard rules:
 - Every number you use must appear in the facts below. Never count anything
   yourself and never estimate. If you want to say something you cannot support
   from the facts, say less.
 - Name entries and courses as they are written.
-- No greeting. No "you should" or "make sure to" — say what the day is, not
-  what kind of person to be.
-- If there is genuinely nothing pressing, say that in one sentence and stop.
+- Never invent a headline and never change what one says. You may compress one
+  into a clause; you may not sharpen it, guess at its consequences, or state as
+  fact anything the headline does not.
+- You only know TODAY's classes. Never say anything about free time, classes
+  or plans on any other day — "you've got the week off" is a guess.
+- Being casual never loosens any of the above. A friend who gets the date
+  wrong is worse than a stiff one who gets it right.
 
-Return the sentences as plain text. No JSON, no quotes around it, no markdown.`;
+Return JSON: {"work": "...", "news": "..."}. Plain sentences inside each
+string — no markdown, no quotes around them.`;
 
   const user = `Facts, all computed by the app and all correct:
 
@@ -903,12 +1187,17 @@ ${snap.undated.length ? `Open with no date:\n${snap.undated.map((e) => `  [${e.p
 What the app already says:
 ${snap.signals.map((s) => `  ${s}`).join('\n')}
 
+${wireBlock(wire)}
+
 Write the brief.`;
 
   const result = await complete({
     capability: 'fast',
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-    temperature: 0.5,
+    /* A notch warmer than the rest of the clerk: a friend who says the same
+       sentence every morning is a recording. */
+    temperature: 0.7,
+    schema: BRIEF_SCHEMA,
     /* Far more than two sentences needs, because some models spend most of a
        budget on reasoning before emitting any prose — gpt-oss wrote 594
        characters of it to produce 85 of answer. Too small a budget there does
@@ -917,22 +1206,33 @@ Write the brief.`;
     maxTokens: 900,
   });
 
-  const body = trimToSentences(
-    String(result.text || '')
-      .trim()
-      .replace(/^["'`]+|["'`]+$/g, '')
-      .replace(/\s+/g, ' '),
-  );
+  /* A model that ignored the shape and wrote prose has still written the
+     brief — all of it becomes the day, and there is no news today. Better
+     than throwing away a good paragraph over a missing brace. */
+  const parsed = tryObject(result.text);
+  const raw = parsed && typeof parsed.work === 'string'
+    ? { work: parsed.work, news: typeof parsed.news === 'string' ? parsed.news : '' }
+    : { work: String(result.text || ''), news: '' };
 
-  if (!body) throw new AiError('the clerk had nothing to say.');
+  /* The facts are what gets to vouch for a capital. Nothing else can: a name
+     the brief invented is a name this app has never written. */
+  const facts = `${user}\n${system}`;
+  const names = namesOf(snap, wire);
+  const work = briefPart(raw.work, WORK_CHARS, facts, names);
+  const news = briefPart(raw.news, NEWS_CHARS, facts, names);
+
+  if (!work) throw new AiError('the clerk had nothing to say.');
+
+  const madeAt = Date.now();
+  const row = { body: JSON.stringify({ work, news }), model: result.model, made_at: madeAt };
 
   db.prepare(`
     INSERT INTO clerk_brief (id, cache_key, body, model, made_at) VALUES (1, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET cache_key = excluded.cache_key, body = excluded.body,
                                   model = excluded.model, made_at = excluded.made_at
-  `).run(key, body, result.model, Date.now());
+  `).run(key, row.body, row.model, madeAt);
 
-  return { body, model: result.model, madeAt: Date.now(), cached: false };
+  return briefOut(row, false);
 }
 
 /* -------------------------------------------------------------------- chat */

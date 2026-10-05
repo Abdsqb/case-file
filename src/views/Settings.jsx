@@ -27,7 +27,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { Card, CardHead, Metric, Pill, Segmented, Toggle } from '../ui/primitives.jsx'
-import { listProjects } from '../lib/api.js'
+import { getMemory, listProjects } from '../lib/api.js'
 import * as clerk from '../lib/clerk.js'
 import { globalStats } from '../lib/metrics.js'
 
@@ -304,6 +304,92 @@ async function purgeAppCache() {
 }
 
 /* ------------------------------------------------------------------ *
+ * memory
+ * ------------------------------------------------------------------ */
+
+const MEMORY_POLL_MS = 5000
+
+/** Bytes as { value, unit } for a Metric: KB under a megabyte, GB over a gigabyte. */
+function sizeOf(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return { value: '—', unit: null }
+  const KB = 1024
+  const MB = KB * 1024
+  const GB = MB * 1024
+  if (bytes >= GB) return { value: (bytes / GB).toFixed(1), unit: 'GB' }
+  if (bytes >= MB) return { value: (bytes / MB).toFixed(bytes < 10 * MB ? 1 : 0), unit: 'MB' }
+  return { value: Math.max(1, Math.round(bytes / KB)), unit: 'KB' }
+}
+
+function sizeText(bytes) {
+  const s = sizeOf(bytes)
+  return s.unit ? `${s.value} ${s.unit}` : s.value
+}
+
+/**
+ * The tab's JavaScript heap, where the browser will say. Chromium only —
+ * `performance.memory` is non-standard, and the standard replacement needs a
+ * cross-origin-isolated page, which this one is not. Null everywhere else,
+ * and the panel says so rather than showing a zero.
+ */
+function readTabHeap() {
+  try {
+    const m = typeof performance !== 'undefined' ? performance.memory : null
+    return m && Number.isFinite(m.usedJSHeapSize) ? m.usedJSHeapSize : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Both halves of the reading, refreshed every few seconds while Settings is
+ * open and the tab is in front. A hidden tab is not looked at, and polling it
+ * would be the panel adding to the number it reports.
+ */
+function useMemoryReading() {
+  const [reading, setReading] = useState({ server: null, tab: readTabHeap(), status: 'loading' })
+
+  useEffect(() => {
+    let alive = true
+    let timer = null
+    // One chain of polls, ever: coming back to the tab mid-request must not
+    // start a second one alongside it.
+    let inFlight = false
+
+    const tick = () => {
+      if (timer) clearTimeout(timer)
+      timer = null
+      if (inFlight || (typeof document !== 'undefined' && document.hidden)) return
+      inFlight = true
+      getMemory()
+        .then((server) => {
+          if (alive) setReading({ server, tab: readTabHeap(), status: 'ready' })
+        })
+        .catch(() => {
+          if (alive) setReading((r) => ({ ...r, tab: readTabHeap(), status: 'error' }))
+        })
+        .finally(() => {
+          inFlight = false
+          if (alive) timer = setTimeout(tick, MEMORY_POLL_MS)
+        })
+    }
+
+    const onVisible = () => {
+      if (!document.hidden) tick()
+    }
+
+    tick()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      alive = false
+      if (timer) clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
+
+  return reading
+}
+
+/* ------------------------------------------------------------------ *
  * pieces
  * ------------------------------------------------------------------ */
 
@@ -332,12 +418,103 @@ function SettingRow({ title, hint, children }) {
   )
 }
 
-function StatTile({ label, value, sub }) {
+function StatTile({ label, value, unit, sub }) {
   return (
     <div className="tile">
       <span className="micro muted">{label}</span>
-      <Metric value={value} sub={sub} size="sm" />
+      <Metric value={value} unit={unit} sub={sub} size="sm" />
     </div>
+  )
+}
+
+/** Seconds as '42s', '17m', '3h 05m', '2d 4h'. */
+function uptimeText(seconds) {
+  const s = Math.max(0, Math.round(Number(seconds) || 0))
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ${String(m % 60).padStart(2, '0')}m`
+  return `${Math.floor(h / 24)}d ${h % 24}h`
+}
+
+/**
+ * What Case File is using on this computer, live. Two processes make up the
+ * app — the server and this browser tab — and each is measured by the only
+ * party that can see it: the server reports itself, the page reports itself.
+ */
+function MemoryCard() {
+  const { server, tab, status } = useMemoryReading()
+  const down = status === 'error' && !server
+
+  const rss = server?.server?.rss
+  const db = server?.database?.bytes
+  const total = server?.machine?.total
+  const free = server?.machine?.free
+  const together = Number.isFinite(rss) ? rss + (Number.isFinite(tab) ? tab : 0) : null
+  const share = together !== null && total > 0 ? (together / total) * 100 : null
+
+  const serverSize = sizeOf(rss)
+  const tabSize = sizeOf(tab)
+  const togetherSize = sizeOf(together)
+  const dbSize = sizeOf(db)
+
+  return (
+    <Card className="span-12">
+      <CardHead
+        className="card__head"
+        title="Memory"
+        subtitle={status === 'loading' ? 'Measuring…' : down ? 'The server did not answer' : 'Live, while this screen is open'}
+      />
+      <div className="card__body">
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+            gap: '10px',
+          }}
+        >
+          <StatTile
+            label="Server"
+            value={serverSize.value}
+            unit={serverSize.unit}
+            sub={server ? `node · up ${uptimeText(server.server.uptime)}` : 'unavailable'}
+          />
+          <StatTile
+            label="This tab"
+            value={tabSize.value}
+            unit={tabSize.unit}
+            sub={Number.isFinite(tab) ? 'JavaScript heap' : 'not reported by this browser'}
+          />
+          <StatTile
+            label="Together"
+            value={togetherSize.value}
+            unit={togetherSize.unit}
+            sub={share === null ? 'unavailable' : `${share < 0.1 ? '<0.1' : share.toFixed(1)}% of RAM`}
+          />
+          <StatTile
+            label="Database"
+            value={dbSize.value}
+            unit={dbSize.unit}
+            sub="on disk, not in RAM"
+          />
+        </div>
+        <p className="settings-row__hint" style={{ maxWidth: '72ch', marginBottom: 0 }}>
+          The server figure is everything its process holds, the same number Task Manager
+          shows for node. The tab figure is only the page&rsquo;s own JavaScript; the
+          browser&rsquo;s share of drawing it is on top, and its Task Manager
+          (Shift+Esc in Chrome) shows the whole tab.
+        </p>
+      </div>
+      <div className="card__foot">
+        <span>
+          {Number.isFinite(total)
+            ? `${sizeText(total)} of RAM on this computer, ${sizeText(free)} free.`
+            : 'Machine totals unavailable.'}
+        </span>
+        <span className="dim">every {MEMORY_POLL_MS / 1000}s</span>
+      </div>
+    </Card>
   )
 }
 
@@ -556,6 +733,8 @@ export function Settings({ projects, now }) {
             <span>{unknown ? 'Counts unavailable — the server did not answer.' : 'Counts include subtasks.'}</span>
           </div>
         </Card>
+
+        <MemoryCard />
 
         {/* ---------------------------------------------------------------
             The clerk, and what it costs you in privacy.

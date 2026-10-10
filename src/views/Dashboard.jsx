@@ -16,6 +16,7 @@ import { MiniBars, TimelineDots, WeekTable } from '../ui/charts.jsx'
 import CaseFlow from '../ui/CaseFlow.jsx'
 import ClerkChat from '../ui/ClerkChat.jsx'
 import useDeck from '../ui/useDeck.js'
+import useTypewriter from '../ui/useTypewriter.js'
 import * as clerk from '../lib/clerk.js'
 import { buildGraph } from '../lib/graph.js'
 import {
@@ -49,6 +50,45 @@ import {
 
 function cx(...parts) {
   return parts.filter(Boolean).join(' ')
+}
+
+/* The clerk's brief, typed out in front of the reader when the page opens.
+
+   Its own component so the per-frame count re-renders two paragraphs, not the
+   dashboard. The untyped rest of each paragraph is laid out but invisible, so
+   the column is its final height from the first frame and a word never jumps
+   to the next line half way through being typed. Screen readers get the whole
+   text at once from the sr-only copy; the animated one is hidden from them. */
+function TypedBrief({ work, news }) {
+  const full = news ? `${work}\n${news}` : work
+  const { n, done } = useTypewriter(full)
+  const workN = Math.min(n, work.length)
+  const newsN = Math.max(0, n - work.length - 1)
+  const inNews = n > work.length
+
+  const typed = (text, count, caret) => (
+    <span aria-hidden="true">
+      {text.slice(0, count)}
+      {caret ? <span className={cx('typed__caret', done && 'is-done')} /> : null}
+      <span className="typed__rest">{text.slice(count)}</span>
+    </span>
+  )
+
+  return (
+    <>
+      <p className="dash__readtext">
+        <span className="sr-only">{work}</span>
+        {typed(work, workN, !inNews)}
+      </p>
+      {news ? (
+        <p className="dash__readtext dash__readnews">
+          <span className={cx('dash__readkicker', !inNews && 'is-waiting')}>on the wire</span>
+          <span className="sr-only">{news}</span>
+          {typed(news, newsN, inNews)}
+        </p>
+      ) : null}
+    </>
+  )
 }
 
 /* The window offered by the "Change module" pill and the sub-panel menus.
@@ -188,7 +228,7 @@ function Tip({ tip }) {
  * The structure card has both, because both are things you want from it: the
  * menu changes the subject, the arrow goes there. Collapsing them into one is
  * what made every pick in that menu throw you off the dashboard. */
-export default function Dashboard({ projects, now, activeCaseId, onSelectCase, onPickCase }) {
+export default function Dashboard({ projects, now, activeCaseId, onSelectCase, onPickCase, onMutate }) {
   const cases = useMemo(
     () => (Array.isArray(projects) ? projects.filter(Boolean) : []),
     [projects]
@@ -353,6 +393,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
               title bar, its own tools, its own log along the bottom. A card
               header above a panel header is a panel arguing with itself. */}
           <CaseFlow
+            overhang={0}
             cases={cases}
             rootId={activeCase ? activeCase.id : null}
             now={now}
@@ -386,7 +427,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
             {/* The tri-state, not a boolean: null means "the server has not
                 said yet", and flattening that to false makes the card announce
                 that the clerk is off for a frame on every single visit. */}
-            <ClerkChat onDuty={onDuty} />
+            <ClerkChat onDuty={onDuty} onChanged={onMutate} />
           </div>
         </Card>
       ) },
@@ -595,13 +636,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
               <>
                 {/* Two parts: the day, then the news. A brief cached before
                     the split has only `body`, which is all day. */}
-                <p className="dash__readtext">{read.work ?? read.body}</p>
-                {read.news ? (
-                  <p className="dash__readtext dash__readnews">
-                    <span className="dash__readkicker">on the wire</span>
-                    {read.news}
-                  </p>
-                ) : null}
+                <TypedBrief work={read.work ?? read.body ?? ''} news={read.news} />
                 <button
                   type="button"
                   className="dash__readagain"

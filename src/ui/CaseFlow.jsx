@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, Crosshair, Layers } from 'lucide-react';
+import { ArrowUpRight, ChevronRight, Crosshair, Layers } from 'lucide-react';
 
 import { buildGraph } from '../lib/graph.js';
 import { IconMenu } from './primitives.jsx';
@@ -145,6 +145,38 @@ function clock(ts) {
   return `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
 }
 
+/**
+ * Next case — one click moves the board on to the next top-level case.
+ *
+ * Wraps after the last one. Eight cases is a short loop, and a button that
+ * stops working at the end reads as broken. The count says where in the loop
+ * you are, so the wrap is never a surprise.
+ */
+function CaseDial({ cases, rootId, onPick }) {
+  const list = useMemo(() => (cases || []).filter((c) => c && !c.parentId), [cases]);
+  const index = Math.max(0, list.findIndex((c) => c.id === rootId));
+
+  if (list.length < 2) return null;
+
+  const next = list[(index + 1) % list.length];
+  return (
+    <button
+      type="button"
+      className="flow__dial"
+      onClick={() => onPick(next.id)}
+      title={`Next case: ${next.name}`}
+      aria-label={`Case ${index + 1} of ${list.length}. Next case: ${next.name}`}
+    >
+      <span className="flow__dialpos">
+        {String(index + 1).padStart(2, '0')}
+        <span className="flow__sep">/</span>
+        {String(list.length).padStart(2, '0')}
+      </span>
+      <ChevronRight size={12} strokeWidth={1.8} aria-hidden="true" />
+    </button>
+  );
+}
+
 export default function CaseFlow({
   cases,
   rootId = null,
@@ -157,6 +189,12 @@ export default function CaseFlow({
      it sits in already has a header and a footer of its own, and two of each
      is a panel arguing with itself — there it is handed the canvas alone. */
   chrome = true,
+  /* Pixels the first card sits past the left edge of the PANEL, instead of
+     the drawing being centred. With the drawing lifted off the glass in 3D,
+     the turn carries a card anchored at the edge a little way out over it,
+     which is what says it is standing in front of the panel rather than
+     printed on it. null centres it as before. */
+  overhang = null,
   className = '',
 }) {
   const data = useMemo(
@@ -186,6 +224,14 @@ export default function CaseFlow({
     () => (cases || []).find((c) => c && c.id === rootId) || null,
     [cases, rootId]
   );
+
+  /* A change of case, counted. The count keys the scene below, so a new case
+     mounts a fresh drawing whose step cards play their arrival — and only a
+     change does: the first case on the board arrives with the board itself.
+     Derived during render rather than in an effect, so the new case is never
+     painted for one frame before the scene that animates it in. */
+  const [swap, setSwap] = useState({ root: rootId, n: 0 });
+  if (swap.root !== rootId) setSwap({ root: rootId, n: swap.n + 1 });
 
   /* The run log. Every app with a canvas in it has one of these along the
      bottom, and ours has something true to put in it: what was logged on this
@@ -218,6 +264,7 @@ export default function CaseFlow({
   }, [data.counts]);
 
   const hostRef = useRef(null);
+  const panelRef = useRef(null);
   const [fit, setFit] = useState({ s: 1, ox: 0, oy: 0 });
 
   /* One transform on one element. The cards and the wires are laid out in the
@@ -236,9 +283,27 @@ export default function CaseFlow({
     const bw = host.clientWidth;
     const bh = host.clientHeight;
     if (!bw || !bh || !width || !height) return;
-    const s = Math.min(MAX_SCALE, bw / width, bh / height);
-    setFit({ s, ox: (bw - width * s) / 2, oy: (bh - height * s) / 2 });
-  }, [width, height]);
+    if (overhang == null) {
+      const s = Math.min(MAX_SCALE, bw / width, bh / height);
+      setFit({ s, ox: (bw - width * s) / 2, oy: (bh - height * s) / 2 });
+      return;
+    }
+    /* Measured from the panel's edge, not the canvas's: on the dashboard the
+       canvas starts after the tools down the left, and an overhang taken from
+       there would land on the tools rather than past the card. Layout
+       offsets, for the same reason as clientWidth above. */
+    const panel = panelRef.current;
+    let inset = 0;
+    let el = host;
+    while (el && el !== panel) { inset += el.offsetLeft; el = el.offsetParent; }
+    if (el !== panel) inset = 0;
+    /* The room the overhang and the inset give back is room the drawing may
+       use, so it fits a little larger by that much. */
+    const s = Math.min(MAX_SCALE, (bw + inset + overhang) / width, bh / height);
+    /* The first card's edge is PAD in from the drawing's, so the anchor is
+       that card, not the drawing's invisible margin. */
+    setFit({ s, ox: -PAD * s - inset - overhang, oy: (bh - height * s) / 2 });
+  }, [width, height, overhang]);
 
   useLayoutEffect(() => { measure(); }, [measure]);
 
@@ -264,25 +329,25 @@ export default function CaseFlow({
      panel moves that field barely a tenth of its range and the card would sit
      at one angle the whole time it was hovered.
 
-     Written straight onto the document element rather than held in state,
-     because a re-render per pointermove is a frame's work to produce a number
-     that only CSS reads. Throttled onto a frame, with a trailing pass so the
-     last position of a flick is not the one that gets dropped. */
-  const panelRef = useRef(null);
+     Written straight onto the card rather than held in state, because a
+     re-render per pointermove is a frame's work to produce a number that only
+     CSS reads. Onto the CARD, not the document element: a custom property
+     changed on the root restyles every element on the page, which measured at
+     20-30ms a pointer frame. On the card, and registered non-inheriting in
+     styles.css, it restyles the card and nothing else. Throttled onto a frame,
+     with a trailing pass so the last position of a flick is not the one that
+     gets dropped. */
   const fieldRaf = useRef(0);
   const fieldAt = useRef(null);
 
   const publish = useCallback(() => {
     fieldRaf.current = 0;
+    const el = panelRef.current;
+    if (!el) return;
+    const card = el.closest('.card') || el;
     const at = fieldAt.current;
-    const root = document.documentElement;
-    if (!at) {
-      root.style.setProperty('--gx', '0');
-      root.style.setProperty('--gy', '0');
-      return;
-    }
-    root.style.setProperty('--gx', at.x.toFixed(3));
-    root.style.setProperty('--gy', at.y.toFixed(3));
+    card.style.setProperty('--gx', at ? at.x.toFixed(3) : '0');
+    card.style.setProperty('--gy', at ? at.y.toFixed(3) : '0');
   }, []);
 
   const onField = useCallback(
@@ -312,9 +377,12 @@ export default function CaseFlow({
      would hand the next panel its leftover numbers. */
   useEffect(() => () => {
     if (fieldRaf.current) cancelAnimationFrame(fieldRaf.current);
-    const root = document.documentElement;
-    root.style.setProperty('--gx', '0');
-    root.style.setProperty('--gy', '0');
+    const el = panelRef.current;
+    const card = el && (el.closest('.card') || el);
+    if (card) {
+      card.style.removeProperty('--gx');
+      card.style.removeProperty('--gy');
+    }
   }, []);
 
   const wires = useMemo(() => {
@@ -367,7 +435,9 @@ export default function CaseFlow({
       {/* --- the title bar ---------------------------------------------- */}
       {chrome ? (
       <header className="flow__bar">
-        <span className="flow__name truncate">{root ? root.name : 'No case'}</span>
+        <span key={`n${swap.n}`} className={cx('flow__name truncate', swap.n && 'is-swap')}>
+          {root ? root.name : 'No case'}
+        </span>
         <span className="flow__count">
           {data.nodes.length} steps
           <span className="flow__sep">/</span>
@@ -382,6 +452,7 @@ export default function CaseFlow({
         <span className={cx('statpill', `statpill--${standing.tone}`, 'flow__state')}>
           {standing.text}
         </span>
+        {onPickCase ? <CaseDial cases={cases} rootId={rootId} onPick={onPickCase} /> : null}
       </header>
       ) : null}
 
@@ -438,7 +509,8 @@ export default function CaseFlow({
           onPointerLeave={() => setHot(null)}
         >
           <div
-            className="flow__scene"
+            key={`s${swap.n}`}
+            className={cx('flow__scene', swap.n && 'is-swap')}
             style={{
               width: `${width}px`,
               height: `${height}px`,
@@ -494,6 +566,7 @@ export default function CaseFlow({
                   className={cx('flow__node', `flow__node--${n.kind}`, `flow__node--${n.tone}`)}
                   data-lit={lit(n.id) || undefined}
                   style={{
+                    '--col': depth.get(n.id) || 0,
                     left: `${at.x + PAD}px`,
                     top: `${at.y + PAD}px`,
                     width: `${NODE_W}px`,

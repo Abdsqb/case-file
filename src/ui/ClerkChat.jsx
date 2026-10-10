@@ -4,8 +4,8 @@
  * A question box over the archive. It reads: it can open a case, search the
  * entries and look at the timetable before answering, which is the difference
  * between "what have I got for the databases course" being answered and being
- * guessed at. It cannot write — filing lives on the scratchpad, and the clerk
- * says so when asked to change something.
+ * guessed at. Asked to change something — add, edit, close or delete entries —
+ * it stages the changes, and they sit under its reply until you apply them.
  *
  * The transcript is deliberately not persisted. A study session is not resumed
  * in this app and neither is a conversation: coming back to the dashboard
@@ -15,12 +15,128 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowUp, RotateCcw } from 'lucide-react'
+import { ArrowUp, Check, RotateCcw } from 'lucide-react'
 
 import * as clerk from '../lib/clerk.js'
+import ChatMarkdown from './ChatMarkdown.jsx'
 
 function cx(...parts) {
   return parts.filter(Boolean).join(' ')
+}
+
+/* What a staged change does, in the words of the row. `close` with done:false
+   is a reopen, and says so — "close" next to something already closed would
+   read as a mistake. */
+function opLabel(c) {
+  if (c.op === 'create') return c.under ? 'new sub' : 'new'
+  if (c.op === 'update') return 'edit'
+  if (c.op === 'close') return c.done === false ? 'reopen' : 'close'
+  return 'delete'
+}
+
+function changeDetail(c) {
+  if (c.op === 'create') {
+    return [
+      c.under ? `under ${c.under.title}` : c.caseName,
+      c.dueText ? `due ${c.dueText}` : null,
+      c.priority && c.priority !== 'normal' ? c.priority : null,
+    ].filter(Boolean).join(' · ')
+  }
+  if (c.op === 'update') {
+    const s = c.set || {}
+    const b = c.before || {}
+    return [
+      s.title !== undefined ? `title → ${s.title}` : null,
+      'dueText' in s ? `due ${b.dueText || 'none'} → ${s.dueText || 'none'}` : null,
+      s.priority !== undefined ? `${b.priority} → ${s.priority}` : null,
+    ].filter(Boolean).join(' · ')
+  }
+  if (c.op === 'delete' && c.subtasks) {
+    return `and its ${c.subtasks} ${c.subtasks === 1 ? 'subtask' : 'subtasks'}`
+  }
+  return ''
+}
+
+function madeLine(m) {
+  const parts = [
+    m.created && `${m.created} added`,
+    m.updated && `${m.updated} edited`,
+    m.closed && `${m.closed} closed`,
+    m.reopened && `${m.reopened} reopened`,
+    m.deleted && `${m.deleted} deleted`,
+    m.skipped && `${m.skipped} skipped — no longer there`,
+  ].filter(Boolean)
+  return parts.length ? `applied — ${parts.join(', ')}.` : 'nothing to apply.'
+}
+
+/* The model is told what became of what it staged, so "actually, undo that"
+   in the next turn is about something it knows happened. */
+function historyText(t) {
+  if (!t.changes || !t.changes.length) return t.content
+  const fate = t.applied ? 'the reader applied them' : t.dismissed ? 'the reader dismissed them' : 'not applied yet'
+  return `${t.content}\n\n[staged ${t.changes.length} change(s): ${fate}]`
+}
+
+/* The staged changes under a reply. Every row starts ticked — the reader
+   asked for these — and can be left out before applying. Once applied or
+   dismissed the list stays, settled, so the transcript still shows what
+   happened; it just stops offering to do it again. */
+function ChangeList({ turn, onToggle, onApply, onDismiss }) {
+  const { changes, off, applying, applied, dismissed, applyError } = turn
+  const settled = !!applied || !!dismissed
+  const count = changes.length - off.length
+
+  return (
+    <div className={cx('chat__changes', settled && 'is-settled')}>
+      <ul className="chat__changelist">
+        {changes.map((c) => {
+          const on = !off.includes(c.id)
+          const detail = changeDetail(c)
+          return (
+            <li key={c.id} className={cx('chat__change', !on && 'is-off', `chat__change--${c.op}`)}>
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={on}
+                className="chat__changetick"
+                onClick={() => onToggle(c.id)}
+                disabled={settled || applying}
+                aria-label={`${on ? 'Leave out' : 'Include'} ${opLabel(c)} ${c.title}`}
+              >
+                {on ? <Check size={11} strokeWidth={3} aria-hidden="true" /> : null}
+              </button>
+              <span className="chat__changeop">{opLabel(c)}</span>
+              <span className="chat__changebody">
+                <span className="chat__changetitle">{c.title}</span>
+                {detail ? <span className="chat__changedetail">{detail}</span> : null}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+
+      {applied ? (
+        <p className="chat__changenote">{madeLine(applied)}</p>
+      ) : dismissed ? (
+        <p className="chat__changenote">dismissed — nothing changed.</p>
+      ) : (
+        <div className="chat__changeactions">
+          <button
+            type="button"
+            className="chat__apply"
+            onClick={onApply}
+            disabled={applying || !count}
+          >
+            {applying ? 'applying…' : `apply ${count}`}
+          </button>
+          <button type="button" className="chat__dismiss" onClick={onDismiss} disabled={applying}>
+            dismiss
+          </button>
+          {applyError ? <span className="chat__changeerror">{applyError}</span> : null}
+        </div>
+      )}
+    </div>
+  )
 }
 
 /* Openers, rather than an empty box. The first question is the hardest one to
@@ -32,7 +148,7 @@ const OPENERS = [
   'what is due this week, by day?',
 ]
 
-export default function ClerkChat({ onDuty }) {
+export default function ClerkChat({ onDuty, onChanged }) {
   const [turns, setTurns] = useState([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -60,8 +176,14 @@ export default function ClerkChat({ onDuty }) {
     setBusy(true)
 
     try {
-      const res = await clerk.chat(next.map((t) => ({ role: t.role, content: t.content })))
-      setTurns([...next, { role: 'assistant', content: res.reply, tools: res.toolsUsed || [] }])
+      const res = await clerk.chat(next.map((t) => ({ role: t.role, content: historyText(t) })))
+      setTurns([...next, {
+        role: 'assistant',
+        content: res.reply,
+        tools: res.toolsUsed || [],
+        changes: Array.isArray(res.changes) ? res.changes : [],
+        off: [],
+      }])
     } catch (err) {
       /* The question stays in the transcript and the error sits under it, so
          retrying is a matter of asking again rather than retyping. */
@@ -74,6 +196,33 @@ export default function ClerkChat({ onDuty }) {
   useEffect(() => {
     if (!busy && inputRef.current && turns.length) inputRef.current.focus()
   }, [busy, turns.length])
+
+  const patchTurn = useCallback((i, patch) => {
+    setTurns((all) => all.map((t, j) => (j === i ? { ...t, ...patch } : t)))
+  }, [])
+
+  const toggleChange = useCallback((i, id) => {
+    setTurns((all) => all.map((t, j) => {
+      if (j !== i) return t
+      const off = t.off.includes(id) ? t.off.filter((x) => x !== id) : [...t.off, id]
+      return { ...t, off }
+    }))
+  }, [])
+
+  const applyTurn = useCallback(async (i) => {
+    const t = turns[i]
+    if (!t || t.applying) return
+    const picked = t.changes.filter((c) => !t.off.includes(c.id))
+    if (!picked.length) return
+    patchTurn(i, { applying: true, applyError: '' })
+    try {
+      const made = await clerk.applyChanges(picked)
+      patchTurn(i, { applying: false, applied: made })
+      if (onChanged) onChanged()
+    } catch (err) {
+      patchTurn(i, { applying: false, applyError: err.message || 'the changes could not be made.' })
+    }
+  }, [turns, patchTurn, onChanged])
 
   /* `onDuty` is null until the server has answered. Hold an empty card for
      that moment rather than claiming either state — "the clerk is off" shown
@@ -117,7 +266,17 @@ export default function ClerkChat({ onDuty }) {
           turns.map((t, i) => (
             <div key={i} className={cx('chat__turn', `chat__turn--${t.role}`)}>
               <span className="chat__who">{t.role === 'user' ? 'you' : 'clerk'}</span>
-              <p className="chat__text">{t.content}</p>
+              {t.role === 'assistant'
+                ? <ChatMarkdown className="chat__text chat__text--md" text={t.content} />
+                : <p className="chat__text">{t.content}</p>}
+              {t.changes && t.changes.length ? (
+                <ChangeList
+                  turn={t}
+                  onToggle={(id) => toggleChange(i, id)}
+                  onApply={() => applyTurn(i)}
+                  onDismiss={() => patchTurn(i, { dismissed: true })}
+                />
+              ) : null}
               {t.tools && t.tools.length ? (
                 /* What it looked at. Small, and under the answer rather than
                    over it — it is evidence you check when something reads

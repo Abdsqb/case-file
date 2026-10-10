@@ -774,6 +774,15 @@ app.post('/api/clerk/apply', (req, res) => {
   }
 });
 
+/* The chat's staged changes, applied. Same reasoning as /apply: no key check. */
+app.post('/api/clerk/changes', (req, res) => {
+  try {
+    res.json(clerk.applyChanges(req.body?.changes, Date.now()));
+  } catch (err) {
+    clerkFail(res, err, 'make those changes');
+  }
+});
+
 app.get('/api/clerk/brief', async (req, res) => {
   const force = req.query.force === '1';
   if (!clerk.ready()) return res.status(503).json({ error: 'the clerk is off duty.' });

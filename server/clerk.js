@@ -24,7 +24,8 @@
  * The jobs:
  *   file(text)   unstructured text in, proposed cases/entries/subtasks out
  *   brief(now)   the day in two sentences, then one thing off the news wire
- *   ask(turns)   the chat card — questions about the archive, answered from it
+ *   ask(turns)   the chat card — questions about the archive, answered from it,
+ *                and edits to entries, staged for the reader to apply
  *   deck(text)   lecture notes in, proposed flashcards out
  */
 
@@ -192,10 +193,215 @@ const TOOLS = [
   },
 ];
 
+/**
+ * The chat card's hands — and they are still proposals.
+ *
+ * Each of these validates against the archive and STAGES a change; nothing is
+ * written. The staged list goes back with the reply and the reader applies it
+ * with one click under the answer, through applyChanges() below. Only ask()
+ * offers these: filing has its own proposal shape and the brief has no
+ * business changing anything.
+ *
+ * Several ids per call for closing and deleting, because "close the four
+ * homeworks" is one intent and four tool calls would run into the per-tool
+ * limit that keeps the read tools from circling.
+ */
+const WRITE_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'create_entry',
+      description:
+        'Stage a new entry in a case, or a subtask under an existing entry. '
+        + 'Check with case_detail first that it is not already logged.',
+      parameters: {
+        type: 'object',
+        properties: {
+          caseId: { type: 'string', description: 'the case id from the case list' },
+          title: { type: 'string' },
+          due: { type: 'string', description: 'YYYY-MM-DD, or leave out if no date is stated' },
+          priority: { type: 'string', enum: ['low', 'normal', 'high'] },
+          under: { type: 'integer', description: 'an entry id, to make this a subtask of it' },
+        },
+        required: ['title'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_entry',
+      description:
+        'Stage an edit to one entry: its title, due date or priority. '
+        + 'Only pass the fields that change. due "none" clears the date.',
+      parameters: {
+        type: 'object',
+        properties: {
+          entryId: { type: 'integer' },
+          title: { type: 'string' },
+          due: { type: 'string', description: 'YYYY-MM-DD, or "none" to clear it' },
+          priority: { type: 'string', enum: ['low', 'normal', 'high'] },
+        },
+        required: ['entryId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'close_entries',
+      description: 'Stage closing entries (marking them done), or reopening them with done: false.',
+      parameters: {
+        type: 'object',
+        properties: {
+          entryIds: { type: 'array', items: { type: 'integer' } },
+          done: { type: 'boolean', description: 'defaults to true' },
+        },
+        required: ['entryIds'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_entries',
+      description:
+        'Stage deleting entries outright, with their subtasks. Only when the reader asks to delete or '
+        + 'remove — finished work is closed, not deleted.',
+      parameters: {
+        type: 'object',
+        properties: { entryIds: { type: 'array', items: { type: 'integer' } } },
+        required: ['entryIds'],
+      },
+    },
+  },
+];
+
+const WRITE_NAMES = new Set(WRITE_TOOLS.map((t) => t.function.name));
+const MAX_STAGED = 30;
+
 const titleOf = (row) => (typeof row.title === 'string' ? row.title : '');
 
-function runTool(name, args, now) {
+/* Local, the same way dateToMs reads it back — a due date is a day on your
+   calendar, and the UTC day of local midnight is yesterday east of Greenwich. */
+function ymdOf(ms) {
+  if (!Number.isFinite(ms)) return null;
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function taskRow(id) {
+  const n = Number(id);
+  if (!Number.isInteger(n)) return null;
+  return db.prepare('SELECT * FROM tasks WHERE id = ?').get(n) || null;
+}
+
+function caseName(projectId) {
+  const row = db.prepare('SELECT name FROM projects WHERE id = ?').get(projectId);
+  return row ? row.name : '';
+}
+
+/* A later change to the same entry replaces the earlier one rather than
+   stacking, so "close it — no, delete it" stages one delete. Two edits to the
+   same entry merge, so a title and a date asked for in two turns of thought
+   arrive as one row. */
+function stage(staged, change) {
+  if (change.taskId !== undefined) {
+    const i = staged.findIndex((c) => c.taskId === change.taskId);
+    if (i !== -1) {
+      const prev = staged[i];
+      staged[i] = prev.op === 'update' && change.op === 'update'
+        ? { ...prev, set: { ...prev.set, ...change.set } }
+        : change;
+      return;
+    }
+  }
+  if (staged.length < MAX_STAGED) staged.push(change);
+}
+
+function runWrite(name, a, staged) {
+  if (!staged) return { error: 'changes can only be proposed from the chat' };
+  if (staged.length >= MAX_STAGED) return { error: `that is ${MAX_STAGED} changes already — stop and reply` };
+
+  if (name === 'create_entry') {
+    const title = String(a.title || '').trim().replace(/\.$/, '').slice(0, 300);
+    if (!title) return { error: 'an entry needs a title' };
+
+    let projectId = String(a.caseId || '').trim();
+    let under = null;
+    if (a.under !== undefined && a.under !== null && a.under !== '') {
+      const parent = taskRow(a.under);
+      if (!parent) return { error: 'no entry with that id to put it under' };
+      if (parent.parent_task_id) return { error: 'subtasks only go one level deep' };
+      under = { id: parent.id, title: parent.title };
+      projectId = parent.project_id;
+    }
+    if (!projectId || !caseName(projectId)) return { error: 'no case with that id' };
+
+    const { due, dueText } = dueOf(a.due);
+    const priority = PRIORITIES.has(a.priority) ? a.priority : 'normal';
+    stage(staged, {
+      id: randomUUID(), op: 'create', caseId: projectId, caseName: caseName(projectId),
+      title, due, dueText, priority: under ? 'normal' : priority, under,
+    });
+    return { staged: `new ${under ? 'subtask' : 'entry'} "${title}"` };
+  }
+
+  if (name === 'update_entry') {
+    const row = taskRow(a.entryId);
+    if (!row) return { error: 'no entry with that id' };
+
+    const set = {};
+    if (typeof a.title === 'string' && a.title.trim() && a.title.trim() !== row.title) {
+      set.title = a.title.trim().replace(/\.$/, '').slice(0, 300);
+    }
+    if (typeof a.due === 'string') {
+      if (/^(none|null|clear)$/i.test(a.due.trim())) {
+        if (row.due_date !== null) { set.due = null; set.dueText = null; }
+      } else {
+        const d = dueOf(a.due);
+        if (d.due === null) return { error: 'due must be YYYY-MM-DD or "none"' };
+        if (d.due !== row.due_date) { set.due = d.due; set.dueText = d.dueText; }
+      }
+    }
+    if (PRIORITIES.has(a.priority) && a.priority !== row.priority) set.priority = a.priority;
+    if (!Object.keys(set).length) return { note: 'that would change nothing — it is already like that' };
+
+    stage(staged, {
+      id: randomUUID(), op: 'update', taskId: row.id, title: row.title,
+      before: { title: row.title, dueText: ymdOf(row.due_date), priority: row.priority },
+      set,
+    });
+    return { staged: `edit to "${row.title}"` };
+  }
+
+  if (name === 'close_entries' || name === 'delete_entries') {
+    const ids = Array.isArray(a.entryIds) ? a.entryIds : [a.entryIds];
+    const done = a.done !== false;
+    const out = { staged: [], skipped: [] };
+    for (const id of ids.slice(0, MAX_STAGED)) {
+      const row = taskRow(id);
+      if (!row) { out.skipped.push(`${id}: no such entry`); continue; }
+      if (name === 'close_entries') {
+        if (!!row.completed === done) { out.skipped.push(`"${row.title}" is already ${done ? 'closed' : 'open'}`); continue; }
+        stage(staged, { id: randomUUID(), op: 'close', taskId: row.id, title: row.title, done });
+      } else {
+        const subs = db.prepare('SELECT COUNT(*) AS n FROM tasks WHERE parent_task_id = ?').get(row.id).n;
+        stage(staged, { id: randomUUID(), op: 'delete', taskId: row.id, title: row.title, subtasks: subs });
+      }
+      out.staged.push(row.title);
+    }
+    return out;
+  }
+
+  return { error: `no tool named ${name}` };
+}
+
+function runTool(name, args, now, staged) {
   const a = args && typeof args === 'object' ? args : {};
+
+  if (WRITE_NAMES.has(name)) return runWrite(name, a, staged);
 
   if (name === 'case_detail') {
     const project = loadProjects().find((p) => p.id === String(a.caseId || ''));
@@ -272,7 +478,7 @@ function runTool(name, args, now) {
  */
 const SAME_TOOL_LIMIT = 2;
 
-function dispatch(calls, { now, used, ledger }) {
+function dispatch(calls, { now, used, ledger, staged = null }) {
   const out = [];
 
   for (const call of calls) {
@@ -292,7 +498,9 @@ function dispatch(calls, { now, used, ledger }) {
         note: 'You already ran this exact lookup and its result is above. '
           + 'Do not call it again — give your final answer now.',
       };
-    } else if (timesThisTool > SAME_TOOL_LIMIT) {
+    } else if (timesThisTool > SAME_TOOL_LIMIT && !WRITE_NAMES.has(fn)) {
+      /* Not for the write tools: five new entries is five calls to
+         create_entry and none of them is circling. MAX_STAGED caps those. */
       payload = {
         note: `You have called ${fn} ${SAME_TOOL_LIMIT} times already. `
           + 'Work with what you have and give your final answer now.',
@@ -300,7 +508,7 @@ function dispatch(calls, { now, used, ledger }) {
     } else {
       ledger.signatures.add(signature);
       try {
-        payload = runTool(fn, args, now);
+        payload = runTool(fn, args, now, staged);
       } catch (err) {
         /* A thrown tool is a bug here, not there. Tell the model plainly and
            let it carry on without it rather than failing the whole job. */
@@ -838,6 +1046,92 @@ export function apply(list, now = Date.now()) {
   return made;
 }
 
+/**
+ * Write the changes the chat staged and the reader applied.
+ *
+ * Untrusted for the same reason apply() treats its rows as untrusted: they
+ * have been to the browser and back, and the archive may have moved since they
+ * were staged — an entry deleted in another tab, a case removed. Each change
+ * is re-checked against the archive as it is now and skipped if it no longer
+ * makes sense, rather than failing the batch over one stale row.
+ *
+ * The statements are the REST routes' own, so a change made here is exactly
+ * the change the case screen would have made. One transaction.
+ */
+export function applyChanges(list, now = Date.now()) {
+  if (!Array.isArray(list) || !list.length) {
+    throw new AiError('nothing was approved.', { status: 400 });
+  }
+
+  const rows = list.filter((r) => r && typeof r === 'object').slice(0, MAX_STAGED);
+  const made = { created: 0, updated: 0, closed: 0, reopened: 0, deleted: 0, skipped: 0 };
+  const skip = () => { made.skipped += 1; };
+
+  db.prepare('BEGIN').run();
+  try {
+    for (const c of rows) {
+      const op = String(c.op || '');
+
+      if (op === 'create') {
+        const title = String(c.title || '').trim().slice(0, 300);
+        if (!title) { skip(); continue; }
+        let projectId = String(c.caseId || '');
+        let parentId = null;
+        if (c.under && c.under.id !== undefined) {
+          const parent = taskRow(c.under.id);
+          if (!parent || parent.parent_task_id) { skip(); continue; }
+          parentId = parent.id;
+          projectId = parent.project_id;
+        }
+        if (!caseName(projectId)) { skip(); continue; }
+        const priority = parentId ? 'normal' : (PRIORITIES.has(c.priority) ? c.priority : 'normal');
+        const due = parentId ? null : dateToMs(c.dueText);
+        insertTask().run(projectId, title, priority, now, due ?? null, parentId);
+        made.created += 1;
+        continue;
+      }
+
+      const row = taskRow(c.taskId);
+      if (!row) { skip(); continue; }
+
+      if (op === 'update') {
+        const set = c.set && typeof c.set === 'object' ? c.set : {};
+        const title = typeof set.title === 'string' && set.title.trim()
+          ? set.title.trim().slice(0, 300) : row.title;
+        const priority = PRIORITIES.has(set.priority) ? set.priority : row.priority;
+        let due = row.due_date;
+        if (Object.prototype.hasOwnProperty.call(set, 'dueText')) {
+          if (set.dueText === null) due = null;
+          else {
+            const ms = dateToMs(set.dueText);
+            if (ms === null) { skip(); continue; }
+            due = ms;
+          }
+        }
+        db.prepare('UPDATE tasks SET title = ?, priority = ?, due_date = ? WHERE id = ?')
+          .run(title, priority, due, row.id);
+        made.updated += 1;
+      } else if (op === 'close') {
+        const done = c.done !== false;
+        db.prepare('UPDATE tasks SET completed = ? WHERE id = ?').run(done ? 1 : 0, row.id);
+        made[done ? 'closed' : 'reopened'] += 1;
+      } else if (op === 'delete') {
+        db.prepare('DELETE FROM tasks WHERE parent_task_id = ?').run(row.id);
+        db.prepare('DELETE FROM tasks WHERE id = ?').run(row.id);
+        made.deleted += 1;
+      } else {
+        skip();
+      }
+    }
+    db.prepare('COMMIT').run();
+  } catch (err) {
+    db.prepare('ROLLBACK').run();
+    throw new AiError(`the changes failed and nothing was written: ${err.message}`, { status: 500 });
+  }
+
+  return made;
+}
+
 /* ------------------------------------------------------------------- brief */
 
 /* The brief is cached against the facts that produced it, not against the
@@ -1242,10 +1536,10 @@ const MAX_TURNS = 12;
 /**
  * The chat card. Questions about the archive, answered out of the archive.
  *
- * Same tools as filing, so "what did I say I'd do for the databases course"
- * is answerable rather than guessed at. It still cannot write — if you ask it
- * to add something it says so and points you at the pad, which is where filing
- * lives.
+ * Same read tools as filing, so "what did I say I'd do for the databases
+ * course" is answerable rather than guessed at — plus WRITE_TOOLS, which stage
+ * creates, edits, closes and deletes. They come back as `changes` beside the
+ * reply, and nothing is written until the reader applies them.
  */
 export async function ask(turns, now = Date.now()) {
   const history = (Array.isArray(turns) ? turns : [])
@@ -1271,9 +1565,18 @@ You can look things up with the tools. Use them rather than guessing: if you
 are asked about a case, read it. Never state a number you have not been given
 or looked up.
 
-You cannot change anything — you have no tools that write. If you are asked to
-add, move or complete something, say that filing happens on the scratchpad
-(the tab on the left edge) and offer to draft the text for it.
+You can propose changes to entries: create_entry, update_entry, close_entries
+and delete_entries. None of them writes. Each one stages a change, and the
+reader confirms the staged changes with one click under your reply. So:
+- Only stage what the reader asked for. Never tidy up on your own initiative.
+- You need an entry's id to change it. Ids are in the lists below, or look the
+  entry up with search_entries or case_detail. Never guess an id.
+- If it is ambiguous which entry they mean, ask instead of staging.
+- Finished work is closed, not deleted. Delete only when asked to delete or
+  remove.
+- After staging, say in a sentence what you have set up — "staged: closing the
+  four homeworks" — and never say it is done; it is not done until they apply it.
+You cannot create or rename cases themselves; that is done on the case screen.
 
 If the archive does not answer the question, say so plainly. The reader would
 rather hear "that is not logged anywhere" than a confident guess.`;
@@ -1286,7 +1589,10 @@ Cases:
 ${snap.cases.length ? snap.cases.map((c) => `  ${c.id}  ${c.name} — ${c.open} open of ${c.total}`).join('\n') : '  (none)'}
 
 Due next:
-${snap.dueNext.length ? snap.dueNext.slice(0, 8).map((e) => `  ${e.due} [${e.priority}] ${e.title} — ${e.case}`).join('\n') : '  nothing dated'}
+${snap.dueNext.length ? snap.dueNext.slice(0, 8).map((e) => `  #${e.id}  ${e.due} [${e.priority}] ${e.title} — ${e.case}`).join('\n') : '  nothing dated'}
+
+Open with no date:
+${snap.undated.length ? snap.undated.map((e) => `  #${e.id}  [${e.priority}] ${e.title} — ${e.case}`).join('\n') : '  none'}
 
 Classes today:
 ${snap.classesToday.length ? snap.classesToday.map((c) => `  ${c.from}–${c.to} ${c.course}`).join('\n') : '  none'}`;
@@ -1299,13 +1605,14 @@ ${snap.classesToday.length ? snap.classesToday.map((c) => `  ${c.from}–${c.to}
 
   const used = [];
   const ledger = newLedger();
+  const staged = [];
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
     const last = round === MAX_TOOL_ROUNDS;
     const result = await complete({
       capability: 'fast',
       messages,
-      tools: last ? null : TOOLS,
+      tools: last ? null : [...TOOLS, ...WRITE_TOOLS],
       temperature: 0.5,
       /* Headroom for a model that reasons before it answers; the prompt is
          what keeps the reply short, not the ceiling. */
@@ -1314,13 +1621,21 @@ ${snap.classesToday.length ? snap.classesToday.map((c) => `  ${c.from}–${c.to}
 
     if (!result.toolCalls.length) {
       const text = String(result.text || '').trim();
-      if (!text) throw new AiError('the clerk had nothing to say.');
-      return { reply: text, model: result.model, provider: result.providerLabel, toolsUsed: [...new Set(used)] };
+      /* A model that staged changes and then said nothing still did
+         something — the card shows the changes, so give them a line. */
+      if (!text && !staged.length) throw new AiError('the clerk had nothing to say.');
+      return {
+        reply: text || 'staged — apply below.',
+        changes: staged,
+        model: result.model,
+        provider: result.providerLabel,
+        toolsUsed: [...new Set(used)].filter((n) => !WRITE_NAMES.has(n)),
+      };
     }
 
     messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.toolCalls });
 
-    for (const m of dispatch(result.toolCalls, { now, used, ledger })) messages.push(m);
+    for (const m of dispatch(result.toolCalls, { now, used, ledger, staged })) messages.push(m);
   }
 
   throw new AiError('the clerk could not settle on an answer.');

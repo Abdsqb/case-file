@@ -11,7 +11,6 @@ import Flashcards from './views/Flashcards';
 import Settings from './views/Settings';
 import NotesDrawer from './ui/NotesDrawer.jsx';
 import Streak from './ui/Streak.jsx';
-import { readMotionPrefs, watchMotionPrefs } from './lib/prefs.js';
 import Standby from './ui/Standby.jsx';
 
 const CLOCK_MS = 30000;         // drives overdue arithmetic only; nothing renders seconds
@@ -178,74 +177,12 @@ export default function App() {
     return () => ro.disconnect();
   }, []);
 
-  /* ------------------------------------------------------------------
-     The pointer field.
-     ------------------------------------------------------------------
-     One listener for the whole app, writing where the pointer is as two
-     numbers from -1 to 1 on the root element. Everything that wants to move
-     with it reads --px and --py in CSS and moves on the compositor; nothing
-     re-renders, and there is exactly one listener however many panels are on
-     screen.
-
-     The point of it is that different layers move by different amounts and in
-     different directions, which is the whole of the 3D here:
-
-        the light behind    travels WITH the pointer, furthest
-        the glass panels    travel AGAINST it, a little
-        the graph's nodes   travel WITH it again, by how high each one sits
-
-     Three directions of relative motion over one small movement of the hand is
-     what makes a flat screen read as having depth in it. */
-  useEffect(() => {
-    const root = document.documentElement;
-    let raf = 0;
-    let x = 0;
-    let y = 0;
-    let on = readMotionPrefs().parallax;
-
-    const write = () => {
-      raf = 0;
-      root.style.setProperty('--px', x.toFixed(4));
-      root.style.setProperty('--py', y.toFixed(4));
-    };
-
-    /* Coalesced onto a frame: a pointer can report several times between two
-       of them and every write but the last would be thrown away unseen. */
-    const schedule = () => { if (!raf) raf = requestAnimationFrame(write); };
-
-    const onMove = (e) => {
-      if (!on) return;
-      x = (e.clientX / window.innerWidth) * 2 - 1;
-      y = (e.clientY / window.innerHeight) * 2 - 1;
-      schedule();
-    };
-
-    /* Pointer gone — out of the window, or the window itself deactivated. The
-       field returns to centre rather than leaving the app frozen at whatever
-       angle it was last held at. */
-    const centre = () => { x = 0; y = 0; schedule(); };
-
-    const sync = () => {
-      on = readMotionPrefs().parallax;
-      if (!on) centre();
-    };
-
-    window.addEventListener('pointermove', onMove, { passive: true });
-    window.addEventListener('pointerleave', centre, { passive: true });
-    window.addEventListener('blur', centre);
-    const stopWatch = watchMotionPrefs(sync);
-    sync();
-
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerleave', centre);
-      window.removeEventListener('blur', centre);
-      stopWatch();
-      root.style.removeProperty('--px');
-      root.style.removeProperty('--py');
-    };
-  }, []);
+  /* There used to be a pointer field here: --px and --py written onto the root
+     element on every pointer frame. Nothing read them any more, and a custom
+     property changed on the root restyles every element in the document, so
+     each mouse move cost a full-page style recalc (20-30ms a frame, measured).
+     The streak behind the app and the case flow both track the pointer
+     themselves, scoped to what they move. */
 
   const standing = useMemo(() => standingOf(projects, now), [projects, now]);
 
@@ -267,6 +204,7 @@ export default function App() {
         activeCaseId={activeCaseId}
         onSelectCase={openCase}
         onPickCase={setActiveCaseId}
+        onMutate={refresh}
       />
     );
   } else if (view === 'cases') {

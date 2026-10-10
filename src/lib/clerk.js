@@ -11,7 +11,8 @@
  *   POST /api/clerk/file         { text }              → { summary, proposals[] }
  *   POST /api/clerk/apply        { proposals }         → { cases, entries, subtasks }
  *   GET  /api/clerk/brief[?force=1]                    → { work, news, body, model, madeAt, cached }
- *   POST /api/clerk/chat         { messages }          → { reply, toolsUsed }
+ *   POST /api/clerk/chat         { messages }          → { reply, changes[], toolsUsed }
+ *   POST /api/clerk/changes      { changes }           → { created, updated, closed, reopened, deleted, skipped }
  *   POST /api/clerk/deck         { text, name, count } → { name, cards[] }
  */
 
@@ -94,8 +95,13 @@ export function chat(messages) {
   return call('POST', '/chat', { messages });
 }
 
+/** The chat's staged changes, as the reader left them after reviewing. */
+export function applyChanges(changes) {
+  return call('POST', '/changes', { changes });
+}
+
 export function buildDeck(text, { name = '', count = 0 } = {}) {
   return call('POST', '/deck', { text, name, count });
 }
 
-export default { status, forgetStatus, file, apply, brief, chat, buildDeck, ClerkError };
+export default { status, forgetStatus, file, apply, brief, chat, applyChanges, buildDeck, ClerkError };

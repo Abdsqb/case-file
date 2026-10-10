@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { KEY_ACCENT, readAccent, useSetting } from '../views/Settings.jsx';
 
 /* ============================================================================
    IsoCase — the centrepiece.
@@ -853,11 +854,15 @@ export default function IsoCase({ entries = [], completion = 0, className = '', 
      the same colours either way, to within a rounding step nobody can see. */
   const [ramp, setRamp] = useState(null);
   const rampRef = useRef(null);
+  /* The ground and the ink carry the accent's hue, so a new accent is a new
+     ramp. Subscribed for the re-render; the id is what the effect keys on. */
+  useSetting(KEY_ACCENT, '');
+  const accentId = readAccent();
   useLayoutEffect(() => {
     const next = buildRamp(svgRef.current);
     rampRef.current = next;
     setRamp(next);
-  }, [prefs.reduced]);
+  }, [prefs.reduced, accentId]);
   // Read by the morph, which must not re-run just because the ground committed.
   const terrainRef = useRef(terrain);
   terrainRef.current = terrain;

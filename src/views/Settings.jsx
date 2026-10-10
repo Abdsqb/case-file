@@ -6,12 +6,14 @@
  * localStorage under the `casefile.` namespace, broadcasts a
  * `casefile:settings` event so live consumers (IsoCase, the other views)
  * re-read immediately, and — for reduced motion — stamps the <html> element
- * so the stylesheet override takes effect app-wide.
+ * so the stylesheet override takes effect app-wide. The accent is stamped
+ * the same way, as data-accent.
  *
  * Keys owned here (all optional; absent always means "follow the default"):
  *   casefile.reducedMotion   'on' | 'off'   — force reduced motion
  *   casefile.parallax        'on' | 'off'   — IsoCase pointer parallax
  *   casefile.weekStart       '1'  | '0'     — Monday (default) or Sunday
+ *   casefile.accent          'violet' (default) | 'white' | 'red' | 'green' | 'turquoise'
  *
  * Other views read these with the exported `useSetting(key, fallback)` hook.
  * Every read is wrapped in try/catch: a corrupt value, a disabled storage
@@ -41,6 +43,18 @@ const EVENT = 'casefile:settings'
 export const KEY_REDUCED_MOTION = 'reducedMotion'
 export const KEY_PARALLAX = 'parallax'
 export const KEY_WEEK_START = 'weekStart'
+export const KEY_ACCENT = 'accent'
+
+/* The order the swatches sit in. Each id has a block in styles.css under
+   ACCENTS; the first is the default and the one with no attribute at all. */
+export const ACCENTS = [
+  { id: 'violet', label: 'Violet' },
+  { id: 'white', label: 'White' },
+  { id: 'red', label: 'Red' },
+  { id: 'green', label: 'Green' },
+  { id: 'turquoise', label: 'Turquoise' },
+]
+const DEFAULT_ACCENT = ACCENTS[0].id
 
 /** Fallback store for private mode / disabled storage — session-scoped. */
 const memory = new Map()
@@ -200,13 +214,37 @@ export function applyMotionPreference() {
   else root.removeAttribute('data-motion')
 }
 
-// Applied at import time so the preference survives a reload even when the
+/* ------------------------------------------------------------------ *
+ * accent — stamped on <html> as data-accent; the stylesheet does the rest
+ * ------------------------------------------------------------------ */
+
+/** The stored accent, or the default when it is missing or not one we know. */
+export function readAccent() {
+  const raw = readRaw(KEY_ACCENT)
+  return ACCENTS.some((a) => a.id === raw) ? raw : DEFAULT_ACCENT
+}
+
+export function applyAccentPreference() {
+  if (typeof document === 'undefined') return
+  const accent = readAccent()
+  const root = document.documentElement
+  if (accent === DEFAULT_ACCENT) root.removeAttribute('data-accent')
+  else root.dataset.accent = accent
+}
+
+// Applied at import time so the preferences survive a reload even when the
 // user never opens this view, and re-applied whenever anything (including
-// another tab) changes it.
-if (typeof window !== 'undefined') {
+// another tab) changes them. Registered before any React subscriber, so the
+// attribute is already on <html> by the time a component re-reads a token.
+function applyPreferences() {
   applyMotionPreference()
-  window.addEventListener(EVENT, applyMotionPreference)
-  window.addEventListener('storage', applyMotionPreference)
+  applyAccentPreference()
+}
+
+if (typeof window !== 'undefined') {
+  applyPreferences()
+  window.addEventListener(EVENT, applyPreferences)
+  window.addEventListener('storage', applyPreferences)
 }
 
 /* ------------------------------------------------------------------ *
@@ -418,6 +456,45 @@ function SettingRow({ title, hint, children }) {
   )
 }
 
+/**
+ * One swatch per accent, as a radio group: arrows move the choice, the way a
+ * native radio set does, and each swatch is named for a screen reader since
+ * its only visible content is the colour.
+ */
+function AccentPicker({ value, onChange }) {
+  const refs = useRef([])
+  const index = Math.max(0, ACCENTS.findIndex((a) => a.id === value))
+
+  const onKeyDown = (e) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key]
+    if (!step) return
+    e.preventDefault()
+    const next = (index + step + ACCENTS.length) % ACCENTS.length
+    onChange(ACCENTS[next].id)
+    refs.current[next]?.focus()
+  }
+
+  return (
+    <div className="accent-picker" role="radiogroup" aria-label="Accent colour" onKeyDown={onKeyDown}>
+      {ACCENTS.map((a, i) => (
+        <button
+          key={a.id}
+          ref={(el) => { refs.current[i] = el }}
+          type="button"
+          role="radio"
+          className="accent-swatch"
+          data-accent={a.id}
+          aria-checked={i === index}
+          aria-label={a.label}
+          title={a.label}
+          tabIndex={i === index ? 0 : -1}
+          onClick={() => onChange(a.id)}
+        />
+      ))}
+    </div>
+  )
+}
+
 function StatTile({ label, value, unit, sub }) {
   return (
     <div className="tile">
@@ -611,6 +688,7 @@ export function Settings({ projects, now }) {
   const reducedMotion = useSetting(KEY_REDUCED_MOTION, false)
   const parallax = useSetting(KEY_PARALLAX, true)
   const weekStart = useSetting(KEY_WEEK_START, 1)
+  const accent = useSetting(KEY_ACCENT, DEFAULT_ACCENT)
 
   const stats = useMemo(() => globalStats(cases, clock), [cases, clock])
   /* Asked once. The answer is a function of .env, which cannot change without
@@ -653,10 +731,20 @@ export function Settings({ projects, now }) {
           <CardHead
             className="card__head"
             title="Interface"
-            subtitle="Motion and calendar preferences"
+            subtitle="Colour, motion and calendar preferences"
           />
           <div className="card__body">
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <SettingRow
+                title="Accent colour"
+                hint="Buttons, the active tab, finished work and the light behind the dashboard."
+              >
+                <AccentPicker
+                  value={accent}
+                  onChange={(next) => writeSetting(KEY_ACCENT, next === DEFAULT_ACCENT ? null : next)}
+                />
+              </SettingRow>
+
               <SettingRow
                 title="Reduce motion"
                 hint="Overrides the system setting. Kills the parallax, the ambient pulse and every transition."
@@ -845,7 +933,7 @@ export function Settings({ projects, now }) {
 
               <SettingRow
                 title="Reset preferences"
-                hint="Forgets every setting above and returns to the defaults: motion follows the system, parallax on, week starts Monday."
+                hint="Forgets every setting above and returns to the defaults: violet accent, motion follows the system, parallax on, week starts Monday."
               >
                 <ConfirmAction
                   label="Reset"
@@ -853,7 +941,7 @@ export function Settings({ projects, now }) {
                   busyLabel="Resetting…"
                   onRun={async () => {
                     clearSettings()
-                    applyMotionPreference()
+                    applyPreferences()
                   }}
                 />
               </SettingRow>

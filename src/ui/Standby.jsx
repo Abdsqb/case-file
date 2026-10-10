@@ -10,6 +10,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+/* Announced on the window when standby goes on or off, as { detail: { on } }.
+   The streak behind the app listens for it and holds still while the sheet is
+   up: a moving picture under a full-screen blur is the costliest thing the app
+   can draw, and nobody is looking at it. */
+export const STANDBY_EVENT = 'casefile:standby';
+
 /* How long the app has to be left alone. */
 const IDLE_MS = 60_000;
 
@@ -78,6 +84,10 @@ export default function Standby() {
       clearInterval(watch);
     };
   }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent(STANDBY_EVENT, { detail: { on: asleep } }));
+  }, [asleep]);
 
   /* No seconds on the face, so this wakes on the minute rather than every
      second — the screen a machine is left sitting on should not be re-rendering

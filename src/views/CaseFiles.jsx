@@ -1928,6 +1928,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
                 now={now}
                 focus={filter === 'open'}
                 chrome={false}
+                overhang={0}
                 className="caseboard__flow"
               />
 

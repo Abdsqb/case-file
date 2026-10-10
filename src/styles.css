@@ -14,20 +14,21 @@
      ON the surface rather than a sticker stuck to it. Nothing in the UI is
      pure white and nothing is pure black.
      ------------------------------------------------------------------ */
-  --bg:            #07060A;
+  /* --bg, and the channels behind every tinted neutral below, are set per
+     accent under ACCENTS: the trace of hue in the ground is the accent's. */
   --bg-elevated:   rgba(255, 255, 255, 0.03);
 
   /* A panel is glass: a dark translucent fill over whatever the streak is
      doing behind it, blurred. The alpha is the whole point — opaque panels
      would cut holes in the light. */
-  --panel:         rgba(13, 11, 19, 0.46);
+  --panel:         rgba(var(--panel-rgb), 0.46);
   --panel-blur:    blur(30px) saturate(1.25);
 
   /* A panel sits in the page and can afford to be thin. A menu, a tooltip or
      the scratchpad sits ON TOP of the page, over text and charts, and at 72%
      you would read the dashboard straight through it. Same glass, nearly
      opaque. */
-  --overlay:       rgba(14, 12, 19, 0.95);
+  --overlay:       rgba(var(--overlay-rgb), 0.95);
 
   --border:        rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.14);
@@ -37,13 +38,13 @@
      One colour at three strengths. Muted and faint are alpha rather than
      grey, so text sits IN the glass instead of on top of it.
      ------------------------------------------------------------------ */
-  --text:          #F1EFF6;
-  --text-muted:    rgba(241, 239, 246, 0.55);
-  --text-faint:    rgba(241, 239, 246, 0.32);
+  --text-muted:    rgba(var(--text-rgb), 0.55);
+  --text-faint:    rgba(var(--text-rgb), 0.32);
 
   /* ------------------------------------------------------------------
      ACCENT
-     Violet, and it is the only saturated colour in the chrome: primary
+     Violet unless the reader picks another, and it is the only saturated
+     colour in the chrome: primary
      actions, the active state, and done. Everything else earns attention
      through contrast, not hue.
 
@@ -52,21 +53,15 @@
      carries a trace of the same hue, which is what stops the accent reading
      as a sticker.
      ------------------------------------------------------------------ */
-  --accent:        #A98BFF;
-  --accent-hover:  #BCA4FF;
-  --accent-ink:    #0B0716;   /* text on a violet fill */
-  --accent-glow:   rgba(169, 139, 255, 0.35);
-  --accent-faint:  rgba(169, 139, 255, 0.10);
+  /* The accent itself is chosen in Settings — see ACCENTS just below this
+     block. What lives here is everything DERIVED from it, so a new accent is
+     five values and not a hunt through the stylesheet. */
+  --accent-glow:   rgba(var(--accent-rgb), 0.35);
+  --accent-faint:  rgba(var(--accent-rgb), 0.10);
   /* The fill behind a thing that is selected — a wash you can see the glass
      and the light through, not a solid chip of colour stuck on top of it. */
-  --accent-wash:   rgba(169, 139, 255, 0.18);
-  --accent-edge:   rgba(169, 139, 255, 0.45);
-
-  /* The streak's second tint, and the only other hue in the app. A cooler
-     blue-violet beside the accent: close enough that the bundle reads as one
-     light rather than two, far enough that the strands separate. It belongs
-     to the streak and nothing in the UI may spend it. */
-  --accent-cool:   #6E8CFF;
+  --accent-wash:   rgba(var(--accent-rgb), 0.18);
+  --accent-edge:   rgba(var(--accent-rgb), 0.45);
 
   /* ------------------------------------------------------------------
      STATUS
@@ -162,6 +157,125 @@
 }
 
 /* --------------------------------------------------------------------------
+   1b. ACCENTS
+   The reader picks one in Settings, which stamps it on <html> as
+   data-accent. Five values each: the colour, its hover, the ink that sits on
+   a fill of it, the same colour as bare channels (every glow, wash and edge
+   above is built from those), and the streak's cooler second tint.
+
+   Then the neutrals. Nothing in the app is a pure grey: the ground, the
+   glass, the ink and the solid cards on the case graph all carry a faint
+   trace of the accent's hue, which is what makes the accent read as a light
+   on the surface rather than a sticker on it. So they move with it — each
+   is the violet original with its tint turned to the new hue at the same
+   strength. White has none: it is the one accent with no hue to lend.
+   --text and --bg stay hex: the streak and the case render parse them.
+
+   Every one of them is light enough to carry dark ink at button size — that
+   is the one rule a new entry here has to keep.
+
+   The selectors are bare attributes rather than :root-only so a swatch in
+   Settings can carry data-accent and paint itself in the colour it offers,
+   from the same definition the app uses.
+   -------------------------------------------------------------------------- */
+
+:root,
+[data-accent='violet'] {
+  --accent:        #A98BFF;
+  --accent-hover:  #BCA4FF;
+  --accent-ink:    #0B0716;
+  --accent-rgb:    169, 139, 255;
+  --accent-cool:   #6E8CFF;
+
+  --bg:            #07060A;
+  --text:          #F1EFF6;
+  --text-rgb:      241, 239, 246;
+  --panel-rgb:     13, 11, 19;
+  --overlay-rgb:   14, 12, 19;
+  --raised-rgb:    22, 20, 28;
+  --raised-hi-rgb: 28, 25, 36;
+  --solid-rgb:     24, 21, 31;
+  --solid-hi-rgb:  31, 27, 41;
+}
+
+/* A shade brighter than the ink (#F2F2F2) and never pure white; the glow is
+   most of what tells "done" from "open" here. No hue anywhere — the ground
+   and the glass go true grey with it. */
+[data-accent='white'] {
+  --accent:        #FAFAFA;
+  --accent-hover:  #FFFFFF;
+  --accent-ink:    #0A0A0A;
+  --accent-rgb:    250, 250, 250;
+  --accent-cool:   #A6A6A6;
+
+  --bg:            #080808;
+  --text:          #F2F2F2;
+  --text-rgb:      242, 242, 242;
+  --panel-rgb:     14, 14, 14;
+  --overlay-rgb:   15, 15, 15;
+  --raised-rgb:    23, 23, 23;
+  --raised-hi-rgb: 30, 30, 30;
+  --solid-rgb:     25, 25, 25;
+  --solid-hi-rgb:  33, 33, 33;
+}
+
+/* Pulled toward rose so it stays a different light from overdue, which is
+   an orange-red (--red) and means something. */
+[data-accent='red'] {
+  --accent:        #FF5A6E;
+  --accent-hover:  #FF7E8E;
+  --accent-ink:    #1A0508;
+  --accent-rgb:    255, 90, 110;
+  --accent-cool:   #E0508F;
+
+  --bg:            #0A0607;
+  --text:          #F6F0F0;
+  --text-rgb:      246, 240, 240;
+  --panel-rgb:     19, 11, 12;
+  --overlay-rgb:   19, 13, 13;
+  --raised-rgb:    28, 20, 21;
+  --raised-hi-rgb: 36, 26, 27;
+  --solid-rgb:     31, 22, 23;
+  --solid-hi-rgb:  41, 28, 30;
+}
+
+[data-accent='green'] {
+  --accent:        #6EE7A0;
+  --accent-hover:  #8DEFB6;
+  --accent-ink:    #04140B;
+  --accent-rgb:    110, 231, 160;
+  --accent-cool:   #3CC9A8;
+
+  --bg:            #060A07;
+  --text:          #EFF6F2;
+  --text-rgb:      239, 246, 242;
+  --panel-rgb:     10, 19, 14;
+  --overlay-rgb:   12, 19, 15;
+  --raised-rgb:    19, 28, 23;
+  --raised-hi-rgb: 24, 36, 29;
+  --solid-rgb:     21, 31, 25;
+  --solid-hi-rgb:  26, 41, 32;
+}
+
+[data-accent='turquoise'] {
+  --accent:        #3EE0D0;
+  --accent-hover:  #6BE9DC;
+  --accent-ink:    #031412;
+  --accent-rgb:    62, 224, 208;
+  --accent-cool:   #4AA8FF;
+
+  --bg:            #050909;
+  --text:          #EEF4F4;
+  --text-rgb:      238, 244, 244;
+  --panel-rgb:     10, 17, 16;
+  --overlay-rgb:   11, 17, 17;
+  --raised-rgb:    19, 26, 25;
+  --raised-hi-rgb: 23, 33, 32;
+  --solid-rgb:     19, 29, 28;
+  --solid-hi-rgb:  25, 38, 37;
+}
+
+/* --------------------------------------------------------------------------
    2. RESET + GROUND
    -------------------------------------------------------------------------- */
 
@@ -234,21 +348,6 @@ body::after {
     radial-gradient(130% 100% at 50% 40%, transparent 42%, rgba(7, 8, 7, 0.55) 78%, rgba(7, 8, 7, 0.86) 100%);
 }
 
-/* --------------------------------------------------------------------------
-   THE POINTER FIELD
-   --px and --py are where the pointer is, from -1 to 1, written on the root
-   by App.jsx — one listener for the whole app, on a frame, and everything
-   below moves on the compositor off the back of it.
-
-   Declared here with a resting value so every rule that reads them works on a
-   touch screen, before the first pointer event, and with the preference off:
-   nothing has to guard against the field not existing yet.
-   -------------------------------------------------------------------------- */
-:root {
-  --px: 0;
-  --py: 0;
-}
-
 /* The panels are in a room, not on a wall.
    ------------------------------------------------------------------------
    One perspective for the whole grid, with its vanishing point following the
@@ -317,7 +416,14 @@ body::after {
    under the pointer is an object you picked up. And it turns to face the
    POINTER ON ITSELF — --gx and --gy, published by the graph — not the
    window-wide field, which barely moves across a panel this size and would
-   leave the card stuck at one angle the whole time it was hovered. */
+   leave the card stuck at one angle the whole time it was hovered.
+
+   Registered as non-inheriting: CaseFlow writes them on the card every pointer
+   frame, and only the card reads them. Inheriting, every node inside the flow
+   would be restyled each time for a value none of them use. */
+@property --gx { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --gy { syntax: '<number>'; inherits: false; initial-value: 0; }
+
 .card:has(.flow) {
   transform: rotateY(var(--tilt, 0deg));
   /* Slower coming back than going out: it leaves the pointer reluctantly. */
@@ -328,14 +434,14 @@ body::after {
 
 .card:has(.flow):hover {
   transform:
-    rotateY(calc(var(--tilt, 0deg) + var(--gx, 0) * 6deg))
-    rotateX(calc(var(--gy, 0) * -5deg))
+    rotateY(calc(var(--tilt, 0deg) + var(--gx, 0) * 10deg))
+    rotateX(calc(var(--gy, 0) * -8deg))
     /* A small, FIXED step toward the eye. It was proportional to the pointer
        before, which meant the card changed size as you moved across it —
        the other half of what read as stretching. Lifting by the same amount
        the whole time it is held is a lift; lifting by a varying amount is a
        zoom. */
-    translateZ(14px);
+    translateZ(24px);
   transition:
     transform 220ms cubic-bezier(0.22, 1, 0.3, 1),
     box-shadow 220ms ease;
@@ -810,12 +916,12 @@ summary:focus-visible,
    looking broken. No hatch — the blur is the texture. */
 .tip--sage {
   background-image:
-    linear-gradient(180deg, rgba(169, 139, 255, 0.07), rgba(169, 139, 255, 0.02) 42%, transparent 72%);
-  border-color: rgba(169, 139, 255, 0.26);
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.07), rgba(var(--accent-rgb), 0.02) 42%, transparent 72%);
+  border-color: rgba(var(--accent-rgb), 0.26);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 0 0 1px rgba(169, 139, 255, 0.05),
-    0 18px 50px -24px rgba(169, 139, 255, 0.22),
+    0 0 0 1px rgba(var(--accent-rgb), 0.05),
+    0 18px 50px -24px rgba(var(--accent-rgb), 0.22),
     0 22px 60px -30px rgba(0, 0, 0, 0.9);
   color: var(--fg);
 }
@@ -2136,7 +2242,8 @@ textarea::placeholder {
 .entry__status--open    { background: var(--pin-open); }
 
 @keyframes status-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
-.entry__status--overdue { animation: status-blink 1500ms ease-in-out infinite; }
+/* Stepped, not smooth: see statpulse below. */
+.entry__status--overdue { animation: status-blink 1500ms steps(6, jump-none) infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .entry__status--overdue { animation: none; opacity: 1; }
@@ -2603,16 +2710,22 @@ button.entry__title:hover { color: var(--fg); }
 .status-dot--live {
   background: var(--accent);
   box-shadow: 0 0 8px 0 var(--accent-glow);
-  animation: statpulse 2s ease-in-out infinite;
+  animation: statpulse 2s steps(6, jump-none) infinite;
 }
 .status-dot--overdue {
   background: var(--red);
   box-shadow: 0 0 8px 0 rgba(229, 112, 79, 0.4);
-  animation: statpulse 2s ease-in-out infinite;
+  animation: statpulse 2s steps(6, jump-none) infinite;
 }
 .status-dot--idle { background: var(--border-strong); }
 
-/* Slow enough to be a breath rather than a blink. */
+/* Slow enough to be a breath rather than a blink.
+
+   And STEPPED, six levels each way, rather than eased. A smooth breath is a
+   new frame every vsync forever, and each new frame re-runs every glass
+   blur on screen: one 6px dot in the top bar kept the GPU at ~80% with the
+   app otherwise idle. Stepped, it changes a dozen times a second, which on a
+   dot this size still reads as breathing, and the GPU idles at ~15%. */
 @keyframes statpulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.45; }
@@ -2645,7 +2758,7 @@ button.entry__title:hover { color: var(--fg); }
   border-radius: 50%;
   background: var(--tone, var(--text-faint));
   box-shadow: 0 0 8px 0 var(--tone-glow, transparent);
-  animation: statpulse 2s ease-in-out infinite;
+  animation: statpulse 2s steps(6, jump-none) infinite;
 }
 
 .statpill--ok      { --tone: var(--accent); --tone-glow: var(--accent-glow); color: var(--text); }
@@ -2723,6 +2836,40 @@ button.entry__title:hover { color: var(--fg); }
   font-size: 11px;
   color: var(--fg-dim);
   overflow-wrap: anywhere;
+}
+
+/* The accent picker. Each swatch carries its own data-accent, so it paints in
+   the colour it offers from the same tokens the app uses — the picker cannot
+   drift from what picking it does. */
+.accent-picker {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.accent-swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 0 0 transparent;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+.accent-swatch:hover { transform: scale(1.08); }
+.accent-swatch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.45);
+}
+/* Chosen: a ring in the swatch's own colour, held off the fill by a gap of
+   page, plus its glow. */
+.accent-swatch[aria-checked='true'] {
+  box-shadow:
+    0 0 0 3px var(--bg),
+    0 0 0 4.5px var(--accent),
+    0 0 16px -2px rgba(var(--accent-rgb), 0.55);
 }
 
 /* --------------------------------------------------------------------------
@@ -2895,7 +3042,9 @@ button.entry__title:hover { color: var(--fg); }
   margin: 0 0 14px;
 }
 .subbar .section-label { margin: 0; flex: none; }
-.subbar .segmented { min-width: 0; }
+/* No outline on the track here: with one or two sub-cases it hugs the options
+   so closely that it reads as a border on the selected button itself. */
+.subbar .segmented { min-width: 0; border-color: transparent; }
 
 /* --------------------------------------------------------------------------
    14. THE TIMETABLE — Class calendar
@@ -4896,8 +5045,8 @@ button.entry__title:hover { color: var(--fg); }
 
 @keyframes taskpop {
   0%   { box-shadow: 0 0 0 0 var(--accent-glow); transform: scale(1); }
-  40%  { box-shadow: 0 0 0 5px rgba(169, 139, 255, 0); transform: scale(1.14); }
-  100% { box-shadow: 0 0 0 0 rgba(169, 139, 255, 0); transform: scale(1); }
+  40%  { box-shadow: 0 0 0 5px rgba(var(--accent-rgb), 0); transform: scale(1.14); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0); transform: scale(1); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -5178,7 +5327,7 @@ button.entry__title:hover { color: var(--fg); }
 
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: rgba(22, 20, 28, 0.9);
+  background: rgba(var(--raised-rgb), 0.9);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   box-shadow:
@@ -5238,7 +5387,7 @@ button.entry__title:hover { color: var(--fg); }
 
 /* The first card is the case itself: the thing everything else comes off. */
 .flow__node--case {
-  background: rgba(28, 25, 36, 0.92);
+  background: rgba(var(--raised-hi-rgb), 0.92);
   border-color: var(--border-strong);
 }
 .flow__node--case .flow__title { font-size: 13.5px; }
@@ -5681,6 +5830,46 @@ button.entry__title:hover { color: var(--fg); }
 
 .flow__state { margin-left: auto; flex: none; }
 
+/* The case dial. Made of the same stuff as a step card — solid, bordered,
+   shadowed — because on the dashboard it floats at the drawing's height (see
+   .flowcard below), and a control up there that looked like chrome would read
+   as a bit of the bar that came unstuck. */
+.flow__dial {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px 6px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: rgba(var(--raised-rgb), 0.9);
+  color: var(--text-muted);
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 30px -18px rgba(0, 0, 0, 0.95);
+  transition:
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease,
+    transform 200ms cubic-bezier(0.22, 1, 0.3, 1);
+}
+
+.flow__dialpos {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.flow__dial:hover,
+.flow__dial:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent-edge);
+}
+
 .flow__body {
   flex: 1 1 auto;
   display: flex;
@@ -5904,10 +6093,45 @@ button.entry__title:hover { color: var(--fg); }
    runs to, and the eye reads a bug rather than a height. A drawing is a thing
    on a sheet of acetate laid over the board, and the sheet is what floats. */
 .flowcard {
+  --graph: 130px;
+}
+/* The dashboard's board runs right up to the window's edge, and its near
+   cards already reach it: any higher and they leave the screen. */
+.dash__card--flow.flowcard {
   --graph: 88px;
 }
 
-.flowcard .flow__bar   { transform: translateZ(3px); }
+.flowcard .flow__bar   { position: relative; transform: translateZ(3px); transform-style: preserve-3d; }
+
+/* The dial hangs below the bar rather than in it, at the top right of the
+   drawing, and floats off the glass the way the step cards do. Lower than the
+   drawing: the top-right corner is where the perspective throws a lifted thing
+   furthest out, and at the drawing's full height it left a 1280 window. In
+   from the edge for the same reason. */
+.flowcard .flow__dial {
+  position: absolute;
+  top: calc(100% + 14px);
+  right: 34px;
+  transform: translateZ(calc(var(--graph) * 0.45));
+  background: rgba(var(--solid-hi-rgb), 0.97);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 6px -2px rgba(0, 0, 0, 0.7),
+    0 34px 56px -20px rgba(0, 0, 0, 0.98);
+}
+
+.flowcard .flow__dial:hover,
+.flowcard .flow__dial:focus-visible {
+  transform: translateZ(calc(var(--graph) * 0.45 + 18px));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 3px 7px -2px rgba(0, 0, 0, 0.65),
+    0 40px 60px -26px rgba(0, 0, 0, 0.98),
+    0 0 36px -14px var(--accent-glow);
+}
+
+[data-motion='reduced'] .flowcard .flow__bar { transform-style: flat; }
+[data-motion='reduced'] .flowcard .flow__dial { transform: none; }
 .flowcard .flow__tools { transform: translateZ(8px); }
 .flowcard .flow__runs  { transform: translateZ(3px); }
 .flowcard .flow__wires { transform: translateZ(var(--graph)); }
@@ -5916,18 +6140,18 @@ button.entry__title:hover { color: var(--fg); }
 .flowcard .flow__node {
   /* Set per kind below and read here, so a step cannot be at one height and
      cast the shadow of another. */
-  transform: translateZ(var(--lift, 88px));
+  transform: translateZ(var(--lift, 130px));
   /* Nearly solid, over glass that is nearly not: the contrast between the two
      is most of what says the cards are off the surface, and it does the work
      at a glance that the parallax only does once you move. */
-  background: rgba(24, 21, 31, 0.96);
+  background: rgba(var(--solid-rgb), 0.96);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 2px 6px -2px rgba(0, 0, 0, 0.7),
     0 34px 56px -20px rgba(0, 0, 0, 0.98);
 }
 
-.flowcard .flow__node--case { background: rgba(31, 27, 41, 0.97); }
+.flowcard .flow__node--case { background: rgba(var(--solid-hi-rgb), 0.97); }
 
 /* The case is the board's own label and sits nearly on it; the steps hanging
    off it stand proud. Two heights rather than one is what turns a lifted
@@ -5941,7 +6165,7 @@ button.entry__title:hover { color: var(--fg); }
 .flowcard .flow__node--subcase { --lift: calc(var(--graph) + 8px); }
 
 .flowcard .flow__node[data-lit='hot'] {
-  transform: translateZ(calc(var(--lift, 88px) + 20px));
+  transform: translateZ(calc(var(--lift, 130px) + 28px));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.07),
     0 3px 7px -2px rgba(0, 0, 0, 0.65),
@@ -6037,13 +6261,57 @@ button.entry__title:hover { color: var(--fg); }
 .dash__readtext {
   margin: 0;
   max-width: 46ch;
-  font-size: 13.5px;
-  line-height: 1.62;
+  font-size: 15px;
+  line-height: 1.6;
   color: var(--text-muted);
   text-wrap: pretty;
 }
 
+/* A short window keeps the old size. The column only just fits there (see the
+   max-height block above), and the measure is in ch, so the bigger type wraps
+   to the same lines and costs height only — height a 720px laptop has not got. */
+@media (max-height: 820px) {
+  .dash__readtext { font-size: 13.5px; line-height: 1.62; }
+}
+
 .dash__readtext--wait { color: var(--text-faint); }
+
+/* The typing. The untyped rest is laid out but not painted, so the paragraph
+   is its final shape from the first frame; the caret is an inline span with no
+   width of its own, so it adds no break opportunity and never re-wraps a line. */
+.typed__rest { visibility: hidden; }
+
+.typed__caret { position: relative; }
+
+.typed__caret::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 0.18em;
+  bottom: 0.12em;
+  width: 1.5px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+/* Solid while it types. Done: two blinks, then gone — a caret blinking forever
+   under the brief would be a perpetual animation, and every frame of one
+   re-blurs the glass cards across the page. */
+.typed__caret.is-done::after {
+  animation: typed-done 2s steps(1) forwards;
+}
+
+@keyframes typed-done {
+  0%, 50% { opacity: 1; }
+  25%, 75%, 100% { opacity: 0; }
+}
+
+.dash__readkicker { transition: opacity 300ms ease; }
+.dash__readkicker.is-waiting { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .typed__caret { display: none; }
+}
 
 /* The news is the second paragraph and the quieter one: it is about the
    world, not about the reader's day, so it steps back a shade and says where
@@ -6194,6 +6462,161 @@ button.entry__title:hover { color: var(--fg); }
 }
 
 .chat__turn--user .chat__text { color: var(--text-muted); }
+
+/* The clerk's replies, rendered. Line breaks are elements now, so pre-wrap
+   would double them; spacing between blocks does the job blank lines did. */
+.chat__text--md { white-space: normal; }
+.chat__text--md > * { margin: 0; }
+.chat__text--md > * + * { margin-top: 0.6em; }
+.chat__text--md ul,
+.chat__text--md ol { padding-left: 1.25em; }
+.chat__text--md ul { list-style: disc; }
+.chat__text--md ol { list-style: decimal; }
+.chat__text--md li + li { margin-top: 0.25em; }
+.chat__text--md li::marker { color: var(--text-faint); }
+.chat__text--md strong { font-weight: 600; color: var(--text); }
+.chat__text--md code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0 0.3em;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.chat__text--md .md__h { font-weight: 600; }
+
+/* Staged changes under a reply. A quiet box, not a panel: it is part of the
+   answer, and the only accent in it is the apply button and the ticks. */
+.chat__changes {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat__changelist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat__change {
+  display: grid;
+  grid-template-columns: auto 52px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  transition: opacity 180ms ease;
+}
+
+.chat__change.is-off { opacity: 0.4; }
+
+.chat__changetick {
+  margin-top: 1px;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--accent-ink);
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.chat__changetick[aria-checked='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.chat__changetick:disabled { cursor: default; }
+
+.chat__changeop {
+  padding-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* Delete is the one that cannot be taken back, so it is the one row that
+   reads at full strength. Not red: red means overdue in this app. */
+.chat__change--delete .chat__changeop { color: var(--text); }
+
+.chat__changebody {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat__changetitle { color: var(--text); overflow-wrap: anywhere; }
+
+.chat__change--delete .chat__changetitle { text-decoration: line-through; text-decoration-color: var(--text-faint); }
+
+.chat__changedetail {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.chat__changeactions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chat__apply,
+.chat__dismiss {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background-color 180ms ease, color 180ms ease, opacity 180ms ease;
+}
+
+.chat__apply {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.chat__apply:disabled { opacity: 0.5; cursor: default; }
+
+.chat__dismiss {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.chat__dismiss:hover:not(:disabled) { color: var(--text); }
+
+.chat__changenote {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.chat__changes.is-settled .chat__change { opacity: 0.55; }
+.chat__changes.is-settled .chat__change.is-off { opacity: 0.25; }
+
+.chat__changeerror { font-size: 11.5px; color: var(--text-muted); }
 
 .chat__tools {
   font-family: var(--font-mono);

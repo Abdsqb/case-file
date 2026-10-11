@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, ChevronRight, Crosshair, Layers } from 'lucide-react';
+import { ArrowUpRight, Crosshair, Layers } from 'lucide-react';
 
 import { buildGraph } from '../lib/graph.js';
 import { IconMenu } from './primitives.jsx';
@@ -145,38 +145,6 @@ function clock(ts) {
   return `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
 }
 
-/**
- * Next case — one click moves the board on to the next top-level case.
- *
- * Wraps after the last one. Eight cases is a short loop, and a button that
- * stops working at the end reads as broken. The count says where in the loop
- * you are, so the wrap is never a surprise.
- */
-function CaseDial({ cases, rootId, onPick }) {
-  const list = useMemo(() => (cases || []).filter((c) => c && !c.parentId), [cases]);
-  const index = Math.max(0, list.findIndex((c) => c.id === rootId));
-
-  if (list.length < 2) return null;
-
-  const next = list[(index + 1) % list.length];
-  return (
-    <button
-      type="button"
-      className="flow__dial"
-      onClick={() => onPick(next.id)}
-      title={`Next case: ${next.name}`}
-      aria-label={`Case ${index + 1} of ${list.length}. Next case: ${next.name}`}
-    >
-      <span className="flow__dialpos">
-        {String(index + 1).padStart(2, '0')}
-        <span className="flow__sep">/</span>
-        {String(list.length).padStart(2, '0')}
-      </span>
-      <ChevronRight size={12} strokeWidth={1.8} aria-hidden="true" />
-    </button>
-  );
-}
-
 export default function CaseFlow({
   cases,
   rootId = null,
@@ -232,6 +200,19 @@ export default function CaseFlow({
      painted for one frame before the scene that animates it in. */
   const [swap, setSwap] = useState({ root: rootId, n: 0 });
   if (swap.root !== rootId) setSwap({ root: rootId, n: swap.n + 1 });
+
+  /* Where a click on the drawing goes: the next top-level case, wrapping after
+     the last. Only with the chrome — on the dashboard, where the board is a
+     picture you flip through. The Case files deck is the case you are working
+     on, and a click there that changed it would be a click that lost your
+     place. The "Switch case" menu in the tools is the keyboard route. */
+  const nextCase = useMemo(() => {
+    if (!chrome || !onPickCase) return null;
+    const list = (cases || []).filter((c) => c && !c.parentId);
+    if (list.length < 2) return null;
+    const i = list.findIndex((c) => c.id === rootId);
+    return list[(i + 1) % list.length];
+  }, [chrome, onPickCase, cases, rootId]);
 
   /* The run log. Every app with a canvas in it has one of these along the
      bottom, and ours has something true to put in it: what was logged on this
@@ -452,7 +433,6 @@ export default function CaseFlow({
         <span className={cx('statpill', `statpill--${standing.tone}`, 'flow__state')}>
           {standing.text}
         </span>
-        {onPickCase ? <CaseDial cases={cases} rootId={rootId} onPick={onPickCase} /> : null}
       </header>
       ) : null}
 
@@ -503,10 +483,12 @@ export default function CaseFlow({
         ) : null}
 
         <div
-          className={cx('flow__canvas', empty && 'is-empty')}
+          className={cx('flow__canvas', empty && 'is-empty', nextCase && 'is-cycling')}
           ref={hostRef}
           data-hot={hot ? '1' : undefined}
           onPointerLeave={() => setHot(null)}
+          onClick={nextCase ? () => onPickCase(nextCase.id) : undefined}
+          title={nextCase ? `Click for the next case: ${nextCase.name}` : undefined}
         >
           <div
             key={`s${swap.n}`}

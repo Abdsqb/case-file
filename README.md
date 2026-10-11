@@ -11,8 +11,9 @@ Everything runs on your own machine against a local SQLite file. There is no acc
 sync and no telemetry.
 
 One part is opt-in and does leave the machine: **the clerk**, an agent that files your
-notes into the archive, writes the day's brief and answers questions about what you have
-logged. It does nothing until you put an API key in `.env` yourself — see
+notes into the archive, writes the day's brief, answers questions about what you have
+logged and makes the changes you ask it for — each one waiting for your click before it
+is written. It does nothing until you put an API key in `.env` yourself — see
 [The clerk](#the-clerk).
 
 ![The dashboard](docs/screenshots/dashboard.png)
@@ -23,12 +24,12 @@ logged. It does nothing until you put an API key in `.env` yourself — see
 
 | | |
 |---|---|
-| **Dashboard** | A greeting and what is coming on the left; one card at a time on the right, paged with the wheel. The case structure comes first, then workload, recommendations, tracking, the weekly report and the completion rate. |
+| **Dashboard** | A greeting and what is coming on the left; one card at a time on the right, paged with the wheel. The case structure comes first — click the drawing to move it on to the next case — then the clerk's chat, workload, recommendations, tracking, the weekly report and the completion rate. |
 | **Case files** | The working screen. Create, rename, reorder and delete cases; add sub-cases; log entries with dates and priorities; nest subtasks under an entry. The entries take the left of the screen; the case structure stands on the right as a turned panel, with the seven readings of the case paged one at a time underneath it at the same angle. Only the one with the drawing on it turns further under the pointer. |
 | **Reporting** | Every open entry bucketed by due day — Overdue / This week / Later — plus a world-news feed from public RSS. |
 | **Calendar** | Two calendars over the same days. **Entries** is a month grid of every dated entry in the archive, coloured by how its deadline stands, and clicking one opens its case. **Classes** is a weekly timetable parsed from `src/data/class-calendar.ics`, with next class, today's agenda and term progress. |
 | **Flashcards** | Import a deck from a `.json` file or pasted text — or paste a lecture and have the clerk draft one — file it under a course, and review it on an SM-2 spaced schedule. The scheduling is offline SM-2 and always has been; only drafting a new deck calls a model, and only when you ask it to. |
-| **Settings** | Motion preferences, including a reduced-motion override; what this install holds; a live reading of how much memory the app is using; and what the clerk sends where. |
+| **Settings** | The accent colour; motion preferences, including a reduced-motion override; what this install holds; a live reading of how much memory the app is using; and what the clerk sends where. |
 
 *Every screenshot here is of the sample archive a fresh install seeds, not anyone's real
 cases.*
@@ -67,6 +68,12 @@ Colour means state and nothing else: **white** open, **amber** due soon, **red**
 rest back, so one branch can be followed through a busy case without reading every card on
 the way.
 
+On the dashboard the drawing is something you flip through: **click anywhere on it** and
+the board moves on to the next case, wrapping after the last. The new case comes in from
+the left a column at a time — the case, then its entries, then their subtasks — the way
+the flow reads. The tools down the panel's left edge, and the Case files screen, where the
+drawing is the case you are working on, do not cycle.
+
 It is built as HTML cards over a single SVG of wires rather than as one drawing. Text in
 SVG cannot wrap, cannot ellipsis and does not inherit the app's type scale, and a card full
 of real words needs all three. The whole thing is laid out at its own size and scaled to
@@ -94,7 +101,9 @@ painted as one flat picture, which is why the drawing used to lie flat for a sec
 then snap upright once the fade finished. So the board itself never fades. A registered
 custom property is animated from 0 to 1 on it instead, and only the flat layers inside
 (the glass, the wires, the labels) read it as their opacity. The cards stay standing the
-whole way in.
+whole way in. Switching case on the dashboard follows the same rule: the fade and slide go
+on each card and wire, never on the layers holding them, and the slide is the `translate`
+property rather than `transform`, so it adds to a card's lift instead of replacing it.
 
 ### The other screens
 
@@ -157,14 +166,26 @@ the feed is down. The model returns the two as separate fields, so the news can 
 mixed into the advice. The brief is cached against the facts that produced it. Opening the
 dashboard four times before lunch costs one call, and ticking off something overdue is what
 makes it rewrite. Casual is only the tone: it still says nothing it was not given, and it
-only knows today's classes, so it never guesses at the rest of the week.
+only knows today's classes, so it never guesses at the rest of the week. It types itself
+out each time the dashboard opens; the untyped rest of each paragraph is laid out but
+invisible, so the column is its final height from the first frame and no word jumps a
+line half way through. Screen readers get the whole text at once, and under reduced
+motion it simply appears.
 
 ![The clerk's chat card](docs/screenshots/clerk-chat.png)
 
 **The chat card — second in the dashboard deck.** Questions about the archive, answered out
 of it. It can open a case, search the entries and read the timetable before answering, and
-it says underneath what it looked at. It cannot change anything, and says so if you ask it
-to.
+it says underneath what it looked at. Replies are rendered — lists, bold, inline code —
+rather than shown as raw markdown.
+
+Ask it to change something — *close the four homeworks*, *push the midterm to the 22nd*,
+*add "read chapter 5" to Operating Systems*, *delete Lab 3* — and it stages the changes
+instead of making them. They sit under its reply as a list with a tick per row: untick
+what you do not want, then **apply** or **dismiss**. Entries and subtasks can be added,
+edited (title, due date, priority), closed, reopened and deleted; cases themselves are
+left to the Case files screen. It is told to close finished work rather than delete it,
+and to ask rather than guess when it is not clear which entry you mean.
 
 **Writing a deck — Flashcards.** Paste a lecture, a chapter or a set of notes and the clerk
 drafts cards from it. You read the draft and cut, because a model will write forty cards
@@ -175,14 +196,18 @@ written this way is no less traceable than one imported from a file.
 
 ### Reads loop, writes are proposals
 
-The clerk has four tools and every one of them reads: `case_detail`, `search_entries`,
-`timetable`, `standing`. It calls them in a loop, because deciding whether a case for a
-course already exists genuinely requires looking.
+The clerk has four tools that read: `case_detail`, `search_entries`, `timetable`,
+`standing`. It calls them in a loop, because deciding whether a case for a course already
+exists genuinely requires looking.
 
-It has no tool that writes. Everything it wants to change comes back as a list you approve,
-and applying it is a separate request that validates the rows again — by then they have
-been through a browser and been edited, so they are untrusted input whatever the model
-originally said. The whole filing applies in one transaction or not at all.
+Nothing it calls writes. The chat has four more tools — `create_entry`, `update_entry`,
+`close_entries`, `delete_entries` — and each one checks the archive and **stages** a
+change rather than making it, so even the chat's edits come back as a list you approve.
+Applying is a separate request (`/api/clerk/apply` for a filing, `/api/clerk/changes` for
+the chat) that validates every row again — by then they have been through a browser and
+been edited, so they are untrusted input whatever the model originally said. A change
+whose entry has gone since it was staged is skipped and reported, and a batch applies in
+one transaction or not at all, using the same statements the REST routes use.
 
 This is not timidity about the model. A filing assistant you have to audit afterwards is
 slower than filing it yourself: reviewing nine proposed rows takes ten seconds, and finding
@@ -317,7 +342,8 @@ server/
   news.js       RSS fetch and place-name resolution for Reporting
   ai.js         the only file that talks to a model, and the only one that sees a key
   archive.js    the archive as JSON, plus the facts the clerk is handed
-  clerk.js      the agent: read tools, the loop, filing / brief / chat / decks
+  clerk.js      the agent: read tools, staged write tools, the loop, filing / brief /
+                chat / decks, and applying what you approve
 src/
   views/        one file per screen
   ui/           primitives, charts, the case graph, the scratchpad drawer
@@ -337,8 +363,8 @@ React 19 and Vite on the front, Express on the back, SQLite through Node's built
 
 ## Notes on the design
 
-Near-black ground, one violet accent, and panels of dark glass over a slow-moving bundle of
-light. Three faces, each with one job: a geometric sans for the UI, a monospace for
+Near-black ground, one accent — violet unless you pick white, red, green or turquoise in
+Settings — and panels of dark glass over a slow-moving bundle of light. Three faces, each with one job: a geometric sans for the UI, a monospace for
 anything that is a measurement rather than a sentence — counts, times, ids, status — and
 an italic serif used on exactly one word, the last word of an empty state.
 
@@ -368,9 +394,12 @@ there is exactly one listener and no re-render.
 
 The light is a canvas behind everything (`src/ui/Streak.jsx`): a hundred-odd bezier
 strands pulled through a focal point in the lower-left and fanned across the right,
-undulating on gradient noise. One stroke per strand with a gradient along it, rather than
-a chain of segments, is what keeps it free: measured against an idle baseline on the same
-browser, the dashboard holds 60fps with it running. It stops dead when the tab is hidden,
+undulating on gradient noise. It is painted through WebGL (`src/ui/streakGL.js`): stroking
+that many curves through Canvas 2D turned out to cost the browser's GPU process most of a
+CPU core, because each stroke is triangulated on the CPU before the GPU sees it. So the
+strands are flattened to polylines, widened into one triangle mesh and drawn in a single
+call, with the same additive blending, the same radial colour and antialiased edges worked
+out per pixel. If WebGL cannot start, it paints through Canvas 2D as before. It stops dead when the tab is hidden,
 thins out on a small screen, and paints a single still frame under `prefers-reduced-motion`.
 
 Three conventions are load-bearing, and breaking any of them shows immediately:

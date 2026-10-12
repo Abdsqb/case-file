@@ -615,7 +615,9 @@
 
    CaseFlow keys its scene on the change, so the new drawing mounts fresh and
    this plays once per switch. The old drawing simply goes; the new one comes
-   in from the left, a column at a time, the way the flow reads.
+   in a column at a time, the way the flow reads — from the left going
+   forward (left click), from the right going back (right click), so the
+   direction of the slide says which way through the cases you went.
 
    Opacity and `translate` on the leaves only — the wires, the tags and each
    step card. The scene, canvas and body are preserve-3d layers, and an opacity
@@ -625,7 +627,7 @@
    replacing it.
    ========================================================================== */
 @keyframes flow-swap-in {
-  from { opacity: 0; translate: -16px 0; }
+  from { opacity: 0; translate: var(--swap-from, -16px) 0; }
   to   { opacity: 1; translate: none; }
 }
 
@@ -633,6 +635,9 @@
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+.flow__scene.is-back,
+.flow__name.is-back { --swap-from: 16px; }
 
 .flow__scene.is-swap > .flow__node {
   animation: flow-swap-in 380ms var(--e-arrive, cubic-bezier(0.22, 1, 0.3, 1)) both;

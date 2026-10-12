@@ -198,21 +198,40 @@ export default function CaseFlow({
      change does: the first case on the board arrives with the board itself.
      Derived during render rather than in an effect, so the new case is never
      painted for one frame before the scene that animates it in. */
-  const [swap, setSwap] = useState({ root: rootId, n: 0 });
-  if (swap.root !== rootId) setSwap({ root: rootId, n: swap.n + 1 });
+  /* Which way the last click sent the board, kept with the case it was sent to
+     so the swap below only reads it for that case: a pick from the tools menu
+     afterwards is a forward arrival, not a leftover backward one. */
+  const heading = useRef({ to: null, back: false });
 
-  /* Where a click on the drawing goes: the next top-level case, wrapping after
-     the last. Only with the chrome — on the dashboard, where the board is a
-     picture you flip through. The Case files deck is the case you are working
-     on, and a click there that changed it would be a click that lost your
-     place. The "Switch case" menu in the tools is the keyboard route. */
-  const nextCase = useMemo(() => {
+  const [swap, setSwap] = useState({ root: rootId, n: 0, back: false });
+  if (swap.root !== rootId) {
+    const back = heading.current.to === rootId && heading.current.back;
+    setSwap({ root: rootId, n: swap.n + 1, back });
+  }
+
+  /* Where a click on the drawing goes: left click the next top-level case,
+     right click the one before, wrapping at both ends. Only with the chrome —
+     on the dashboard, where the board is a picture you flip through. The Case
+     files deck is the case you are working on, and a click there that changed
+     it would be a click that lost your place. The "Switch case" menu in the
+     tools is the keyboard route. */
+  const around = useMemo(() => {
     if (!chrome || !onPickCase) return null;
     const list = (cases || []).filter((c) => c && !c.parentId);
     if (list.length < 2) return null;
-    const i = list.findIndex((c) => c.id === rootId);
-    return list[(i + 1) % list.length];
+    const i = Math.max(0, list.findIndex((c) => c.id === rootId));
+    return {
+      next: list[(i + 1) % list.length],
+      prev: list[(i - 1 + list.length) % list.length],
+    };
   }, [chrome, onPickCase, cases, rootId]);
+
+  const cycle = useCallback((back) => {
+    if (!around) return;
+    const to = back ? around.prev : around.next;
+    heading.current = { to: to.id, back };
+    onPickCase(to.id);
+  }, [around, onPickCase]);
 
   /* The run log. Every app with a canvas in it has one of these along the
      bottom, and ours has something true to put in it: what was logged on this
@@ -416,7 +435,7 @@ export default function CaseFlow({
       {/* --- the title bar ---------------------------------------------- */}
       {chrome ? (
       <header className="flow__bar">
-        <span key={`n${swap.n}`} className={cx('flow__name truncate', swap.n && 'is-swap')}>
+        <span key={`n${swap.n}`} className={cx('flow__name truncate', swap.n && 'is-swap', swap.back && 'is-back')}>
           {root ? root.name : 'No case'}
         </span>
         <span className="flow__count">
@@ -483,16 +502,20 @@ export default function CaseFlow({
         ) : null}
 
         <div
-          className={cx('flow__canvas', empty && 'is-empty', nextCase && 'is-cycling')}
+          className={cx('flow__canvas', empty && 'is-empty', around && 'is-cycling')}
           ref={hostRef}
           data-hot={hot ? '1' : undefined}
           onPointerLeave={() => setHot(null)}
-          onClick={nextCase ? () => onPickCase(nextCase.id) : undefined}
-          title={nextCase ? `Click for the next case: ${nextCase.name}` : undefined}
+          onClick={around ? () => cycle(false) : undefined}
+          /* The browser's own menu is given up over the drawing only, and
+             only on the dashboard — everywhere else right click is still
+             the browser's. */
+          onContextMenu={around ? (e) => { e.preventDefault(); cycle(true); } : undefined}
+          title={around ? `Click: ${around.next.name}\nRight click: ${around.prev.name}` : undefined}
         >
           <div
             key={`s${swap.n}`}
-            className={cx('flow__scene', swap.n && 'is-swap')}
+            className={cx('flow__scene', swap.n && 'is-swap', swap.back && 'is-back')}
             style={{
               width: `${width}px`,
               height: `${height}px`,

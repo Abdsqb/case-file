@@ -24,7 +24,7 @@ is written. It does nothing until you put an API key in `.env` yourself — see
 
 | | |
 |---|---|
-| **Dashboard** | A greeting and what is coming on the left; one card at a time on the right, paged with the wheel. The case structure comes first — click the drawing to move it on to the next case — then the clerk's chat, workload, recommendations, tracking, the weekly report and the completion rate. |
+| **Dashboard** | A greeting and what is coming on the left; one card at a time on the right, paged with the wheel. The case structure comes first — click the drawing for the next case, right-click for the one before — then the clerk's chat, workload, recommendations, tracking, the weekly report and the completion rate. |
 | **Case files** | The working screen. Create, rename, reorder and delete cases; add sub-cases; log entries with dates and priorities; nest subtasks under an entry. The entries take the left of the screen; the case structure stands on the right as a turned panel, with the seven readings of the case paged one at a time underneath it at the same angle. Only the one with the drawing on it turns further under the pointer. |
 | **Reporting** | Every open entry bucketed by due day — Overdue / This week / Later — plus a world-news feed from public RSS. |
 | **Calendar** | Two calendars over the same days. **Entries** is a month grid of every dated entry in the archive, coloured by how its deadline stands, and clicking one opens its case. **Classes** is a weekly timetable parsed from `src/data/class-calendar.ics`, with next class, today's agenda and term progress. |
@@ -68,10 +68,11 @@ Colour means state and nothing else: **white** open, **amber** due soon, **red**
 rest back, so one branch can be followed through a busy case without reading every card on
 the way.
 
-On the dashboard the drawing is something you flip through: **click anywhere on it** and
-the board moves on to the next case, wrapping after the last. The new case comes in from
-the left a column at a time — the case, then its entries, then their subtasks — the way
-the flow reads. The tools down the panel's left edge, and the Case files screen, where the
+On the dashboard the drawing is something you flip through: **click anywhere on it** for
+the next case and **right-click** for the one before, wrapping at both ends. The new case
+comes in a column at a time — the case, then its entries, then their subtasks — from the
+left going forward and from the right going back, so the slide says which way you went.
+Right-click gives up the browser's menu over the drawing only. The tools down the panel's left edge, and the Case files screen, where the
 drawing is the case you are working on, do not cycle.
 
 It is built as HTML cards over a single SVG of wires rather than as one drawing. Text in

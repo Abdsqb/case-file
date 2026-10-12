@@ -393,7 +393,6 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
               title bar, its own tools, its own log along the bottom. A card
               header above a panel header is a panel arguing with itself. */}
           <CaseFlow
-            overhang={0}
             cases={cases}
             rootId={activeCase ? activeCase.id : null}
             now={now}

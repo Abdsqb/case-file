@@ -18,6 +18,7 @@ import {
 } from '../ui/primitives.jsx'
 import { DotMatrix, MiniBars } from '../ui/charts.jsx'
 import CaseFlow from '../ui/CaseFlow.jsx'
+import FlowFullscreen from '../ui/FlowFullscreen.jsx'
 import useDeck from '../ui/useDeck.js'
 import { buildGraph } from '../lib/graph.js'
 import api from '../lib/api.js'
@@ -700,6 +701,10 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
   const [subComposer, setSubComposer] = useState(null)
   const [caseForm, setCaseForm] = useState(null) // { mode:'new'|'sub'|'rename', id, value }
   const [caseConfirm, setCaseConfirm] = useState(null)
+  /* The board, opened to the whole window by a click on it. The element
+     clicked is kept so the drawing can grow out of it and go back into it. */
+  const [boardFull, setBoardFull] = useState(false)
+  const boardFrom = useRef(null)
   const [matrixDays, setMatrixDays] = useState(28)
   // Which project's entries the list shows: the case itself, or one of its
   // sub-cases. null means the case itself.
@@ -1928,9 +1933,25 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
                 now={now}
                 focus={filter === 'open'}
                 chrome={false}
-                overhang={0}
+                onExpand={(e) => {
+                  boardFrom.current = e.currentTarget
+                  setBoardFull(true)
+                }}
                 className="caseboard__flow"
               />
+
+              {boardFull ? (
+                <FlowFullscreen
+                  cases={list}
+                  rootId={activeId}
+                  now={now}
+                  focus={filter === 'open'}
+                  title={caseName}
+                  subtitle={`${graph.nodes.length} ${graph.nodes.length === 1 ? 'step' : 'steps'}`}
+                  from={boardFrom.current}
+                  onClose={() => setBoardFull(false)}
+                />
+              ) : null}
 
               <div className="card__foot">
                 <span className="nowrap">{nextDueText}</span>

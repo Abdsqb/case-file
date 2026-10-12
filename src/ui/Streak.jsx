@@ -29,6 +29,11 @@
 
 import { useEffect, useRef } from 'react';
 import { STANDBY_EVENT } from './Standby.jsx';
+
+/* Anything that lays a blur over the whole window can hold the streak still
+   while it is up — the board opened full window does. Its own event rather
+   than standby's, so standby waking underneath cannot restart it. */
+export const STREAK_HOLD_EVENT = 'casefile:streak-hold';
 import { createStreakGL } from './streakGL.js';
 import { KEY_ACCENT, readAccent, useSetting } from '../views/Settings.jsx';
 
@@ -457,8 +462,9 @@ export default function Streak({ view }) {
        left alone, for as long as it is left. */
     let pausedAt = 0;
     let asleep = false;
+    let held = false;
     const start = () => {
-      if (raf || still || asleep || document.hidden) return;
+      if (raf || still || asleep || held || document.hidden) return;
       /* Picked up from where it left off rather than jumping ahead by however
          long it was stopped, so coming back does not snap the bundle into
          another shape. */
@@ -485,6 +491,10 @@ export default function Streak({ view }) {
       asleep = Boolean(e.detail && e.detail.on);
       if (asleep) stop(); else start();
     };
+    const onHold = (e) => {
+      held = Boolean(e.detail && e.detail.on);
+      if (held) stop(); else start();
+    };
     const onResize = () => {
       resize();
       /* Resizing a canvas clears it. Running, the next frame repaints it;
@@ -504,6 +514,7 @@ export default function Streak({ view }) {
     window.addEventListener('resize', onResize, { passive: true });
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener(STANDBY_EVENT, onStandby);
+    window.addEventListener(STREAK_HOLD_EVENT, onHold);
     if (!still) window.addEventListener('pointermove', onMove, { passive: true });
 
     return () => {
@@ -512,6 +523,7 @@ export default function Streak({ view }) {
       window.removeEventListener('resize', onResize);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener(STANDBY_EVENT, onStandby);
+      window.removeEventListener(STREAK_HOLD_EVENT, onHold);
       window.removeEventListener('pointermove', onMove);
     };
   }, [accentId]);

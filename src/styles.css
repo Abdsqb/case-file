@@ -5927,6 +5927,196 @@ button.entry__title:hover { color: var(--fg); }
 .flow__canvas.is-cycling { cursor: pointer; }
 .flow__canvas.is-cycling .flow__node { cursor: inherit; }
 
+/* On the Case files board a click opens the drawing to the whole window. */
+.flow__canvas.is-expandable { cursor: zoom-in; }
+.flow__canvas.is-expandable .flow__node { cursor: inherit; }
+
+/* --- the board, full window ------------------------------------------------
+   FlowFullscreen. See the component for why the veil, the morph and the tilt
+   are three elements: only the veil and the bar ever fade, because an opacity
+   on anything holding the drawing flattens it. */
+.flowfull {
+  position: fixed;
+  inset: 0;
+  z-index: 230;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The page, blurred and dimmed a little, and nothing else. The streak is held
+   still while this is up (STREAK_HOLD_EVENT), so the blur is worked out once
+   rather than on every frame of the light moving behind it. */
+.flowfull__veil {
+  position: absolute;
+  inset: 0;
+  background: rgba(var(--overlay-rgb), 0.18);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  opacity: 0;
+  transition: opacity 380ms ease;
+}
+
+.flowfull.is-on .flowfull__veil { opacity: 1; }
+
+.flowfull__bar {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 28px 18px;
+  opacity: 0;
+  translate: 0 -6px;
+  transition: opacity 260ms ease, translate 260ms ease;
+}
+
+.flowfull.is-on .flowfull__bar {
+  opacity: 1;
+  translate: none;
+  transition-delay: 160ms;
+}
+
+.flowfull__titles {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.flowfull__kicker,
+.flowfull__sub,
+.flowfull__hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.flowfull__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.flowfull__hint {
+  margin-left: auto;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.flowfull__close {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: rgba(var(--overlay-rgb), 0.6);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 180ms ease, border-color 180ms ease;
+}
+
+.flowfull__close:hover,
+.flowfull__close:focus-visible { color: var(--text); border-color: var(--accent-edge); }
+
+/* Clicks through the padding land on the veil, which closes. */
+.flowfull__stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  padding: 20px 48px 48px;
+  pointer-events: none;
+}
+
+.flowfull__morph {
+  flex: 1 1 auto;
+  display: flex;
+  min-width: 0;
+  transform-origin: 0 0;
+  perspective: 1800px;
+  perspective-origin: 50% 45%;
+  transform-style: preserve-3d;
+  pointer-events: auto;
+}
+
+/* The lean toward the pointer. Small, because the drawing is the size of the
+   window and a few degrees at that size is a lot of movement at the edges. */
+.flowfull__tilt {
+  flex: 1 1 auto;
+  display: flex;
+  min-width: 0;
+  transform-style: preserve-3d;
+  transform:
+    rotateY(calc(var(--gx, 0) * 5deg))
+    rotateX(calc(var(--gy, 0) * -4deg));
+  transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.flowfull__flow { flex: 1 1 auto; }
+
+/* Every layer between the tilt and the cards passes the third dimension down,
+   the same chain .flowcard keeps on the board. */
+.flowfull .flow,
+.flowfull .flow__body,
+.flowfull .flow__canvas,
+.flowfull .flow__scene { transform-style: preserve-3d; }
+
+.flowfull .flow,
+.flowfull .flow__canvas { overflow: visible; }
+
+/* The wires lie on the sheet; the cards stand off it, so the tilt moves the
+   two against each other — which is the whole of the parallax. No backdrop
+   blur on the cards: they are solid, and twenty small blurs would each be
+   redone as the drawing leans. */
+.flowfull .flow__tag { transform: translateZ(18px); }
+
+.flowfull .flow__node {
+  transform: translateZ(40px);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: rgba(var(--solid-rgb), 0.97);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 6px -2px rgba(0, 0, 0, 0.7),
+    0 30px 50px -22px rgba(0, 0, 0, 0.95);
+}
+
+.flowfull .flow__node--case { background: rgba(var(--solid-hi-rgb), 0.97); }
+
+.flowfull .flow__node[data-lit='hot'] { transform: translateZ(64px); }
+
+.flowfull .flow__canvas.is-expandable { cursor: zoom-out; }
+
+/* The handover between the board's drawing and this one. The board's is turned
+   and this one is flat, so instead of one replacing the other in a frame they
+   crossfade where they overlap — as the drawing leaves the board, and again as
+   it lands back on it. The leaves fade, never the layers: an opacity on the
+   board or the scene would flatten the 3D of everything in it. The cards
+   already transition their opacity (the hover dim); the wires and labels are
+   given the same. */
+.caseboard .flow__wires,
+.caseboard .flow__tag,
+.flowfull .flow__wires,
+.flowfull .flow__tag { transition: opacity 220ms ease; }
+
+.caseboard.is-lifted .flow__scene > *,
+.flowfull:not(.is-shown) .flow__scene > * { opacity: 0; }
+
+[data-motion='reduced'] .flowfull__tilt { transform: none; transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .flowfull__tilt { transform: none; transition: none; }
+  .flowfull__veil, .flowfull__bar { transition: none; }
+}
+
 /* --- the log --------------------------------------------------------------
    "last runs" in the reference, and ours has something true to put in it. */
 .flow__runs {

@@ -25,7 +25,7 @@ is written. It does nothing until you put an API key in `.env` yourself — see
 | | |
 |---|---|
 | **Dashboard** | A greeting and what is coming on the left; one card at a time on the right, paged with the wheel. The case structure comes first — click the drawing for the next case, right-click for the one before — then the clerk's chat, workload, recommendations, tracking, the weekly report and the completion rate. |
-| **Case files** | The working screen. Create, rename, reorder and delete cases; add sub-cases; log entries with dates and priorities; nest subtasks under an entry. The entries take the left of the screen; the case structure stands on the right as a turned panel, with the seven readings of the case paged one at a time underneath it at the same angle. Only the one with the drawing on it turns further under the pointer. |
+| **Case files** | The working screen. Create, rename, reorder and delete cases; add sub-cases; log entries with dates and priorities; nest subtasks under an entry. The entries take the left of the screen; the case structure stands on the right as a turned panel, with the seven readings of the case paged one at a time underneath it at the same angle. Only the one with the drawing on it turns further under the pointer. Click the drawing to open the whole case full window. |
 | **Reporting** | Every open entry bucketed by due day — Overdue / This week / Later — plus a world-news feed from public RSS. |
 | **Calendar** | Two calendars over the same days. **Entries** is a month grid of every dated entry in the archive, coloured by how its deadline stands, and clicking one opens its case. **Classes** is a weekly timetable parsed from `src/data/class-calendar.ics`, with next class, today's agenda and term progress. |
 | **Flashcards** | Import a deck from a `.json` file or pasted text — or paste a lecture and have the clerk draft one — file it under a course, and review it on an SM-2 spaced schedule. The scheduling is offline SM-2 and always has been; only drafting a new deck calls a model, and only when you ask it to. |
@@ -74,6 +74,17 @@ comes in a column at a time — the case, then its entries, then their subtasks 
 left going forward and from the right going back, so the slide says which way you went.
 Right-click gives up the browser's menu over the drawing only. The tools down the panel's left edge, and the Case files screen, where the
 drawing is the case you are working on, do not cycle.
+
+On Case files a click lifts the drawing out of the board instead: it grows from where it
+sat to fill the window, over a blur of the page, and is allowed past its natural size, so
+a busy case that has to shrink to fit the board can be read whole. It leans a few degrees
+toward the pointer, and because the cards stand off the wires the two slide against each
+other as it does. Esc, the close button or another click sends it back into the board the
+way it came. The grow is one transform run from the board's box to the window's, the blur
+is the only layer that fades (an opacity on the drawing would flatten it), and the streak
+is held still while it is up so the full-window blur is not redone on every frame.
+
+On both screens the drawing sits in the middle of its panel, scaled to fit.
 
 It is built as HTML cards over a single SVG of wires rather than as one drawing. Text in
 SVG cannot wrap, cannot ellipsis and does not inherit the app's type scale, and a card full

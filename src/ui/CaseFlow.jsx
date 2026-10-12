@@ -163,6 +163,14 @@ export default function CaseFlow({
      which is what says it is standing in front of the panel rather than
      printed on it. null centres it as before. */
   overhang = null,
+  /* A click on the drawing opens it larger — the Case files board, where the
+     drawing is turned and small and a busy case is hard to read. On the
+     dashboard a click cycles the case instead, and that wins. */
+  onExpand = null,
+  expandTitle = 'Click to see the whole case',
+  /* How far past natural size the drawing may scale to fill its box. 1 on the
+     panels (see MAX_SCALE); the full-window view lets a small case grow. */
+  maxScale = MAX_SCALE,
   className = '',
 }) {
   const data = useMemo(
@@ -284,7 +292,7 @@ export default function CaseFlow({
     const bh = host.clientHeight;
     if (!bw || !bh || !width || !height) return;
     if (overhang == null) {
-      const s = Math.min(MAX_SCALE, bw / width, bh / height);
+      const s = Math.min(maxScale, bw / width, bh / height);
       setFit({ s, ox: (bw - width * s) / 2, oy: (bh - height * s) / 2 });
       return;
     }
@@ -299,11 +307,11 @@ export default function CaseFlow({
     if (el !== panel) inset = 0;
     /* The room the overhang and the inset give back is room the drawing may
        use, so it fits a little larger by that much. */
-    const s = Math.min(MAX_SCALE, (bw + inset + overhang) / width, bh / height);
+    const s = Math.min(maxScale, (bw + inset + overhang) / width, bh / height);
     /* The first card's edge is PAD in from the drawing's, so the anchor is
        that card, not the drawing's invisible margin. */
     setFit({ s, ox: -PAD * s - inset - overhang, oy: (bh - height * s) / 2 });
-  }, [width, height, overhang]);
+  }, [width, height, overhang, maxScale]);
 
   useLayoutEffect(() => { measure(); }, [measure]);
 
@@ -502,16 +510,23 @@ export default function CaseFlow({
         ) : null}
 
         <div
-          className={cx('flow__canvas', empty && 'is-empty', around && 'is-cycling')}
+          className={cx(
+            'flow__canvas',
+            empty && 'is-empty',
+            around && 'is-cycling',
+            !around && onExpand && !empty && 'is-expandable',
+          )}
           ref={hostRef}
           data-hot={hot ? '1' : undefined}
           onPointerLeave={() => setHot(null)}
-          onClick={around ? () => cycle(false) : undefined}
+          onClick={around ? () => cycle(false) : onExpand && !empty ? onExpand : undefined}
           /* The browser's own menu is given up over the drawing only, and
              only on the dashboard — everywhere else right click is still
              the browser's. */
           onContextMenu={around ? (e) => { e.preventDefault(); cycle(true); } : undefined}
-          title={around ? `Click: ${around.next.name}\nRight click: ${around.prev.name}` : undefined}
+          title={around
+            ? `Click: ${around.next.name}\nRight click: ${around.prev.name}`
+            : onExpand && !empty ? expandTitle : undefined}
         >
           <div
             key={`s${swap.n}`}

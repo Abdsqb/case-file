@@ -35,57 +35,20 @@ import { STANDBY_EVENT } from './Standby.jsx';
    than standby's, so standby waking underneath cannot restart it. */
 export const STREAK_HOLD_EVENT = 'casefile:streak-hold';
 import { createStreakGL } from './streakGL.js';
-import { KEY_ACCENT, readAccent, useSetting } from '../views/Settings.jsx';
+import { backdropById, buildStrands, LAMP_STOPS, readColours } from './backdrops.js';
+import { KEY_ACCENT, KEY_BACKDROP, readAccent, readBackdrop, useSetting } from '../views/Settings.jsx';
 
 /* Screens that are mostly content. The streak stays, at a fraction of its
    weight, because a wall of rows over a bright strand is hard to read. */
 const DENSE = new Set(['reporting', 'settings', 'flashcards', 'cases']);
 
-const STRANDS = 118;
-const STRANDS_SMALL = 52;
-const PARTICLES = 18;
+const PARTICLES = 36;
 
 /* How long one full undulation takes, give or take — the strands are on
    several frequencies, so the bundle never quite repeats. */
-const CYCLE_MS = 11000;
+const CYCLE_MS = 9000;
 
 const MAX_PARALLAX = 20;
-
-/* The strands' lamp: how bright a strand is by its distance from the fold, as
-   a fraction of the lamp's radius. Shared by both painters. */
-const LAMP_STOPS = [[0, 1], [0.06, 0.92], [0.22, 0.5], [0.52, 0.16], [1, 0]];
-
-/* ---- gradient noise ------------------------------------------------------
-   One dimension is all this needs: every strand reads its own slice of the
-   same drifting field, offset by its index. Hashed gradients with a smoothstep
-   between them — the real thing, not summed sines, which beat against each
-   other and give the bundle a pulse you can count. */
-const PERM = new Uint8Array(512);
-(() => {
-  const p = new Uint8Array(256);
-  for (let i = 0; i < 256; i += 1) p[i] = i;
-  /* A fixed shuffle. The field has to be the same on every load, or the
-     bundle would be a different shape each time the app started. */
-  let seed = 1337;
-  for (let i = 255; i > 0; i -= 1) {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    const j = seed % (i + 1);
-    const t = p[i]; p[i] = p[j]; p[j] = t;
-  }
-  for (let i = 0; i < 512; i += 1) PERM[i] = p[i & 255];
-})();
-
-const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
-
-function noise(x) {
-  const i = Math.floor(x) & 255;
-  const f = x - Math.floor(x);
-  /* Gradients in one dimension are just a sign and a magnitude. */
-  const g0 = (PERM[i] & 15) / 7.5 - 1;
-  const g1 = (PERM[i + 1] & 15) / 7.5 - 1;
-  const u = fade(f);
-  return (g0 * f) * (1 - u) + (g1 * (f - 1)) * u;
-}
 
 /* Cubic bezier, one axis. */
 function bez(a, b, c, d, t) {
@@ -99,11 +62,16 @@ export default function Streak({ view }) {
      stylesheet at mount, so a new accent needs a new mount. readAccent()
      normalises a junk stored value to the one the stylesheet is showing. */
   useSetting(KEY_ACCENT, '');
+  useSetting(KEY_BACKDROP, '');
   const accentId = readAccent();
+  const backdropId = readBackdrop();
 
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return undefined;
+    const backdrop = backdropById(backdropId);
+    /* Lights Out: nothing to draw and nothing to run. */
+    if (backdrop.off) return undefined;
 
     const still =
       document.documentElement.dataset.motion === 'reduced' ||
@@ -125,63 +93,15 @@ export default function Streak({ view }) {
 
     const build = () => {
       const small = W < 760;
-      const n = small ? STRANDS_SMALL : STRANDS;
-      strands = [];
-      for (let i = 0; i < n; i += 1) {
-        const t = n === 1 ? 0.5 : i / (n - 1);
-        /* Signed position across the bundle. Squaring the magnitude crowds the
-           strands toward the core and throws the outliers wide, which is what
-           gives a bundle an edge instead of a boundary. */
-        const u = t * 2 - 1;
-        const spread = Math.sign(u) * Math.pow(Math.abs(u), 1.7);
-        /* A strand's own character, fixed at build and never animated.
-           ------------------------------------------------------------------
-           Without these every strand is the same curve at a different offset,
-           and a hundred copies of one curve read as a ribbon: smooth, even,
-           and dead. Giving each one its own turn radius, its own entry angle
-           and its own place along the fold is what makes the bundle look spun
-           rather than printed — strands cross each other, some whip round the
-           turn tight while their neighbours swing wide, and the fold gets an
-           edge made of a hundred different curves instead of one.
-
-           Hashed off the index rather than random, so the picture is the same
-           every time the app starts. */
-        const h = (k) => {
-          const v = Math.sin((i + 1) * k) * 43758.5453;
-          return v - Math.floor(v);
-        };
-        const curl = 0.62 + h(12.9898) * 0.95;
-        const drift = h(78.233) * 2 - 1;
-        const rake = h(39.425) * 2 - 1;
-        const flare = 0.7 + h(93.989) * 0.8;
-
-        strands.push({
-          u,
-          spread,
-          curl,
-          drift,
-          rake,
-          flare,
-          /* Its own slice of the noise field, and its own clock. Without this
-             the whole bundle would wave in lockstep like a flag. */
-          seed: i * 1.37 + (i % 7) * 0.41,
-          phase: (i / n) * Math.PI * 2,
-          /* Thicker and brighter toward the core. */
-          width: 0.6 + (1 - Math.abs(u)) * 0.9,
-          alpha: 0.07 + (1 - Math.abs(u)) * 0.53,
-          /* Mostly the accent. A few strands take the cooler tint and a few go
-             pale, which is what stops a hundred lines of one colour reading as
-             a flat wash. */
-          hue: i % 11 === 0 ? 'cool' : i % 7 === 0 ? 'pale' : 'main',
-        });
-      }
+      strands = buildStrands(backdrop, W);
       particles = [];
-      for (let i = 0; i < (small ? 8 : PARTICLES); i += 1) {
+      for (let i = 0; i < (small ? 14 : PARTICLES); i += 1) {
         particles.push({
           strand: Math.floor((i / PARTICLES) * strands.length),
           p: Math.random(),
-          speed: 0.012 + Math.random() * 0.03,
-          size: 0.7 + Math.random() * 0.9,
+          speed: 0.015 + Math.random() * 0.04,
+          size: 0.9 + Math.random() * 1.4,
+          twinkle: Math.random() * Math.PI * 2,
         });
       }
     };
@@ -200,79 +120,9 @@ export default function Streak({ view }) {
       build();
     };
 
-    /* One strand at one moment, as two cubics joined at the turn.
-     *
-     * A hairpin cannot be one cubic: a cubic cannot reverse direction and come
-     * back alongside itself. Two can, and they join cleanly if both of the
-     * controls either side of the apex sit on the same vertical line through
-     * it. The strand is then travelling straight down as it passes the turn,
-     * which is exactly what a hairpin does.
-     *
-     *            A0  (off the top right, far out for the wide strands)
-     *              .
-     *               A1
-     *                .
-     *        A2 --,     (A2 directly above the apex)
-     *             T     the apex
-     *        B1 --'     (B1 directly below it)
-     *                .
-     *                 B2 ----- B3  (off the right edge again)
-     *
-     * How far out a strand rides decides everything about it: how far left it
-     * reaches, how wide it turns, and how high above the screen it starts. The
-     * core strands turn tight and the outer ones swing wide, which is what
-     * makes the bundle a bundle rather than a hundred parallel lines. */
-    const shape = (s, time, fx, fy) => {
-      const n1 = noise(s.seed + time * 0.42);
-      const n2 = noise(s.seed * 1.7 + 40 + time * 0.31);
-      const n3 = noise(s.seed * 0.6 + 90 + time * 0.23);
-      const swing = Math.sin(time * 1.6 + s.phase) * 0.5 + 0.5;
-
-      /* Unsigned: both sides of the bundle fold the same way round the turn.
-         The sign is spent on which of the two sheets a strand lies in. */
-      const a = Math.abs(s.spread);
-      const side = s.spread < 0 ? -1 : 1;
-
-      /* The apex. The wide strands reach further left and sit a little lower,
-         which fans the fold into a teardrop instead of stacking every turn on
-         the same point. */
-      /* Where this strand turns. The fold is not a point: the apexes are
-         strung out along a short diagonal, which is what gives the bright
-         part of the picture a LENGTH — a caustic you can follow rather than a
-         dot everything is aimed at. */
-      const tx = fx - a * W * 0.042 + s.drift * W * 0.028 + n3 * W * 0.012;
-      const ty = fy + a * H * 0.035 + s.drift * H * 0.032 + side * a * H * 0.018;
-
-      /* The radius of the turn. Tight at the core: a small radius against a
-         wide separation between the two sheets is what makes the fold come to
-         a point instead of rounding off into a bowl. Scaled by the strand's
-         own curl, so neighbours whip round at different radii and cross. */
-      const e = H * (0.055 + a * 0.25 + swing * 0.015) * s.curl;
-
-      /* Straight above and straight below, so the strand is heading down as it
-         passes the apex and the two halves meet without a corner. */
-      const ax2 = tx + n1 * W * 0.006;
-      const ay2 = ty - e;
-      const bx1 = tx + n2 * W * 0.006;
-      const by1 = ty + e * (0.64 + s.rake * 0.2);
-
-      /* In from the upper right. The further out a strand rides the higher and
-         further right it enters, so the top of the screen fills with the wide
-         ones arriving while the core is already round the turn. */
-      const ax1 = W * (0.44 + a * 0.3 + s.rake * 0.1) + n2 * W * 0.055;
-      const ay1 = ay2 - H * (0.11 + a * 0.26) * s.flare;
-      const ax0 = W * (1.1 + a * 0.25 + s.rake * 0.12);
-      const ay0 = ay1 - H * (0.3 + a * 0.8) * s.flare + n1 * H * 0.13;
-
-      /* And out again, flatter than it came in: the lower sheet of the fold
-         runs back across the screen rather than dropping off the bottom. */
-      const bx2 = W * (0.4 + a * 0.26 - s.rake * 0.14) + n3 * W * 0.07;
-      const by2 = by1 + H * (0.05 + a * 0.12) * s.flare + n2 * H * 0.05;
-      const bx3 = W * (1.15 + a * 0.22 - s.rake * 0.1);
-      const by3 = by2 + H * (0.08 + a * 0.38) * s.flare + n3 * H * 0.1;
-
-      return [ax0, ay0, ax1, ay1, ax2, ay2, tx, ty, bx1, by1, bx2, by2, bx3, by3];
-    };
+    /* One strand at one moment, as two cubics joined end to end: how it is
+       laid out is the backdrop's business (backdrops.js). */
+    const shape = (s, time, fx, fy) => backdrop.shape(s, time, fx, fy, W, H);
 
     /* A point along the whole fold, nose to tail, as one 0..1 -- the first
        half is the upper sheet, the second the lower. Used by the motes. */
@@ -286,35 +136,12 @@ export default function Streak({ view }) {
     };
 
     /* Read from the stylesheet, once per mount — and the effect remounts when
-     * the accent changes.
-     *
-     * Every colour in this app is written down in exactly one place, and the
-     * canvas is not exempt: hard-coding the strands here is how the light ends
-     * up the wrong colour three months after someone moves the accent. Parsed
-     * to channels once rather than per frame — a canvas wants numbers, and
-     * resolving a custom property sixty times a second for a hundred strands
-     * is the kind of thing that quietly doubles a frame. */
-    const token = (name, fallback) => {
-      const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-      const hex = /^#([0-9a-f]{6})$/i.exec(raw);
-      if (!hex) return fallback;
-      const n = parseInt(hex[1], 16);
-      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-    };
-
-    const accent = token('--accent', [169, 139, 255]);
-    const COLOURS = {
-      main: accent,
-      cool: token('--accent-cool', [110, 140, 255]),
-      pale: token('--text', [241, 239, 246]),
-    };
-    /* The bloom and the motes are the accent at its brightest — the same
-       colour the strands are, lifted toward white. */
-    const lift = (c, k) => c.map((v) => Math.round(v + (255 - v) * k));
-    const hot = lift(accent, 0.3);
+       the accent changes. */
+    const palette = readColours();
+    const COLOURS = { main: palette.main, cool: palette.cool, pale: palette.pale };
+    const hot = palette.hot;
     const BLOOM = `${hot[0]}, ${hot[1]}, ${hot[2]}`;
-    /* The glow at the fold: [offset, colour, alpha]. */
-    const BLOOM_STOPS = [[0, hot, 0.26], [0.12, accent, 0.1], [0.4, accent, 0.03], [1, [0, 0, 0], 0]];
+    const BLOOM_STOPS = palette.bloomStops;
 
     /* WebGL if it will start, Canvas 2D if not. The picture is the same
        either way; see streakGL.js for why the first exists at all. */
@@ -323,6 +150,7 @@ export default function Streak({ view }) {
       bloomStops: BLOOM_STOPS,
       colours: COLOURS,
       moteColour: hot,
+      fx: backdrop.fx,
     });
     const ctx = glr ? null : canvas.getContext('2d', { alpha: true });
     if (!glr && !ctx) return undefined;
@@ -346,11 +174,11 @@ export default function Streak({ view }) {
       /* Where the fold turns. Left of centre and low, so the bundle crosses
          the screen on the diagonal and the turn sits under the greeting
          rather than across the middle of it. */
-      const fx = W * 0.26 + at.x;
-      const fy = H * 0.68 + at.y;
+      const fx = W * backdrop.focus[0] + at.x;
+      const fy = H * backdrop.focus[1] + at.y;
 
-      const R = Math.max(W, H) * 0.62;
-      const bloomR = Math.max(W, H) * 0.22;
+      const R = Math.max(W, H) * backdrop.lamp;
+      const bloomR = Math.max(W, H) * backdrop.bloom;
 
       curves.length = strands.length;
       for (let i = 0; i < strands.length; i += 1) curves[i] = shape(strands[i], time, fx, fy);
@@ -364,12 +192,14 @@ export default function Streak({ view }) {
         p.p += p.speed * (dt / 1000);
         if (p.p > 1) p.p -= 1;
         const [x, y] = along(curves[i], p.p);
-        /* Brightest at the fold, like everything else here. */
-        const lit = Math.max(0, 1 - Math.abs(p.p - 0.5) * 3.2);
-        motes.push({ x, y, r: p.size, a: 0.10 + lit * 0.5 });
+        /* Brightest near the focus, like everything else here, and each one
+           glinting on its own beat. */
+        const lit = Math.max(0, 1 - Math.hypot(x - fx, y - fy) / (R * 0.4));
+        const glint = 0.7 + 0.3 * Math.sin(now * 0.004 + p.twinkle);
+        motes.push({ x, y, r: p.size, a: (0.14 + lit * 0.6) * glint });
       }
 
-      if (glr) glr.paint({ W, H, dpr, fx, fy, R, bloomR, strands, curves, motes });
+      if (glr) glr.paint({ W, H, dpr, fx, fy, R, bloomR, strands, curves, motes, time: (now - t0) / 1000 });
       else paint2d(fx, fy, R, bloomR);
     };
 
@@ -526,7 +356,10 @@ export default function Streak({ view }) {
       window.removeEventListener(STREAK_HOLD_EVENT, onHold);
       window.removeEventListener('pointermove', onMove);
     };
-  }, [accentId]);
+  }, [accentId, backdropId]);
+
+  /* Nothing behind the glass at all: no canvas, no context, no loop. */
+  if (backdropById(backdropId).off) return null;
 
   return (
     <canvas

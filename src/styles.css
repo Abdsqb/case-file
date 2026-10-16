@@ -2872,6 +2872,76 @@ button.entry__title:hover { color: var(--fg); }
     0 0 16px -2px rgba(var(--accent-rgb), 0.55);
 }
 
+/* The background picker: a live miniature of each backdrop over its name.
+   The miniature sits on the page colour, not the card's glass, so it reads as
+   a window onto the real thing. */
+.backdrop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.backdrop-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-sm) + 4px);
+  background: var(--card-hi);
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+.backdrop-tile:hover { border-color: var(--border-strong); }
+.backdrop-tile:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.45); }
+.backdrop-tile[aria-checked='true'] {
+  border-color: var(--accent-edge);
+  background: var(--accent-faint);
+  box-shadow: 0 0 24px -8px var(--accent-glow);
+}
+
+.backdrop-tile__view {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  /* the same falloff the vignette gives the real one */
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.55);
+}
+.backdrop-tile__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.backdrop-tile__off {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--fg-dim);
+}
+
+.backdrop-tile__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 6px;
+  min-width: 0;
+}
+.backdrop-tile__name { font-size: 13.5px; font-weight: 500; }
+.backdrop-tile__line { font-size: 11.5px; color: var(--fg-mid); line-height: 1.35; }
+.backdrop-tile[aria-checked='true'] .backdrop-tile__name { color: var(--accent-hover); }
+
 /* --------------------------------------------------------------------------
    14. REDUCED MOTION — kills every animation and transition
    -------------------------------------------------------------------------- */
@@ -4189,125 +4259,135 @@ button.entry__title:hover { color: var(--fg); }
 }
 
 /* --------------------------------------------------------------------------
-   THE CASE BAR — folders inline, collapsible
-   One bar, not two. A folder is a chip in the strip that opens to reveal its
-   cases beside it and shuts to hide them, so collapsing is what shortens the
-   bar. Each open folder holds its own Segmented, which is why the sliding thumb
-   and drag-to-reorder still work inside one: Segmented renders no thumb when
-   the active value is not among its own items, so several can sit side by side
-   and only the one holding the open case shows it.
+   THE CASE BAR — one folder at a time
+   A switcher on the left says which folder the bar is showing and opens a menu
+   of the others; that folder's cases follow as plain tabs, the open one
+   underlined. The underline is Segmented's sliding thumb restyled, so it still
+   glides from case to case and drag-to-reorder still works. The whole bar sits
+   on one hairline, and the underline is drawn over it.
    -------------------------------------------------------------------------- */
 
 .casebar {
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+
+.casebar__left,
+.casebar__right {
   display: flex;
+  min-width: 0;
+}
+.casebar__left { flex: 1 1 auto; align-items: flex-end; gap: 22px; }
+.casebar__right { flex: none; align-items: center; gap: 4px; padding-bottom: 8px; }
+
+/* The folder switcher: its face is the folder, its count, and a caret. */
+.casepick {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.casefold {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-  padding: 2px;
-  /* Transparent rather than absent, so a hover cannot shift the row by a pixel.
-     The tinted background is what reads as "these belong together" — an outline
-     bright enough to group them was brighter than anything else in the bar. */
-  border: 1px solid transparent;
-  border-radius: calc(var(--radius) + 2px);
+  flex: none;
+  max-width: 260px;
+  height: 34px;
+  margin-bottom: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   background: var(--card-hi);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
   transition: border-color 160ms ease, background-color 160ms ease;
 }
-.casefold:hover { border-color: var(--line); }
-/* Holding the open case is carried by the folder's own label going bright (see
-   .holds-active .casefold__tab below), not by outlining the whole cluster. */
+.casepick:hover,
+.casepick.is-open {
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.06);
+}
+.casepick:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: 2px; }
+.casepick__icon { flex: none; color: var(--fg-mid); }
+.casepick__name { min-width: 0; }
+.casepick__n {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.casepick__chev { flex: none; color: var(--fg-dim); }
 
-.casefold__tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* The tabs: no track, no pill — text, and a line under the open one. */
+.segmented--tabs {
+  position: relative;
+  flex: 0 1 auto;
   min-width: 0;
-  padding: 6px 9px;
+  gap: 24px;
+  padding: 0;
+  margin-bottom: -1px;
+  background: none;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: 0;
+}
+.segmented--tabs .segmented__item {
+  border-radius: 0;
+  font-size: 13.5px;
+  color: var(--fg-mid);
+}
+.segmented--tabs .segmented__item:hover,
+.segmented--tabs .segmented__item--active { color: var(--fg); }
+.segmented--tabs .segmented__btn {
+  height: 50px;
+  padding: 0;
+  border-radius: 0;
+}
+.segmented--tabs .segmented__menu { padding: 0 0 0 2px; }
+.segmented--tabs .segmented__thumb {
+  top: auto;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--glow);
+  box-shadow: 0 0 12px -2px var(--accent-glow);
+}
+
+.casebar__empty { padding-bottom: 18px; white-space: nowrap; }
+
+/* Focus, as an icon: lit when it is filtering. */
+.casebar__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: none;
   color: var(--fg-mid);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.02em;
   transition: color 160ms ease, background-color 160ms ease;
 }
-.casefold__tab:hover { color: var(--fg); background: var(--line-soft); }
-.casefold__tab:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: -1px; }
-.casefold.holds-active .casefold__tab { color: var(--fg); }
+.casebar__icon:hover { color: var(--fg); background: var(--line-soft); }
+.casebar__icon.is-on { color: var(--glow); background: var(--accent-wash); }
+.casebar__icon:focus-visible { outline: 1px solid var(--fg-mid); outline-offset: 2px; }
 
-.casefold__chev {
-  flex: none;
-  color: var(--fg-dim);
-  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms ease;
-}
-.casefold__chev.is-open { transform: rotate(90deg); }
-.casefold__tab:hover .casefold__chev { color: var(--fg); }
-
-.casefold__name { font-size: 12px; }
-
-/* The count only appears when shut — open, the cases speak for themselves. */
-.casefold__n {
-  flex: none;
-  min-width: 16px;
-  padding: 1px 5px;
-  border-radius: 999px;
+.casebar__rule {
+  width: 1px;
+  height: 18px;
+  margin: 0 8px;
   background: var(--line);
-  color: var(--fg-mid);
-  font-size: 10px;
-  line-height: 1.5;
-  text-align: center;
+}
+
+/* MenuButton's rows: the name, a quiet count, then the check. */
+.menu-pop__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-pop__meta {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-dim);
   font-variant-numeric: tabular-nums;
 }
-
-.casefold .iconmenu { flex: none; }
-
-/* The collapsing half. Animating grid-template-columns 1fr -> 0fr is the only
-   way to reach "however wide the contents are" without measuring in JS, and it
-   runs on a click rather than every frame, so the cost never shows. */
-.casefold__wrap {
-  display: grid;
-  grid-template-columns: 1fr;
-  min-width: 0;
-  transition: grid-template-columns 260ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.casefold.is-shut .casefold__wrap { grid-template-columns: 0fr; }
-
-.casefold__inner {
-  overflow: hidden;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-}
-.casefold.is-shut .casefold__inner { opacity: 0; transition: opacity 140ms ease; }
-
-/* The nested strip loses its own frame — the folder already provides one. */
-.casefold .segmented {
-  border: 0;
-  background: none;
-  padding: 0;
-}
-
-.casefold__empty { padding: 0 8px; white-space: nowrap; }
-
-.casebar__add { flex: none; }
-
-@media (prefers-reduced-motion: reduce) {
-  .casefold__wrap,
-  .casefold__inner,
-  .casefold__chev { transition: none !important; }
-}
-[data-motion="reduced"] .casefold__wrap,
-[data-motion="reduced"] .casefold__inner,
-[data-motion="reduced"] .casefold__chev { transition: none !important; }
 
 /* --------------------------------------------------------------------------
    CASE FILES — the entries, the board, and the readings

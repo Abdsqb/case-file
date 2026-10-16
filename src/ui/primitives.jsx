@@ -473,6 +473,104 @@ export function IconMenu({ items, label = 'More actions', align = 'end', classNa
 }
 
 /* ------------------------------------------------------------------ *
+ * MenuButton
+ * ------------------------------------------------------------------ */
+
+/* IconMenu's menu behind a trigger the caller draws — for a control whose face
+ * says what it holds (a folder name and its count) rather than three dots.
+ *
+ * Items are { key, label, meta, on, danger, disabled, onClick }, or { sep: true }
+ * for a rule. `on` marks the current choice: it gets the check and is where
+ * focus lands when the menu opens. `meta` is a quiet value on the right. */
+export function MenuButton({ items, label, className, children, align = 'start', disabled = false }) {
+  const [open, setOpen] = useState(false)
+  const triggerRef = useRef(null)
+  const menuRef = useRef(null)
+  const list = items || []
+
+  const close = useCallback(() => setOpen(false), [])
+  const closeAndFocus = useCallback(() => {
+    setOpen(false)
+    if (triggerRef.current) triggerRef.current.focus()
+  }, [])
+
+  useMenuAutofocus(open, menuRef)
+
+  const run = (item) => {
+    if (item.disabled) return
+    closeAndFocus()
+    if (item.onClick) item.onClick()
+  }
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={cx(className, open && 'is-open')}
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault()
+            setOpen(true)
+          }
+        }}
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={label}
+      >
+        {children}
+      </button>
+      <Popover
+        anchorRef={triggerRef}
+        open={open}
+        onClose={closeAndFocus}
+        onDismiss={close}
+        align={align}
+        className="menu-pop"
+        role="menu"
+        ariaLabel={label}
+      >
+        <div
+          ref={menuRef}
+          className="menu-pop__list"
+          onKeyDown={(e) => handleMenuKeys(e, menuRef.current, closeAndFocus)}
+        >
+          {list.map((item, i) =>
+            item.sep ? (
+              <div key={item.key || `sep-${i}`} className="menu-pop__sep" role="separator" />
+            ) : (
+              <button
+                key={item.key || `${item.label}-${i}`}
+                type="button"
+                data-menuitem=""
+                data-on={item.on ? 'true' : 'false'}
+                className={cx(
+                  'menu-pop__item',
+                  item.on && 'menu-pop__item--on',
+                  item.danger && 'menu-pop__item--danger'
+                )}
+                role={item.on === undefined ? 'menuitem' : 'menuitemradio'}
+                aria-checked={item.on === undefined ? undefined : !!item.on}
+                disabled={!!item.disabled}
+                onClick={() => run(item)}
+              >
+                <span className="menu-pop__text">{item.label}</span>
+                {item.meta !== undefined ? <span className="menu-pop__meta">{item.meta}</span> : null}
+                {item.on ? (
+                  <Check className="menu-pop__check" size={12} strokeWidth={1.75} aria-hidden="true" />
+                ) : null}
+              </button>
+            )
+          )}
+        </div>
+      </Popover>
+    </>
+  )
+}
+
+/* ------------------------------------------------------------------ *
  * Toggle
  * ------------------------------------------------------------------ */
 

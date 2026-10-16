@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronRight, FolderPlus, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { Check, ChevronsUpDown, CircleDot, Folder, Plus, RotateCcw, Trash2 } from 'lucide-react'
 
 import {
   Card,
@@ -8,12 +8,12 @@ import {
   EmptyState,
   Field,
   IconMenu,
+  MenuButton,
   Metric,
   Meter,
   Pill,
   PillSelect,
   Segmented,
-  Toggle,
   Trend,
 } from '../ui/primitives.jsx'
 import { DotMatrix, MiniBars } from '../ui/charts.jsx'
@@ -34,6 +34,9 @@ import {
   statusTone,
   urgencyTone,
 } from '../lib/metrics.js'
+
+// The case bar's key for "no folder": the unfiled cases, shown as a group of their own.
+const LOOSE = '__unfiled'
 
 /* ============================================================================
    CaseFiles — the case detail screen, and the app's real CRUD surface.
@@ -715,17 +718,10 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
      diagram. That is the whole difference from a sub-case, which is scoped
      INSIDE its parent and rolls its entries up into it. */
   const [folders, setFolders] = useState([])
-  /* Which folders are shut. Persisted, because a folder you collapsed to get the
-     bar under control should stay collapsed next time you open the app —
-     otherwise the tidying has to be redone every reload. */
-  const [shut, setShut] = useState(() => {
-    try {
-      const raw = window.localStorage.getItem('case-folders-shut')
-      return new Set(raw ? JSON.parse(raw) : [])
-    } catch {
-      return new Set()
-    }
-  })
+  /* The folder the bar is showing, when it is not simply the open case's own.
+     null means "follow the open case"; picking an empty folder, or one just
+     made, is the only time the two part company. */
+  const [viewFolder, setViewFolder] = useState(null)
 
   /* Expanding a folder can push the case bar onto a second line, and the whole
      page below it used to jump by exactly one row height. Nothing animates an
@@ -781,19 +777,6 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     return () => window.clearTimeout(done)
   }, [activeId])
 
-  const toggleFolder = useCallback((id) => {
-    setShut((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      try {
-        window.localStorage.setItem('case-folders-shut', JSON.stringify([...next]))
-      } catch {
-        // A browser refusing storage is not a reason to refuse the collapse.
-      }
-      return next
-    })
-  }, [])
   const [folderForm, setFolderForm] = useState(null)     // {mode:'new'|'rename', id, value}
   const [folderConfirm, setFolderConfirm] = useState(null)
 
@@ -964,9 +947,12 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
 
   /* ---- case writes ------------------------------------------------ */
 
+  /* A new case lands in the folder the bar is showing: making one while looking
+     at University and then having to file it there by hand is a step nobody
+     wants. */
   const openNewCase = () => {
     setCaseConfirm(null)
-    setCaseForm({ mode: 'new', id: null, value: '' })
+    setCaseForm({ mode: 'new', id: null, value: '', folderId: shownFolder === LOOSE ? null : shownFolder })
   }
 
   const submitCaseForm = async () => {
@@ -981,9 +967,15 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     }
 
     const parentId = caseForm.mode === 'sub' ? caseForm.id : null
-    const res = await write(() => api.createProject(name, parentId))
+    const folderId = parentId === null ? caseForm.folderId || null : null
+    const res = await write(async () => {
+      const made = await api.createProject(name, parentId)
+      if (folderId && made && made.id !== undefined) await api.fileProject(made.id, folderId)
+      return made
+    })
     if (res.ok) {
       setCaseForm(null)
+      if (folderId) await loadFolders()
       const created = res.result
       if (created && created.id !== undefined) {
         // A new sub-case becomes the entry scope. A new top-level case becomes
@@ -1022,7 +1014,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
       setFolderForm(null)
       await loadFolders()
       // A folder you just made is the one you want to be looking at.
-      if (folderForm.mode === 'new' && res.result && res.result.id) setFolderScope(res.result.id)
+      if (folderForm.mode === 'new' && res.result && res.result.id) setViewFolder(res.result.id)
     }
   }
 
@@ -1170,10 +1162,9 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     write(() => applyWalk(api.moveProject, id, walk))
   }
 
-  /* The bar, as groups. Folders come first in creation order, then everything
-     unfiled — an unsorted case belongs at the end of the bar, not the front.
-     This is ONE bar: a folder is a chip inside it that expands to show its
-     cases, not a filter that hides the rest. */
+  /* The bar, as groups: each folder with its cases, and the unfiled ones. The
+     bar shows ONE group at a time — a switcher on the left picks the folder,
+     tabs for its cases follow — so it stays one line however many there are. */
   const roots = useMemo(() => ordered.filter(({ depth }) => depth === 0), [ordered])
 
   const chipFor = useCallback(
@@ -1195,14 +1186,97 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     return { folders: out, loose }
   }, [folders, roots])
 
-  /* A case cannot be open and invisible at the same time, so the folder holding
-     it is marked even while shut — the chip itself carries the active state. */
   const activeFolderId = useMemo(() => {
     const found = roots.find(({ project }) => project.id === activeId)
     return found ? found.project.folderId ?? null : null
   }, [roots, activeId])
 
-  const segItems = useMemo(() => groups.loose.map(chipFor), [groups, chipFor])
+  /* The bar follows the open case. Whatever moves it — a tab, the drawing, the
+     next-case button, filing it into another folder — the folder shown is the
+     one it now sits in. */
+  useEffect(() => { setViewFolder(null) }, [activeId, activeFolderId])
+
+  const shownFolder = useMemo(() => {
+    const want = viewFolder ?? activeFolderId ?? LOOSE
+    // A folder deleted out from under the bar falls back to the open case's.
+    if (want !== LOOSE && !folders.some((f) => f.id === want)) return activeFolderId ?? LOOSE
+    return want
+  }, [viewFolder, activeFolderId, folders])
+
+  const shownGroup = useMemo(() => {
+    if (shownFolder === LOOSE) return { folder: null, items: groups.loose }
+    return groups.folders.find((g) => g.folder.id === shownFolder) || { folder: null, items: groups.loose }
+  }, [groups, shownFolder])
+
+  /* Where you were in each folder, so coming back to one reopens that case
+     rather than whichever happens to be first. */
+  const lastInFolder = useRef(new Map())
+  useEffect(() => {
+    if (activeId !== null && activeId !== undefined) lastInFolder.current.set(activeFolderId ?? LOOSE, activeId)
+  }, [activeId, activeFolderId])
+
+  const pickFolder = (key) => {
+    setViewFolder(key)
+    const items = key === LOOSE ? groups.loose : (groups.folders.find((g) => g.folder.id === key) || { items: [] }).items
+    if (!items.length) return
+    const last = lastInFolder.current.get(key)
+    const target = items.find(({ project }) => project.id === last) || items[0]
+    if (target.project.id !== activeId && onSelectCase) onSelectCase(target.project.id)
+  }
+
+  const folderMenu = useMemo(() => {
+    const out = groups.folders.map((g) => ({
+      key: g.folder.id,
+      label: g.folder.name,
+      meta: g.items.length,
+      on: shownFolder === g.folder.id,
+      onClick: () => pickFolder(g.folder.id),
+    }))
+    if (groups.loose.length || !groups.folders.length) {
+      out.push({
+        key: LOOSE,
+        label: groups.folders.length ? 'Unfiled' : 'All cases',
+        meta: groups.loose.length,
+        on: shownFolder === LOOSE,
+        onClick: () => pickFolder(LOOSE),
+      })
+    }
+    out.push({ sep: true, key: 'sep' })
+    out.push({
+      key: 'new',
+      label: 'New folder',
+      onClick: () => {
+        setFolderConfirm(null)
+        setFolderForm({ mode: 'new', id: null, value: '' })
+      },
+    })
+    const f = shownGroup.folder
+    if (f) {
+      out.push({
+        key: 'rename',
+        label: `Rename ${f.name}`,
+        onClick: () => {
+          setFolderConfirm(null)
+          setFolderForm({ mode: 'rename', id: f.id, value: f.name })
+        },
+      })
+      out.push({
+        key: 'delete',
+        label: 'Delete folder',
+        danger: true,
+        onClick: () => {
+          setFolderForm(null)
+          setFolderConfirm(f.id)
+        },
+      })
+    }
+    return out
+    // pickFolder is rebuilt every render; what it reads is all in these deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, shownFolder, shownGroup, activeId, onSelectCase])
+
+  const shownName = shownGroup.folder ? shownGroup.folder.name : groups.folders.length ? 'Unfiled' : 'All cases'
+  const tabItems = useMemo(() => shownGroup.items.map(chipFor), [shownGroup, chipFor])
 
   /* ---- entry writes ----------------------------------------------- */
 
@@ -1527,113 +1601,48 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
       ) : null}
 
       <div className="headshift" style={headH == null ? undefined : { height: headH }}>
-      <div className="viewhead" ref={headRef}>
-        <div className="viewhead__left">
-          <span className="section-label">My cases</span>
+      <div className="viewhead casebar" ref={headRef}>
+        <div className="casebar__left">
+          <MenuButton
+            className="casepick"
+            items={folderMenu}
+            label={`Switch folder, ${shownName}, ${shownGroup.items.length} ${shownGroup.items.length === 1 ? 'case' : 'cases'}`}
+          >
+            <Folder className="casepick__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
+            <span className="casepick__name truncate">{shownName}</span>
+            <span className="casepick__n">{shownGroup.items.length}</span>
+            <ChevronsUpDown className="casepick__chev" size={12} strokeWidth={1.8} aria-hidden="true" />
+          </MenuButton>
 
-          <div className="casebar">
-            {groups.folders.map((g) => {
-              const closed = shut.has(g.folder.id)
-              const holds = activeFolderId === g.folder.id
-              return (
-                <div
-                  key={g.folder.id}
-                  className={cx('casefold', closed && 'is-shut', holds && 'holds-active')}
-                >
-                  <button
-                    type="button"
-                    className="casefold__tab"
-                    onClick={() => toggleFolder(g.folder.id)}
-                    aria-expanded={!closed}
-                    title={closed ? `Show ${g.items.length} case(s)` : 'Collapse'}
-                  >
-                    <ChevronRight
-                      size={12}
-                      strokeWidth={1.8}
-                      className={cx('casefold__chev', !closed && 'is-open')}
-                      aria-hidden="true"
-                    />
-                    <span className="casefold__name truncate">{g.folder.name}</span>
-                    {closed ? <span className="casefold__n">{g.items.length}</span> : null}
-                  </button>
-
-                  <IconMenu
-                    label={`Actions for ${g.folder.name}`}
-                    items={[
-                      {
-                        key: 'rename',
-                        label: 'Rename folder',
-                        onClick: () => {
-                          setFolderConfirm(null)
-                          setFolderForm({ mode: 'rename', id: g.folder.id, value: g.folder.name })
-                        },
-                      },
-                      {
-                        key: 'delete',
-                        label: 'Delete folder',
-                        danger: true,
-                        onClick: () => {
-                          setFolderForm(null)
-                          setFolderConfirm(g.folder.id)
-                        },
-                      },
-                    ]}
-                  />
-
-                  {/* 0fr -> 1fr on the inline axis: collapses to nothing without
-                      anyone having to measure the strip's width in JS. */}
-                  <div className="casefold__wrap">
-                    <div className="casefold__inner">
-                      {g.items.length ? (
-                        <Segmented
-                          items={g.items.map(chipFor)}
-                          value={activeId}
-                          onChange={(id) => onSelectCase && onSelectCase(id)}
-                          onReorder={reorderCase}
-                          label={g.folder.name}
-                        />
-                      ) : (
-                        <span className="micro dim casefold__empty">empty</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-
-            {segItems.length ? (
-              <Segmented
-                items={segItems}
-                value={activeId}
-                onChange={(id) => onSelectCase && onSelectCase(id)}
-                onReorder={reorderCase}
-                label="Cases"
-              />
-            ) : null}
-
-            {!roots.length ? <span className="micro dim">no cases yet</span> : null}
-
-            <Pill
-              className="pill--micro pill--ghost casebar__add"
-              onClick={() => {
-                setFolderConfirm(null)
-                setFolderForm({ mode: 'new', id: null, value: '' })
-              }}
-              aria-label="New folder"
-            >
-              <FolderPlus size={12} strokeWidth={1.5} aria-hidden="true" />
-              <span className="pill__label">Folder</span>
-            </Pill>
-          </div>
+          {tabItems.length ? (
+            <Segmented
+              className="segmented--tabs"
+              items={tabItems}
+              value={activeId}
+              onChange={(id) => onSelectCase && onSelectCase(id)}
+              onReorder={reorderCase}
+              label={`Cases in ${shownName}`}
+            />
+          ) : (
+            <span className="micro dim casebar__empty">
+              {roots.length ? 'no cases in this folder yet' : 'no cases yet'}
+            </span>
+          )}
         </div>
-        <div className="viewhead__right">
-          <Toggle
-            checked={filter === 'open'}
-            onChange={(v) => setFilter(v ? 'open' : 'all')}
-            label="Focus"
-          />
-          <Pill onClick={openNewCase}>
-            <Plus size={13} strokeWidth={1.5} aria-hidden="true" />
+        <div className="casebar__right">
+          <button
+            type="button"
+            className={cx('casebar__icon', filter === 'open' && 'is-on')}
+            aria-pressed={filter === 'open'}
+            aria-label="Focus: show open entries only"
+            title={filter === 'open' ? 'Focus is on: open entries only' : 'Focus: show open entries only'}
+            onClick={() => setFilter(filter === 'open' ? 'all' : 'open')}
+          >
+            <CircleDot size={15} strokeWidth={1.6} aria-hidden="true" />
+          </button>
+          <span className="casebar__rule" aria-hidden="true" />
+          <Pill active onClick={openNewCase}>
+            <Plus size={13} strokeWidth={1.8} aria-hidden="true" />
             New case
           </Pill>
         </div>

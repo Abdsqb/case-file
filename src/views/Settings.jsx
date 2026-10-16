@@ -14,6 +14,7 @@
  *   casefile.parallax        'on' | 'off'   — IsoCase pointer parallax
  *   casefile.weekStart       '1'  | '0'     — Monday (default) or Sunday
  *   casefile.accent          'violet' (default) | 'white' | 'red' | 'green' | 'turquoise'
+ *   casefile.backdrop        'silk' (default) | any other id in ui/backdrops.js
  *
  * Other views read these with the exported `useSetting(key, fallback)` hook.
  * Every read is wrapped in try/catch: a corrupt value, a disabled storage
@@ -32,6 +33,7 @@ import { Card, CardHead, Metric, Pill, Segmented, Toggle } from '../ui/primitive
 import { getMemory, listProjects } from '../lib/api.js'
 import * as clerk from '../lib/clerk.js'
 import { globalStats } from '../lib/metrics.js'
+import { BACKDROPS, DEFAULT_BACKDROP, paintStill, readColours } from '../ui/backdrops.js'
 
 /* ------------------------------------------------------------------ *
  * storage
@@ -44,6 +46,7 @@ export const KEY_REDUCED_MOTION = 'reducedMotion'
 export const KEY_PARALLAX = 'parallax'
 export const KEY_WEEK_START = 'weekStart'
 export const KEY_ACCENT = 'accent'
+export const KEY_BACKDROP = 'backdrop'
 
 /* The order the swatches sit in. Each id has a block in styles.css under
    ACCENTS; the first is the default and the one with no attribute at all. */
@@ -222,6 +225,12 @@ export function applyMotionPreference() {
 export function readAccent() {
   const raw = readRaw(KEY_ACCENT)
   return ACCENTS.some((a) => a.id === raw) ? raw : DEFAULT_ACCENT
+}
+
+/** The stored backdrop, or the default when it is missing or not one we know. */
+export function readBackdrop() {
+  const raw = readRaw(KEY_BACKDROP)
+  return BACKDROPS.some((b) => b.id === raw) ? raw : DEFAULT_BACKDROP
 }
 
 export function applyAccentPreference() {
@@ -495,6 +504,100 @@ function AccentPicker({ value, onChange }) {
   )
 }
 
+/**
+ * One live miniature per backdrop, as a radio group. Each is the real shape
+ * painted small in the current accent, held still until the pointer rests on
+ * it — then it plays, so you can see how it moves before you pick it.
+ */
+function BackdropPicker({ value, accent, reduced, onChange }) {
+  const refs = useRef([])
+  const index = Math.max(0, BACKDROPS.findIndex((b) => b.id === value))
+
+  const onKeyDown = (e) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key]
+    if (!step) return
+    e.preventDefault()
+    const next = (index + step + BACKDROPS.length) % BACKDROPS.length
+    onChange(BACKDROPS[next].id)
+    refs.current[next]?.focus()
+  }
+
+  return (
+    <div className="backdrop-grid" role="radiogroup" aria-label="Background" onKeyDown={onKeyDown}>
+      {BACKDROPS.map((b, i) => (
+        <BackdropTile
+          key={b.id}
+          backdrop={b}
+          accent={accent}
+          reduced={reduced}
+          checked={i === index}
+          buttonRef={(el) => { refs.current[i] = el }}
+          onPick={() => onChange(b.id)}
+        />
+      ))}
+    </div>
+  )
+}
+
+const PREVIEW_W = 320
+const PREVIEW_H = 180
+
+function BackdropTile({ backdrop, accent, reduced, checked, buttonRef, onPick }) {
+  const canvasRef = useRef(null)
+  const [playing, setPlaying] = useState(false)
+
+  /* The accent lands on <html> before this re-renders, so reading the tokens
+     here picks up the new colour. */
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return undefined
+    const colours = readColours()
+    const size = { width: PREVIEW_W, height: PREVIEW_H }
+    if (!playing || reduced || backdrop.off) {
+      paintStill(canvas, backdrop, colours, size)
+      return undefined
+    }
+    let raf = 0
+    let last = 0
+    const t0 = performance.now()
+    const tick = (now) => {
+      raf = requestAnimationFrame(tick)
+      if (now - last < 33) return
+      last = now
+      // The same clock Streak runs on: one undulation every nine seconds.
+      const secs = (now - t0) / 1000
+      paintStill(canvas, backdrop, colours, { ...size, time: 2.1 + (secs / 9) * Math.PI * 2, secs })
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [backdrop, accent, playing, reduced])
+
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      role="radio"
+      aria-checked={checked}
+      tabIndex={checked ? 0 : -1}
+      className="backdrop-tile"
+      onClick={onPick}
+      onPointerEnter={() => setPlaying(true)}
+      onPointerLeave={() => setPlaying(false)}
+      onFocus={() => setPlaying(true)}
+      onBlur={() => setPlaying(false)}
+    >
+      <span className="backdrop-tile__view">
+        <canvas ref={canvasRef} className="backdrop-tile__canvas" aria-hidden="true" />
+        {backdrop.off ? <span className="backdrop-tile__off" aria-hidden="true">off</span> : null}
+      </span>
+      <span className="backdrop-tile__text">
+        <span className="backdrop-tile__name">{backdrop.name}</span>
+        <span className="backdrop-tile__line">{backdrop.line}</span>
+      </span>
+    </button>
+  )
+}
+
 function StatTile({ label, value, unit, sub }) {
   return (
     <div className="tile">
@@ -689,6 +792,7 @@ export function Settings({ projects, now }) {
   const parallax = useSetting(KEY_PARALLAX, true)
   const weekStart = useSetting(KEY_WEEK_START, 1)
   const accent = useSetting(KEY_ACCENT, DEFAULT_ACCENT)
+  const backdrop = useSetting(KEY_BACKDROP, DEFAULT_BACKDROP)
 
   const stats = useMemo(() => globalStats(cases, clock), [cases, clock])
   /* Asked once. The answer is a function of .env, which cannot change without
@@ -819,6 +923,26 @@ export function Settings({ projects, now }) {
           </div>
           <div className="card__foot">
             <span>{unknown ? 'Counts unavailable — the server did not answer.' : 'Counts include subtasks.'}</span>
+          </div>
+        </Card>
+
+        <Card className="span-12">
+          <CardHead
+            className="card__head"
+            title="Background"
+            subtitle="The light behind the glass. Rest the pointer on one to see it move."
+          />
+          <div className="card__body">
+            <BackdropPicker
+              value={backdrop}
+              accent={accent}
+              reduced={reducedMotion}
+              onChange={(next) => writeSetting(KEY_BACKDROP, next === DEFAULT_BACKDROP ? null : next)}
+            />
+          </div>
+          <div className="card__foot">
+            <span>Drawn in your accent colour. Reduce motion holds it still.</span>
+            <span className="dim">casefile.backdrop</span>
           </div>
         </Card>
 

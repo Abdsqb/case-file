@@ -384,7 +384,9 @@ body::after {
    turned and a panel that is merely narrower. */
 .dash__slide {
   perspective: 1500px;
-  perspective-origin: -25% 50%;
+  /* Straight on: with nothing resting turned, an eye off to one side only
+     made the turn toward the pointer bigger one way than the other. */
+  perspective-origin: 50% 50%;
 }
 
 /* The columns have to pass the third dimension through to the cards inside
@@ -432,7 +434,7 @@ body::after {
     box-shadow 520ms ease;
 }
 
-.card:has(.flow):hover {
+.card:has(.flow)[data-tilt='on'] {
   transform:
     rotateY(calc(var(--tilt, 0deg) + var(--gx, 0) * 10deg))
     rotateX(calc(var(--gy, 0) * -8deg))
@@ -467,13 +469,13 @@ body::after {
    hover rule is overridden so the pointer cannot change it. */
 @media (prefers-reduced-motion: reduce) {
   .card:has(.flow),
-  .card:has(.flow):hover {
+  .card:has(.flow)[data-tilt='on'] {
     transform: rotateY(var(--tilt, 0deg));
     transition: none;
   }
 }
 [data-motion='reduced'] .card:has(.flow),
-[data-motion='reduced'] .card:has(.flow):hover {
+[data-motion='reduced'] .card:has(.flow)[data-tilt='on'] {
   transform: rotateY(var(--tilt, 0deg)) !important;
   transition: none !important;
 }
@@ -488,6 +490,10 @@ body::after {
   pointer-events: none;
   display: block;
   opacity: 1;
+  /* A breath of diffusion over every backdrop, so the light reads as light
+     through a little haze rather than as lines drawn on the screen. Kept to
+     a pixel and a half: any more and the strands smear into fog. */
+  filter: blur(1.5px);
   transition: opacity 600ms ease;
 }
 
@@ -4450,7 +4456,7 @@ button.entry__title:hover { color: var(--fg); }
      step cards still stand off the glass inside it. */
   transform-style: flat;
   perspective: 1500px;
-  perspective-origin: -20% 50%;
+  perspective-origin: 50% 50%;
 
   /* THE ANGLE EVERYTHING ON THIS SIDE STANDS AT.
      ----------------------------------------------------------------------
@@ -4467,9 +4473,13 @@ button.entry__title:hover { color: var(--fg); }
      --swing is how far back toward flat the arrival starts from, read by the
      stand-in keyframe in motion.css. It sits next to --tilt so that the two
      cannot disagree about whether this screen turns: set one to zero and the
-     other goes with it. */
-  --tilt: -11deg;
-  --swing: 9deg;
+     other goes with it.
+
+     Flat at rest, now: every panel faces you straight on until the pointer
+     is over the board, which turns toward it in 3D (`.card:has(.flow)[data-tilt]`).
+     The perspective above is kept for exactly that. */
+  --tilt: 0deg;
+  --swing: 0deg;
 }
 
 .casework__main { min-width: 0; }
@@ -4577,7 +4587,7 @@ button.entry__title:hover { color: var(--fg); }
      one angle but through two different lenses would not look like two panels
      in a room; they would look like a mistake. */
   perspective: 1500px;
-  perspective-origin: -20% 50%;
+  perspective-origin: 50% 50%;
 }
 
 /* The deck's motion is on the slide and the angle is on the card, which is the
@@ -5742,10 +5752,21 @@ button.entry__title:hover { color: var(--fg); }
    --swing is the arrival: how far back toward flat the card starts, so it
    turns into its angle as it comes in instead of appearing already at it. See
    the stand-in keyframe in motion.css. */
+/* Flat at rest, like Case files: the cards face you straight on, and only
+   the board turns in 3D, toward the pointer, while it is under it. */
 .dash {
-  --tilt: -11deg;
-  --swing: 9deg;
+  --tilt: 0deg;
+  --swing: 0deg;
 }
+
+/* A little more glass on the dashboard's cards than elsewhere: this is the
+   screen where the light behind is at full strength, so the panels hold a
+   touch more of their own ground for the text on them. */
+.dash__card,
+.dash__card--flow.flowcard::before {
+  background: rgba(var(--panel-rgb), 0.72);
+}
+.dash__card--flow.flowcard { background: transparent; }
 
 .dash__card {
   width: 100%;

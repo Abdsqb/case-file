@@ -345,53 +345,85 @@ export default function CaseFlow({
      styles.css, it restyles the card and nothing else. Throttled onto a frame,
      with a trailing pass so the last position of a flick is not the one that
      gets dropped. */
+  /* Measured against the card's RESTING box, not its live one.
+     ----------------------------------------------------------------------
+     The card turns and lifts while it is held, so its on-screen box changes
+     shape under the pointer. Measured against that, the turn fed back into
+     the number driving it — the card wobbled — and at an edge the turn could
+     pull the card out from under the pointer, drop :hover, flatten, catch the
+     pointer again, and shake. So the box is read once, flat, when the pointer
+     arrives, and both "where on the card" and "still on the card" are asked
+     of that box until the pointer leaves it. The tilt is switched by
+     data-tilt rather than :hover for the same reason: :hover is asked of the
+     live, turned box. */
   const fieldRaf = useRef(0);
   const fieldAt = useRef(null);
+  const restBox = useRef(null);
+
+  const cardOf = () => {
+    const el = panelRef.current;
+    return el ? el.closest('.card') || el : null;
+  };
 
   const publish = useCallback(() => {
     fieldRaf.current = 0;
-    const el = panelRef.current;
-    if (!el) return;
-    const card = el.closest('.card') || el;
+    const card = cardOf();
+    if (!card) return;
     const at = fieldAt.current;
     card.style.setProperty('--gx', at ? at.x.toFixed(3) : '0');
     card.style.setProperty('--gy', at ? at.y.toFixed(3) : '0');
+    if (at) card.dataset.tilt = 'on';
+    else delete card.dataset.tilt;
   }, []);
 
-  const onField = useCallback(
-    (e) => {
-      const el = panelRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
+  useEffect(() => {
+    const release = () => {
+      if (!restBox.current) return;
+      restBox.current = null;
+      fieldAt.current = null;
+      if (fieldRaf.current) cancelAnimationFrame(fieldRaf.current);
+      publish();
+    };
+    const onMove = (e) => {
+      const card = cardOf();
+      if (!card) return;
+      /* Flat and not held: its live box is its resting box. */
+      const r = restBox.current || card.getBoundingClientRect();
       if (!r.width || !r.height) return;
+      const inside =
+        e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      if (!inside) { release(); return; }
+      restBox.current = r;
       const unit = (v) => Math.max(-1, Math.min(1, v));
       fieldAt.current = {
         x: unit(((e.clientX - r.left) / r.width - 0.5) * 2),
         y: unit(((e.clientY - r.top) / r.height - 0.5) * 2),
       };
       if (!fieldRaf.current) fieldRaf.current = requestAnimationFrame(publish);
-    },
-    [publish]
-  );
-
-  const leaveField = useCallback(() => {
-    fieldAt.current = null;
-    if (fieldRaf.current) cancelAnimationFrame(fieldRaf.current);
-    fieldRaf.current = 0;
-    publish();
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    /* The resting box is only good while nothing moves underneath it. */
+    window.addEventListener('scroll', release, true);
+    window.addEventListener('resize', release);
+    window.addEventListener('blur', release);
+    document.documentElement.addEventListener('pointerleave', release);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('scroll', release, true);
+      window.removeEventListener('resize', release);
+      window.removeEventListener('blur', release);
+      document.documentElement.removeEventListener('pointerleave', release);
+      if (fieldRaf.current) cancelAnimationFrame(fieldRaf.current);
+      /* And it lets go of the angle when it unmounts, or a card left
+         mid-turn would hand the next panel its leftover numbers. */
+      const card = cardOf();
+      if (card) {
+        card.style.removeProperty('--gx');
+        card.style.removeProperty('--gy');
+        delete card.dataset.tilt;
+      }
+    };
   }, [publish]);
-
-  /* And it lets go of the angle when it unmounts, or a card left mid-turn
-     would hand the next panel its leftover numbers. */
-  useEffect(() => () => {
-    if (fieldRaf.current) cancelAnimationFrame(fieldRaf.current);
-    const el = panelRef.current;
-    const card = el && (el.closest('.card') || el);
-    if (card) {
-      card.style.removeProperty('--gx');
-      card.style.removeProperty('--gy');
-    }
-  }, []);
 
   const wires = useMemo(() => {
     const out = [];
@@ -437,8 +469,6 @@ export default function CaseFlow({
     <div
       className={cx('flow', className)}
       ref={panelRef}
-      onPointerMove={onField}
-      onPointerLeave={leaveField}
     >
       {/* --- the title bar ---------------------------------------------- */}
       {chrome ? (

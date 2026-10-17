@@ -25,11 +25,11 @@ is written. It does nothing until you put an API key in `.env` yourself — see
 | | |
 |---|---|
 | **Dashboard** | A greeting and what is coming on the left; one card at a time on the right, paged with the wheel. The case structure comes first — click the drawing for the next case, right-click for the one before — then the clerk's chat, workload, recommendations, tracking, the weekly report and the completion rate. |
-| **Case files** | The working screen. Create, rename, reorder and delete cases; add sub-cases; log entries with dates and priorities; nest subtasks under an entry. The entries take the left of the screen; the case structure stands on the right as a turned panel, with the seven readings of the case paged one at a time underneath it at the same angle. Only the one with the drawing on it turns further under the pointer. Click the drawing to open the whole case full window. |
+| **Case files** | The working screen. Create, rename, reorder and delete cases; add sub-cases; log entries with dates and priorities; nest subtasks under an entry. Along the top, a folder switcher picks which folder's cases show as tabs, and holds new, rename and delete folder; a new case lands in the folder you are looking at. The entries take the left of the screen; the case structure stands on the right, with the seven readings of the case paged one at a time underneath it. Everything rests flat, and the drawing turns toward the pointer while you are over it. Click the drawing to open the whole case full window. |
 | **Reporting** | Every open entry bucketed by due day — Overdue / This week / Later — plus a world-news feed from public RSS. |
 | **Calendar** | Two calendars over the same days. **Entries** is a month grid of every dated entry in the archive, coloured by how its deadline stands, and clicking one opens its case. **Classes** is a weekly timetable parsed from `src/data/class-calendar.ics`, with next class, today's agenda and term progress. |
 | **Flashcards** | Import a deck from a `.json` file or pasted text — or paste a lecture and have the clerk draft one — file it under a course, and review it on an SM-2 spaced schedule. The scheduling is offline SM-2 and always has been; only drafting a new deck calls a model, and only when you ask it to. |
-| **Settings** | The accent colour; motion preferences, including a reduced-motion override; what this install holds; a live reading of how much memory the app is using; and what the clerk sends where. |
+| **Settings** | The accent colour; the background, from eleven, with a live swatch of each and how much blur sits over it; motion preferences, including a reduced-motion override; what this install holds; a live reading of how much memory the app is using; and what the clerk sends where. |
 
 *Every screenshot here is of the sample archive a fresh install seeds, not anyone's real
 cases.*
@@ -93,10 +93,18 @@ fit as one piece — measured off the layout box rather than the painted one, be
 panel is routinely painted through a transform and the painted box is a lie.
 
 **The panel it sits on turns**, on both screens, and it carries the only 3D in the app.
-It stands at a constant angle — the right edge swung forward, the left leaning away — and
-turns further to face the pointer when you are actually over it, while every other panel
-holds still. One panel turning against eleven still ones is unmistakably an object standing
-in front of them; a whole room moving together is a wobble.
+It rests flat, facing you like every other panel, and turns to face the pointer while you
+are over it, stepping a little toward the eye. One panel turning against eleven still ones
+is unmistakably an object standing in front of them; a whole room moving together is a
+wobble.
+
+Where the pointer is on the card is measured against the card's flat, resting box, read
+once when the pointer arrives, and so is whether it is still on the card. Measured against
+the live box, the turn changed the very box it was being measured against, and the card
+wobbled; worse, at an edge the turn could pull the card out from under the pointer, drop
+`:hover`, flatten, catch the pointer again and shake. So the turn is switched by a
+`data-tilt` attribute rather than `:hover`, and both answers come from the box it started
+in.
 
 The drawing on it is a second plane: the step cards sit some 90px off the glass, catch
 their own light and slide against the surface as the panel moves. That costs a little
@@ -107,8 +115,8 @@ glass becomes one layer at z = 0 that blurs and clips itself, and the drawing st
 above it. Nothing needs clipping, because the flow measures itself to fit its box before it
 is laid out.
 
-The panel also has to be at that angle on its first frame. It fades in when the screen
-is built, and a fade on a 3D element flattens it: anything with `opacity` below 1 is
+The step cards also have to be standing on the panel's first frame. It fades in when the
+screen is built, and a fade on a 3D element flattens it: anything with `opacity` below 1 is
 painted as one flat picture, which is why the drawing used to lie flat for a second and
 then snap upright once the fade finished. So the board itself never fades. A registered
 custom property is animated from 0 to 1 on it instead, and only the flat layers inside
@@ -116,6 +124,50 @@ custom property is animated from 0 to 1 on it instead, and only the flat layers 
 whole way in. Switching case on the dashboard follows the same rule: the fade and slide go
 on each card and wire, never on the layers holding them, and the slide is the `translate`
 property rather than `transform`, so it adds to a card's lift instead of replacing it.
+
+### The background
+
+The light behind the glass is a choice, made in Settings with a live swatch of each.
+
+| | |
+|---|---|
+| **Silk Fold** (default) | One bundle of strands folded back on itself in a tight knot low on the left. |
+| **Zenith** | An arch, every strand cresting through one point high over the dashboard's panel. |
+| **Crosswind** | Two sheets crossing in an X low on the left. |
+| **Perihelion** | A comet: a long tail across the screen into a bright head at the top right. |
+| **Aurora** | Wide, faint rays blending into curtains over a rippling hem. |
+| **Maelstrom** | Strands spiralling in from every side to one point, the whole slowly turning. |
+| **Glass Current** | Ribbons of real glass shards drifting through five depths, ray-traced on WebGPU. |
+| **Crystal Needles** | The same current carrying glass slivers that flare as they spin. |
+| **Obsidian Edges** | The same current carrying black glass seen only by its glowing edges. |
+| **Undertow** | A dark sea of tiny slats rolling toward you, stirred by the cursor. |
+| **Lights Out** | Nothing at all, and nothing running. |
+
+The first six are the same material: thin strands added together in light, painted in one
+WebGL call (`src/ui/streakGL.js`), so wherever they crowd they brighten. They differ only in
+choreography, each one a function in `src/ui/backdrops.js` that places a strand as two
+cubics. Each strand has a wide, faint halo, slow soft swells run along it, and the whole
+bundle takes fifteen seconds to sway once.
+
+**The light arrives.** Each time the dashboard opens, each time the idle clock screen is
+dismissed, and whenever the background changes, every strand fills in from its start to its
+end behind a soft glowing front, its neighbours a little ahead or behind, so the river pours
+in along its own course over about four seconds. The component backgrounds replay their own
+intro at the same moments.
+
+The last four are components, mounted in place of the strand canvas and loaded only when
+picked. **Glass Current** is React Bits' AeroShards, tuned to live behind an app all day: it
+draws at 75% resolution, thirty frames a second, with 900 shards, light depth of field and no
+bloom, and it is kept mounted between visits rather than rebuilt. It needs `vgpu` at exactly
+0.5.0, because 0.6 rejects the raw WGSL the component passes. **Crystal Needles** and
+**Obsidian Edges** are our own (`src/ui/ObjectCurrent.jsx`): AeroShards' current ported to
+plain WebGL, one triangle list and one draw call a frame, a fraction of the glass's cost.
+**Undertow** is React Bits' MicroSlats on WebGL2. Each falls back to Silk Fold if it cannot
+start, and says why in the console.
+
+**Diffusion** lays a blur over whichever is showing: Crisp, Haze (the default, 1.5px),
+Mist, Fog or Smoke (12px). It is a filter on the background layer alone, so the panels and
+text above it stay sharp.
 
 ### The other screens
 
@@ -358,7 +410,9 @@ server/
                 chat / decks, and applying what you approve
 src/
   views/        one file per screen
-  ui/           primitives, charts, the case graph, the scratchpad drawer
+  ui/           primitives, charts, the case graph, the scratchpad drawer, and the
+                backgrounds: backdrops.js (the designs), Streak.jsx and streakGL.js
+                (the strand painter), ObjectCurrent.jsx, AeroShards.jsx, MicroSlats.jsx
   lib/          API client, metrics, the graph builder, SM-2, .ics parsing
   data/         the sample class-calendar .ics
   styles.css    the design system — every colour is a token here
@@ -369,7 +423,9 @@ src/
 
 React 19 and Vite on the front, Express on the back, SQLite through Node's built-in
 `node:sqlite`. No ORM, no state library, no CSS framework. Icons are `lucide-react`;
-`compromise` and `fast-xml-parser` serve the news feed.
+`compromise` and `fast-xml-parser` serve the news feed. Two backgrounds bring their own
+renderer and load only when picked: `vgpu` (pinned at 0.5.0) for Glass Current and `ogl`
+for Undertow.
 
 ---
 
@@ -380,9 +436,9 @@ Settings — and panels of dark glass over a slow-moving bundle of light. Three 
 anything that is a measurement rather than a sentence — counts, times, ids, status — and
 an italic serif used on exactly one word, the last word of an empty state.
 
-**One panel turns.** The bento grid carries a `perspective` whose vanishing point follows
-the pointer, and the panel holding the case graph rotates several degrees to face it and
-steps toward the eye. Everything else holds still, which is the point: when the whole room
+**One panel turns.** Every panel rests flat; the one holding the case graph rotates several
+degrees to face the pointer while it is over it, and steps toward the eye. Everything else
+holds still, which is the point: when the whole room
 moves together there is nothing for the eye to measure the movement against, and a dozen
 surfaces each at a slight angle reads as a wobble. Hold the grid still and turn one panel
 hard, and that panel is unmistakably an object standing in front of the others. It has to
@@ -395,18 +451,18 @@ either screen knowing the rule exists. It looks for a CARD on purpose: a turn ne
 you can see turning, and a drawing shearing on its own with no frame around it to say why
 reads as a stretched picture rather than a panel at an angle. The lens matters as much as
 the angle. The grid's is long (2200px) so that a dozen panels across a wide screen are
-turned rather than sheared, and through a lens that long a single card at 11 degrees is
-just a card that is slightly narrower down one side. So the column holding the board keeps
-a room of its own — a much shorter lens with the eye off to the left, out over the page
-where the reader is rather than squarely in front of the panel.
+turned rather than sheared, and through a lens that long a single card turned a few degrees
+is just a card that is slightly narrower down one side. So the column holding the board
+keeps a room of its own, a much shorter lens with the eye straight in front of it, so the
+turn toward the pointer is as large to the left as to the right.
 
-One listener on the window writes the pointer as `--px` and `--py` on the root element;
-the turn, the vanishing point and the streak's own drift all read those two numbers, so
-there is exactly one listener and no re-render.
+The pointer's place on the card is written as `--gx` and `--gy` on the card itself, never
+on the root element: a custom property changed on the root restyles the whole document,
+and on the card, registered as non-inheriting, it restyles the card and nothing else.
 
-The light is a canvas behind everything (`src/ui/Streak.jsx`): a hundred-odd bezier
-strands pulled through a focal point in the lower-left and fanned across the right,
-undulating on gradient noise. It is painted through WebGL (`src/ui/streakGL.js`): stroking
+The light is a canvas behind everything (`src/ui/Streak.jsx`): in the default, a
+hundred-odd bezier strands pulled through a knot in the lower-left and fanned across the
+right, undulating on gradient noise. It is painted through WebGL (`src/ui/streakGL.js`): stroking
 that many curves through Canvas 2D turned out to cost the browser's GPU process most of a
 CPU core, because each stroke is triangulated on the CPU before the GPU sees it. So the
 strands are flattened to polylines, widened into one triangle mesh and drawn in a single
@@ -430,5 +486,5 @@ Three conventions are load-bearing, and breaking any of them shows immediately:
 
 `prefers-reduced-motion` is honoured throughout, and can be forced on from Settings. The
 flow is laid out rather than simulated, so a reduced-motion reader gets the same drawing on
-the first frame. The panel keeps its resting angle, because an angle that never changes is
-not movement, but it no longer turns toward the pointer.
+the first frame. The panel stays flat and no longer turns toward the pointer, and the
+background holds a single still picture with no arrival.

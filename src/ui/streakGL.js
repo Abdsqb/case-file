@@ -26,8 +26,10 @@
  *
  *   - a halo: each strand's quad is widened by `glow` px and the light falls
  *     off across it, so strands bloom instead of being hairlines;
- *   - pulses: bright surges that run along every strand, each strand on its
+ *   - pulses: slow swells that run along every strand, each strand on its
  *     own phase, worked out from where along the strand a pixel is;
+ *   - the arrival: each strand filling in from start to end behind a soft
+ *     front, so the light pours in along its own course;
  *   - heat: near the focus the colour runs to white, and out at the edges it
  *     cools toward the second tint;
  *   - a flare: an anamorphic streak drawn through the focus in the bloom
@@ -80,7 +82,7 @@ precision mediump float;
  * @param colours     { main, cool, pale } as [r,g,b] 0-255
  * @param moteColour  [r,g,b] 0-255
  * @param fx          { glow, halo, pulses, pulseSpeed, pulseGain, heat, chill,
- *                      flare, breathe } — see backdrops.js
+ *                      flare, breathe, pulseSharp } — see backdrops.js
  */
 export function createStreakGL(canvas, { lampStops, bloomStops, colours, moteColour, fx = {} }) {
   let gl = null;
@@ -137,6 +139,7 @@ uniform float u_time;
 uniform float u_glow;
 uniform vec4 u_pulse;
 uniform vec3 u_heat;
+uniform vec2 u_reveal;
 varying vec4 v_meta;
 varying vec2 v_along;
 ${ramp('lamp', lampStops, 'float', ([, a]) => f(a))}
@@ -148,19 +151,28 @@ void main() {
   float cover = core + h * h * u_heat.z * (1.0 - core);
 
   float d = length(gl_FragCoord.xy - u_fold) / u_R;
-  /* A surge running down the strand: a sharp peak once per period, on this
-     strand's own phase. It lights the strand even out where the lamp has
-     faded, which is what makes it read as energy travelling. */
+  /* A swell running down the strand, once per period, on this strand's own
+     phase. u_pulse.w is how peaked it is: low is a long soft swell, which is
+     what keeps it reading as a current rather than a spark. */
   float w = fract(v_along.x * u_pulse.x - u_time * u_pulse.y + v_along.y);
-  float pulse = pow(1.0 - abs(w - 0.5) * 2.0, 10.0) * u_pulse.z;
-  float lit = lamp(d) * (1.0 + pulse) + pulse * 0.16 * (1.0 - smoothstep(0.5, 1.3, d));
-  float a = lit * v_meta.z * cover;
+  float pulse = pow(1.0 - abs(w - 0.5) * 2.0, u_pulse.w) * u_pulse.z;
+  float lit = lamp(d) * (1.0 + pulse) + pulse * 0.08 * (1.0 - smoothstep(0.5, 1.3, d));
+
+  /* The arrival. Each strand fills in from its start to its end, a soft
+     front running along it, every strand a little behind or ahead of its
+     neighbours — the river pouring in along its own course. At u_reveal 1
+     the front is past the end of every strand and nothing is held back. */
+  float head = mix(u_reveal.y, 1.5, u_reveal.x) - v_along.y * 0.38;
+  float shown = 1.0 - smoothstep(head - 0.14, head, v_along.x);
+  float front = smoothstep(head - 0.3, head - 0.04, v_along.x) * shown * (1.0 - step(1.0, u_reveal.x));
+  /* The front carries a glow of its own, so the light is seen travelling
+     even across the dim stretches far from the focus. */
+  float a = (lit * (1.0 + front * 0.5) + front * 0.1 * (1.0 - smoothstep(0.7, 1.5, d))) * v_meta.z * cover * shown;
 
   vec3 col = v_meta.w < 0.5 ? ${rgb(colours.main)} : (v_meta.w < 1.5 ? ${rgb(colours.cool)} : ${rgb(colours.pale)});
-  /* White-hot at the focus, cooling toward the second tint at the edges. */
+  /* A little warmer toward the focus, cooling toward the second tint at the edges. */
   col = mix(col, vec3(1.0), (1.0 - smoothstep(0.0, 0.16, d)) * u_heat.x);
   col = mix(col, ${rgb(colours.cool)}, smoothstep(0.3, 0.95, d) * u_heat.y);
-  col = mix(col, vec3(1.0), min(pulse, 1.0) * 0.4);
   gl_FragColor = vec4(col * a, a);
 }`;
 
@@ -179,10 +191,12 @@ uniform float u_R;
 uniform vec2 u_size;
 uniform float u_time;
 uniform vec2 u_flare;
+uniform float u_fade;
 ${ramp('bloom', bloomStops, 'vec4', ([, c, a]) => `vec4(${rgb(c)}, ${f(a)})`)}
 void main() {
   vec2 p = gl_FragCoord.xy - u_fold;
-  float breath = 1.0 + u_flare.y * sin(u_time * 1.3);
+  /* Slow, and faded in as the light arrives rather than waiting for it. */
+  float breath = (1.0 + u_flare.y * sin(u_time * 0.6)) * u_fade;
   vec4 c = bloom(length(p) / u_R);
   float a = c.a * breath;
   float across = abs(p.y) / (2.0 + u_size.y * 0.0035);
@@ -240,8 +254,8 @@ void main() {
 
   const init = () => {
     res = {
-      strand: program(STRAND_VS, STRAND_FS, ['u_size', 'u_fold', 'u_R', 'u_time', 'u_glow', 'u_pulse', 'u_heat']),
-      bloom: program(FULL_VS, BLOOM_FS, ['u_fold', 'u_R', 'u_size', 'u_time', 'u_flare']),
+      strand: program(STRAND_VS, STRAND_FS, ['u_size', 'u_fold', 'u_R', 'u_time', 'u_glow', 'u_pulse', 'u_heat', 'u_reveal']),
+      bloom: program(FULL_VS, BLOOM_FS, ['u_fold', 'u_R', 'u_size', 'u_time', 'u_flare', 'u_fade']),
       mote: program(MOTE_VS, MOTE_FS, ['u_size']),
       full: gl.createBuffer(),
       pos: gl.createBuffer(),
@@ -352,7 +366,8 @@ void main() {
 
   /**
    * frame: { W, H, dpr, fx, fy, R, bloomR, strands, curves, motes, time }
-   * (fx, fy here are the focus; time is in seconds, for the pulses and flare)
+   * (fx, fy here are the focus; time is in seconds, for the pulses and flare;
+   * reveal is 0..1 through the arrival, absent for the whole picture)
    * curves[i] is strand i as the 14 numbers Streak's shape() returns, in CSS
    * px; motes are { x, y, r, a } in CSS px.
    */
@@ -360,6 +375,8 @@ void main() {
     if (lost || !res) return;
     const { dpr, fx: focusX, fy: focusY, R, bloomR, strands, curves } = frame;
     const time = frame.time || 0;
+    /* 0..1 through the arrival; 1, or absent, is the whole picture. */
+    const reveal = frame.reveal === undefined ? 1 : frame.reveal;
     const dw = canvas.width;
     const dh = canvas.height;
     if (res.builtFor !== strands || res.builtDpr !== dpr) buildStatic(strands, dpr);
@@ -418,6 +435,7 @@ void main() {
     gl.uniform2f(bl.u.u_size, dw, dh);
     gl.uniform1f(bl.u.u_time, time);
     gl.uniform2f(bl.u.u_flare, fx.flare || 0, fx.breathe || 0);
+    gl.uniform1f(bl.u.u_fade, Math.min(1, Math.max(0, (reveal - 0.3) / 0.7)));
     bind(res.full, bl.pos, 2);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.disableVertexAttribArray(bl.pos);
@@ -429,8 +447,9 @@ void main() {
     gl.uniform1f(st.u.u_R, R * dpr);
     gl.uniform1f(st.u.u_time, time);
     gl.uniform1f(st.u.u_glow, glowPx(dpr));
-    gl.uniform4f(st.u.u_pulse, fx.pulses || 0, fx.pulseSpeed || 0, fx.pulseGain || 0, 0);
+    gl.uniform4f(st.u.u_pulse, fx.pulses || 0, fx.pulseSpeed || 0, fx.pulseGain || 0, fx.pulseSharp || 3);
     gl.uniform3f(st.u.u_heat, fx.heat || 0, fx.chill || 0, fx.halo || 0);
+    gl.uniform2f(st.u.u_reveal, reveal, fx.lead || 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, res.pos);
     gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STREAM_DRAW);
     gl.enableVertexAttribArray(st.pos);

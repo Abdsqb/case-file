@@ -20,9 +20,12 @@
  *   fx               the drama, all per pixel in the painter: glow (px the halo
  *                    reaches past a strand), halo (its strength), pulses (surges
  *                    per strand), pulseSpeed (strand lengths a second),
- *                    pulseGain, heat (white at the focus), chill (cool tint at
+ *                    pulseGain, pulseSharp (low is a long soft swell, high a
+ *                    spark), heat (white at the focus), chill (cool tint at
  *                    the edges), flare (the anamorphic streak), breathe (how
- *                    much the bloom swells and settles)
+ *                    much the bloom swells and settles), weight (every
+ *                    strand's brightness, scaled), lead (how far along its
+ *                    strands the screen begins, so the arrival starts there)
  *   look(s)          optional: a strand's width and weight, if not the default
  *   shape(s, time, fx, fy, W, H)
  *                    one strand at one moment, as two cubics joined end to end:
@@ -129,9 +132,32 @@ export function buildStrands(backdrop, W) {
       hue: i % 11 === 0 ? 'cool' : i % 7 === 0 ? 'pale' : 'main',
     };
     if (backdrop.look) Object.assign(s, backdrop.look(s, h));
+    if (backdrop.fx && backdrop.fx.weight) s.alpha *= backdrop.fx.weight;
     strands.push(s);
   }
   return strands;
+}
+
+
+/* The swatch sketch every current shares: three ribbons at three depths,
+   drawing in from the left. Hands each object's place, size, turn and weight
+   to `draw`, which paints it. */
+function currentSketch(W, H, secs, reveal, draw) {
+  const ribbons = [
+    { y0: 0.82, y1: 0.66, depth: 2, size: 10, alpha: 0.3 },
+    { y0: 0.3, y1: 0.55, depth: 1, size: 15, alpha: 0.55 },
+    { y0: 0.62, y1: 0.18, depth: 0, size: 22, alpha: 0.9 },
+  ];
+  for (const rb of ribbons) {
+    for (let i = 0; i < 70; i += 1) {
+      const h = (k) => { const v = Math.sin((i + 1) * k + rb.depth * 7.1) * 43758.5453; return v - Math.floor(v); };
+      const s = (i / 70 + secs * 0.01 * (3 - rb.depth)) % 1;
+      if (s > reveal * 1.15) continue;
+      const x = W * (-0.05 + s * 1.1);
+      const y = H * (rb.y0 + (rb.y1 - rb.y0) * s + 0.06 * Math.sin(s * 6.3 + rb.depth)) + (h(12.9) - 0.5) * H * 0.16;
+      draw(x, y, rb.size * (0.6 + h(78.2)), h(39.4) * Math.PI * 2 + secs * 0.2, rb.alpha);
+    }
+  }
 }
 
 /* ===========================================================================
@@ -153,7 +179,7 @@ export const BACKDROPS = [
     focus: [0.26, 0.68],
     lamp: 0.62,
     bloom: 0.22,
-    fx: { glow: 5, halo: 0.28, pulses: 1.4, pulseSpeed: 0.16, pulseGain: 2.4, heat: 0.62, chill: 0.45, flare: 0.6, breathe: 0.18 },
+    fx: { glow: 7, halo: 0.16, pulses: 0.8, pulseSpeed: 0.05, pulseGain: 0.6, pulseSharp: 2.5, heat: 0.08, chill: 0.5, flare: 0, breathe: 0.08, weight: 0.78 },
     shape(s, time, fx, fy, W, H) {
       const { n1, n2, n3, swing } = stir(s, time);
       /* Unsigned: both sides of the bundle fold the same way round the turn.
@@ -161,11 +187,12 @@ export const BACKDROPS = [
       const a = Math.abs(s.spread);
       const side = s.spread < 0 ? -1 : 1;
 
-      /* Where this strand turns. The apexes are strung out along a short
-         diagonal, which gives the bright part a LENGTH — a caustic you can
-         follow rather than a dot everything is aimed at. */
-      const tx = fx - a * W * 0.042 + s.drift * W * 0.028 + n3 * W * 0.012;
-      const ty = fy + a * H * 0.035 + s.drift * H * 0.032 + side * a * H * 0.018;
+      /* Where this strand turns. Every strand passes through nearly the same
+         point — a few pixels apart at most — so the fold is a tight knot the
+         whole bundle is drawn through, and all the variety is in how each
+         strand arrives and leaves, not in where it turns. */
+      const tx = fx - a * W * 0.01 + s.drift * W * 0.007 + n3 * W * 0.003;
+      const ty = fy + a * H * 0.009 + s.drift * H * 0.008 + side * a * H * 0.004;
 
       /* The radius of the turn: tight at the core, so the fold comes to a
          point instead of rounding off into a bowl. */
@@ -210,16 +237,16 @@ export const BACKDROPS = [
     focus: [0.62, 0.18],
     lamp: 0.6,
     bloom: 0.2,
-    fx: { glow: 5, halo: 0.32, pulses: 1.2, pulseSpeed: 0.14, pulseGain: 2.6, heat: 0.85, chill: 0.5, flare: 0.95, breathe: 0.2 },
+    fx: { glow: 7, halo: 0.16, pulses: 0.8, pulseSpeed: 0.05, pulseGain: 0.6, pulseSharp: 2.5, heat: 0.08, chill: 0.5, flare: 0, breathe: 0.08, weight: 0.82 },
     shape(s, time, fx, fy, W, H) {
       const { n1, n2, n3, swing } = stir(s, time);
       const a = Math.abs(s.spread);
       const side = s.spread < 0 ? -1 : 1;
 
-      /* The crest: nearly one point, smeared a little along the arch so the
-         bright part has a length. */
-      const mx = fx + s.drift * W * 0.035 + n3 * W * 0.015;
-      const my = fy + a * H * 0.05 + side * a * H * 0.02 + s.drift * H * 0.015;
+      /* The crest: all but one point — every strand drawn through the same
+         few pixels. */
+      const mx = fx + s.drift * W * 0.009 + n3 * W * 0.004;
+      const my = fy + a * H * 0.012 + side * a * H * 0.005 + s.drift * H * 0.004;
       /* Speed through the crest decides how wide the arch is there. */
       const sweep = W * (0.28 + a * 0.75) * s.curl * (0.85 + swing * 0.2);
 
@@ -251,7 +278,7 @@ export const BACKDROPS = [
     focus: [0.34, 0.8],
     lamp: 0.58,
     bloom: 0.2,
-    fx: { glow: 4, halo: 0.32, pulses: 2, pulseSpeed: 0.22, pulseGain: 2.2, heat: 0.85, chill: 0.4, flare: 0.75, breathe: 0.15 },
+    fx: { lead: 0.15, glow: 6, halo: 0.16, pulses: 1, pulseSpeed: 0.05, pulseGain: 0.6, pulseSharp: 2.5, heat: 0.08, chill: 0.5, flare: 0, breathe: 0.08, weight: 0.78 },
     shape(s, time, fx, fy, W, H) {
       const { n1, n2, n3, swing } = stir(s, time);
       const a = Math.abs(s.spread);
@@ -266,9 +293,9 @@ export const BACKDROPS = [
       const vy = ux;
 
       /* Through the gap, a few pixels apart. */
-      const off = s.spread * H * 0.025 + n3 * H * 0.01;
-      const mx = fx + vx * off + ux * s.drift * W * 0.03;
-      const my = fy + vy * off + uy * s.drift * W * 0.03;
+      const off = s.spread * H * 0.006 + n3 * H * 0.0025;
+      const mx = fx + vx * off + ux * s.drift * W * 0.008;
+      const my = fy + vy * off + uy * s.drift * W * 0.008;
 
       /* Fanned wide at both ends, mirrored across the gap the way rays are
          through a lens, and the whole sheet bowed so it is never a straight
@@ -303,14 +330,14 @@ export const BACKDROPS = [
     /* Long enough to light the tail all the way back to the left edge. */
     lamp: 1.0,
     bloom: 0.18,
-    fx: { glow: 6, halo: 0.36, pulses: 2.4, pulseSpeed: 0.3, pulseGain: 2.8, heat: 0.55, chill: 0.6, flare: 1.0, breathe: 0.25 },
+    fx: { glow: 7, halo: 0.16, pulses: 1, pulseSpeed: 0.07, pulseGain: 0.6, pulseSharp: 2.5, heat: 0.08, chill: 0.6, flare: 0, breathe: 0.08, weight: 0.85 },
     shape(s, time, fx, fy, W, H) {
       const { n1, n2, n3, swing } = stir(s, time);
       const a = Math.abs(s.spread);
 
       /* The head. */
-      const mx = fx + s.drift * W * 0.014 + n3 * W * 0.008;
-      const my = fy + s.spread * H * 0.03 + n1 * H * 0.01;
+      const mx = fx + s.drift * W * 0.004 + n3 * W * 0.002;
+      const my = fy + s.spread * H * 0.008 + n1 * H * 0.003;
 
       /* The tail, fanned up and down the left edge: it crosses the whole
          screen to reach the head, so the wide strands start further off. */
@@ -348,9 +375,8 @@ export const BACKDROPS = [
     focus: [0.5, 0.46],
     lamp: 1.0,
     bloom: 0.34,
-    /* The flare lies along the hem, so it reads as a glowing horizon under
-       the curtain; a slow shimmer rises up the rays, and it breathes most. */
-    fx: { glow: 3, halo: 0.26, pulses: 1, pulseSpeed: 0.12, pulseGain: 2.6, heat: 0.45, chill: 0.7, flare: 0.5, breathe: 0.32 },
+    /* A slow shimmer rising up the rays, and the most breath of any. */
+    fx: { glow: 4, halo: 0.12, pulses: 0.7, pulseSpeed: 0.04, pulseGain: 0.8, pulseSharp: 2, heat: 0.1, chill: 0.7, flare: 0, breathe: 0.12, weight: 1 },
     /* Two kinds of ray. Most are wide and faint, and overlap into a sheet —
        that is the curtain. One in four is a fine bright thread, which is the
        structure you see in it. */
@@ -401,7 +427,7 @@ export const BACKDROPS = [
     focus: [0.3, 0.62],
     lamp: 0.56,
     bloom: 0.2,
-    fx: { glow: 5, halo: 0.34, pulses: 1.8, pulseSpeed: 0.2, pulseGain: 2.6, heat: 0.95, chill: 0.55, flare: 0.6, breathe: 0.22 },
+    fx: { lead: 0.12, glow: 7, halo: 0.16, pulses: 1, pulseSpeed: 0.06, pulseGain: 0.6, pulseSharp: 2.5, heat: 0.08, chill: 0.5, flare: 0, breathe: 0.08, weight: 0.8 },
     shape(s, time, fx, fy, W, H) {
       const { n1, n2, n3, swing } = stir(s, time);
       const a = Math.abs(s.spread);
@@ -413,7 +439,7 @@ export const BACKDROPS = [
       const tq = tm + (1.7 + s.curl * 0.5 + swing * 0.15);
       const r0 = big * (0.78 + a * 0.28) * s.flare;
       const rm = big * (0.2 + a * 0.12) * (0.9 + n2 * 0.2);
-      const rq = big * (0.012 + a * 0.03) + n3 * big * 0.006;
+      const rq = big * (0.004 + a * 0.009) + n3 * big * 0.002;
 
       const at = (th, r) => [fx + Math.cos(th) * r, fy + Math.sin(th) * r * 0.82];
       /* Velocity along a spiral: inward by the change in radius, round by
@@ -432,6 +458,124 @@ export const BACKDROPS = [
       const [qvx, qvy] = vel(tq, rq + big * 0.02, d2, (rq - rm) * 0.3);
 
       return through(px, py, pvx, pvy, mx, my, mvx, mvy, qx, qy, qvx, qvy);
+    },
+  },
+
+  /* ---- The three currents ------------------------------------------------
+     Not strands at all: objects riding five ribbons at five depths, the
+     current from React Bits' AeroShards. Glass Current is AeroShards itself,
+     ray-tracing real glass on WebGPU (AeroShards.jsx). Crystal Needles and
+     Obsidian Edges ride the same current, drawn on plain WebGL
+     (ObjectCurrent.jsx). Streak mounts the component instead of its own
+     canvas; the swatches are sketches, since none of them paints small. */
+  {
+    id: 'shards',
+    name: 'Glass Current',
+    line: 'Ribbons of glass shards drifting through depth.',
+    component: 'shards',
+    preview: (ctx, W, H, colours, secs, reveal) => {
+      const [r, g, b] = colours.main;
+      currentSketch(W, H, secs, reveal, (x, y, size, turn, alpha) => {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(turn);
+        ctx.beginPath();
+        ctx.moveTo(size, 0);
+        ctx.lineTo(-size * 0.6, size * 0.32);
+        ctx.lineTo(-size * 0.6, -size * 0.32);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.35})`;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.55})`;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+        ctx.restore();
+      });
+    },
+  },
+  {
+    id: 'needles',
+    name: 'Crystal Needles',
+    line: 'Glass slivers that flash as they spin.',
+    component: 'needles',
+    preview: (ctx, W, H, colours, secs, reveal) => {
+      const [r, g, b] = colours.main;
+      ctx.lineCap = 'round';
+      currentSketch(W, H, secs, reveal, (x, y, size, turn, alpha) => {
+        const dx = Math.cos(turn * 2) * size * 1.3;
+        const dy = Math.sin(turn * 2) * size * 1.3;
+        const glint = Math.pow(Math.abs(Math.sin(turn * 2)), 6);
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.25})`;
+        ctx.lineWidth = 7;
+        ctx.beginPath(); ctx.moveTo(x - dx, y - dy); ctx.lineTo(x + dx, y + dy); ctx.stroke();
+        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * (0.45 + glint * 0.55)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x - dx, y - dy); ctx.lineTo(x + dx, y + dy); ctx.stroke();
+      });
+    },
+  },
+  {
+    id: 'obsidian',
+    name: 'Obsidian Edges',
+    line: 'Black glass seen only by its glowing edges.',
+    component: 'obsidian',
+    preview: (ctx, W, H, colours, secs, reveal) => {
+      const [r, g, b] = colours.main;
+      const lift = (v) => Math.round(v + (255 - v) * 0.4);
+      ctx.lineJoin = 'round';
+      currentSketch(W, H, secs, reveal, (x, y, size, turn, alpha) => {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(turn);
+        ctx.beginPath();
+        ctx.moveTo(size * 1.1, 0);
+        ctx.lineTo(size * 0.1, size * 0.6);
+        ctx.lineTo(-size * 0.9, size * 0.3);
+        ctx.lineTo(-size * 0.7, -size * 0.45);
+        ctx.lineTo(size * 0.3, -size * 0.55);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(9, 7, 15, ${0.95 * alpha})`;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.25})`;
+        ctx.lineWidth = 6;
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(${lift(r)}, ${lift(g)}, ${lift(b)}, ${alpha * 0.9})`;
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+        ctx.restore();
+      });
+    },
+  },
+
+  /* ---- Undertow -----------------------------------------------------------
+     A dark sea made of tiny slats, swelling toward you from a horizon above
+     the top edge, drawn by React Bits' MicroSlats on WebGL2 (MicroSlats.jsx).
+     The cursor stirs real fluid through it. Mounted like the currents. */
+  {
+    id: 'slats',
+    name: 'Undertow',
+    line: 'A dark sea of tiny slats, rolling in.',
+    component: 'slats',
+    preview: (ctx, W, H, colours, secs, reveal) => {
+      /* Three times the real slat size: at a fifth of the window, the real
+         ones would be smaller than a pixel. */
+      const sw = 6;
+      const sh = 18;
+      const gap = 9;
+      for (let y = 0; y < H; y += sh + gap) {
+        if (y / H > reveal * 1.35) break;
+        for (let x = 0; x < W; x += sw + gap) {
+          const wave =
+            0.6 * Math.sin(x * 0.011 + y * 0.006 - secs * 0.65) +
+            0.4 * Math.sin(x * 0.004 - y * 0.012 + secs * 0.4);
+          const level = Math.max(0, Math.min(1, 0.5 + 0.5 * wave));
+          const lit = Math.pow(level, 1.6) * 0.9 + 0.06;
+          ctx.fillStyle = `rgba(150, 142, 160, ${lit})`;
+          ctx.beginPath();
+          ctx.roundRect(x, y, sw, sh, sw / 2);
+          ctx.fill();
+        }
+      }
     },
   },
 
@@ -479,7 +623,7 @@ export function readColours() {
     pale: token('--text', [241, 239, 246]),
     hot,
     /* The glow at the focus: [offset, colour, alpha]. */
-    bloomStops: [[0, hot, 0.36], [0.12, accent, 0.14], [0.4, accent, 0.045], [1, [0, 0, 0], 0]],
+    bloomStops: [[0, accent, 0.18], [0.15, accent, 0.07], [0.45, accent, 0.02], [1, [0, 0, 0], 0]],
   };
 }
 
@@ -491,7 +635,7 @@ export function readColours() {
  * approximated the way Canvas 2D can: a wide faint pass for the halo, a
  * moving dash for the pulses, a squashed radial gradient for the flare.
  */
-export function paintStill(canvas, backdrop, colours, { width, height, time = 2.1, secs = 0 } = {}) {
+export function paintStill(canvas, backdrop, colours, { width, height, time = 2.1, secs = 0, reveal = 1 } = {}) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -505,6 +649,11 @@ export function paintStill(canvas, backdrop, colours, { width, height, time = 2.
   const H = (W * height) / width;
   const k = (width / W) * dpr;
   ctx.setTransform(k, 0, 0, k, 0, 0);
+  /* A backdrop drawn by its own component brings its own sketch. */
+  if (backdrop.preview) {
+    backdrop.preview(ctx, W, H, colours, secs, reveal);
+    return;
+  }
   ctx.globalCompositeOperation = 'lighter';
 
   const fx = W * backdrop.focus[0];
@@ -558,9 +707,38 @@ export function paintStill(canvas, backdrop, colours, { width, height, time = 2.
     ctx.bezierCurveTo(c[8], c[9], c[10], c[11], c[12], c[13]);
     ctx.stroke();
   };
+  /* A strand's length, near enough, for drawing only the part of it the
+     arrival has reached: a single dash that long. */
+  const lengthOf = (c) => {
+    let len = 0;
+    let x0 = c[0];
+    let y0 = c[1];
+    for (let seg = 0; seg < 2; seg += 1) {
+      const o = seg * 6;
+      for (let i = 1; i <= 16; i += 1) {
+        const t = i / 16;
+        const m = 1 - t;
+        const a = m * m * m; const b = 3 * m * m * t; const d = 3 * m * t * t; const e = t * t * t;
+        const x = a * c[o] + b * c[o + 2] + d * c[o + 4] + e * c[o + 6];
+        const y = a * c[o + 1] + b * c[o + 3] + d * c[o + 5] + e * c[o + 7];
+        len += Math.hypot(x - x0, y - y0);
+        x0 = x; y0 = y;
+      }
+    }
+    return len;
+  };
   for (const s of strands) {
     const c = backdrop.shape(s, time, fx, fy, W, H);
+    const ph = Math.sin((s.i + 1) * 91.17) * 43758.5453;
+    const phase = ph - Math.floor(ph);
+    /* The same front the painter runs: see streakGL.js. */
+    const head = (drama.lead || 0) + (1.5 - (drama.lead || 0)) * reveal - phase * 0.38;
+    if (head <= 0) continue;
+    const arriving = reveal < 1 && head < 1;
+    const reach = arriving ? lengthOf(c) : 0;
+    const clip = () => { if (arriving) ctx.setLineDash([reach * head, reach * 2]); };
     ctx.strokeStyle = lamps[s.hue];
+    clip();
     if (drama.halo) {
       ctx.globalAlpha = Math.min(1, s.alpha * drama.halo * 0.6);
       ctx.lineWidth = (Math.max(0.5, s.width * 0.8) + (drama.glow || 0) * 0.6) * px;
@@ -569,15 +747,15 @@ export function paintStill(canvas, backdrop, colours, { width, height, time = 2.
     ctx.globalAlpha = Math.min(1, s.alpha * 1.25);
     ctx.lineWidth = Math.max(0.5, s.width * 0.8) * px;
     trace(c);
-    if (drama.pulseGain) {
-      const ph = Math.sin((s.i + 1) * 91.17) * 43758.5453;
-      ctx.setLineDash([period * 0.06, period * 0.94]);
-      ctx.lineDashOffset = ((ph - Math.floor(ph)) - secs * (drama.pulseSpeed || 0) * 2) * period;
-      ctx.globalAlpha = Math.min(1, s.alpha * drama.pulseGain * 0.8);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.setLineDash([]);
+    if (drama.pulseGain && !arriving) {
+      ctx.setLineDash([period * 0.3, period * 0.7]);
+      ctx.lineDashOffset = (phase - secs * (drama.pulseSpeed || 0)) * period;
+      ctx.globalAlpha = Math.min(1, s.alpha * drama.pulseGain * 0.5);
       ctx.lineWidth = Math.max(0.8, s.width) * px;
       trace(c);
       ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
     }
   }
   ctx.globalAlpha = 1;

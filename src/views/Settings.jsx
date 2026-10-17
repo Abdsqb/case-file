@@ -15,6 +15,7 @@
  *   casefile.weekStart       '1'  | '0'     — Monday (default) or Sunday
  *   casefile.accent          'violet' (default) | 'white' | 'red' | 'green' | 'turquoise'
  *   casefile.backdrop        'silk' (default) | any other id in ui/backdrops.js
+ *   casefile.backdropBlur    '0' | '1.5' (default) | '3' | '6' | '12' — px of blur over it
  *
  * Other views read these with the exported `useSetting(key, fallback)` hook.
  * Every read is wrapped in try/catch: a corrupt value, a disabled storage
@@ -47,6 +48,25 @@ export const KEY_PARALLAX = 'parallax'
 export const KEY_WEEK_START = 'weekStart'
 export const KEY_ACCENT = 'accent'
 export const KEY_BACKDROP = 'backdrop'
+export const KEY_BACKDROP_BLUR = 'backdropBlur'
+
+/* How much the light behind the glass is diffused, in CSS px of blur. The
+   second is the default: a breath of haze, enough to soften the strands
+   without losing them. */
+export const BLURS = [
+  { value: 0, label: 'Crisp' },
+  { value: 1.5, label: 'Haze' },
+  { value: 3, label: 'Mist' },
+  { value: 6, label: 'Fog' },
+  { value: 12, label: 'Smoke' },
+]
+export const DEFAULT_BLUR = BLURS[1].value
+
+/** The stored diffusion, or the default when it is missing or not one we offer. */
+export function readBackdropBlur() {
+  const raw = Number(readRaw(KEY_BACKDROP_BLUR))
+  return BLURS.some((b) => b.value === raw) && readRaw(KEY_BACKDROP_BLUR) !== null ? raw : DEFAULT_BLUR
+}
 
 /* The order the swatches sit in. Each id has a block in styles.css under
    ACCENTS; the first is the default and the one with no attribute at all. */
@@ -229,7 +249,9 @@ export function readAccent() {
 
 /** The stored backdrop, or the default when it is missing or not one we know. */
 export function readBackdrop() {
-  const raw = readRaw(KEY_BACKDROP)
+  let raw = readRaw(KEY_BACKDROP)
+  // Ember Current was retired: anyone on it goes back to Glass Current.
+  if (raw === 'embers') raw = 'shards'
   return BACKDROPS.some((b) => b.id === raw) ? raw : DEFAULT_BACKDROP
 }
 
@@ -509,7 +531,7 @@ function AccentPicker({ value, onChange }) {
  * painted small in the current accent, held still until the pointer rests on
  * it — then it plays, so you can see how it moves before you pick it.
  */
-function BackdropPicker({ value, accent, reduced, onChange }) {
+function BackdropPicker({ value, accent, reduced, blur, onChange }) {
   const refs = useRef([])
   const index = Math.max(0, BACKDROPS.findIndex((b) => b.id === value))
 
@@ -530,6 +552,7 @@ function BackdropPicker({ value, accent, reduced, onChange }) {
           backdrop={b}
           accent={accent}
           reduced={reduced}
+          blur={blur}
           checked={i === index}
           buttonRef={(el) => { refs.current[i] = el }}
           onPick={() => onChange(b.id)}
@@ -542,7 +565,7 @@ function BackdropPicker({ value, accent, reduced, onChange }) {
 const PREVIEW_W = 320
 const PREVIEW_H = 180
 
-function BackdropTile({ backdrop, accent, reduced, checked, buttonRef, onPick }) {
+function BackdropTile({ backdrop, accent, reduced, blur, checked, buttonRef, onPick }) {
   const canvasRef = useRef(null)
   const [playing, setPlaying] = useState(false)
 
@@ -564,9 +587,11 @@ function BackdropTile({ backdrop, accent, reduced, checked, buttonRef, onPick })
       raf = requestAnimationFrame(tick)
       if (now - last < 33) return
       last = now
-      // The same clock Streak runs on: one undulation every nine seconds.
+      // The same clock Streak runs on: one undulation every fifteen seconds,
+      // and the light pouring in over the first few, as it does on the dashboard.
       const secs = (now - t0) / 1000
-      paintStill(canvas, backdrop, colours, { ...size, time: 2.1 + (secs / 9) * Math.PI * 2, secs })
+      const reveal = 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, secs / 3.8))
+      paintStill(canvas, backdrop, colours, { ...size, time: 2.1 + (secs / 15) * Math.PI * 2, secs, reveal })
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
@@ -587,7 +612,14 @@ function BackdropTile({ backdrop, accent, reduced, checked, buttonRef, onPick })
       onBlur={() => setPlaying(false)}
     >
       <span className="backdrop-tile__view">
-        <canvas ref={canvasRef} className="backdrop-tile__canvas" aria-hidden="true" />
+        <canvas
+          ref={canvasRef}
+          className="backdrop-tile__canvas"
+          aria-hidden="true"
+          // The swatch is about a fifth of the window, so a fifth of the blur
+          // gives it the same look.
+          style={blur ? { filter: `blur(${(blur * 0.25).toFixed(2)}px)` } : undefined}
+        />
         {backdrop.off ? <span className="backdrop-tile__off" aria-hidden="true">off</span> : null}
       </span>
       <span className="backdrop-tile__text">
@@ -793,6 +825,8 @@ export function Settings({ projects, now }) {
   const weekStart = useSetting(KEY_WEEK_START, 1)
   const accent = useSetting(KEY_ACCENT, DEFAULT_ACCENT)
   const backdrop = useSetting(KEY_BACKDROP, DEFAULT_BACKDROP)
+  useSetting(KEY_BACKDROP_BLUR, '')
+  const blur = readBackdropBlur()
 
   const stats = useMemo(() => globalStats(cases, clock), [cases, clock])
   /* Asked once. The answer is a function of .env, which cannot change without
@@ -937,12 +971,24 @@ export function Settings({ projects, now }) {
               value={backdrop}
               accent={accent}
               reduced={reducedMotion}
+              blur={blur}
               onChange={(next) => writeSetting(KEY_BACKDROP, next === DEFAULT_BACKDROP ? null : next)}
             />
+            <SettingRow
+              title="Diffusion"
+              hint="A blur laid over the background. Crisp draws every line sharp; Smoke melts it into a soft glow."
+            >
+              <Segmented
+                items={BLURS}
+                value={blur}
+                onChange={(next) => writeSetting(KEY_BACKDROP_BLUR, next === DEFAULT_BLUR ? null : next)}
+                label="Background diffusion"
+              />
+            </SettingRow>
           </div>
           <div className="card__foot">
             <span>Drawn in your accent colour. Reduce motion holds it still.</span>
-            <span className="dim">casefile.backdrop</span>
+            <span className="dim">casefile.backdrop · casefile.backdropBlur</span>
           </div>
         </Card>
 

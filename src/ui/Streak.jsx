@@ -27,26 +27,50 @@
  *     point; the motion is a bonus, and it is the bonus that costs.
  */
 
-import { useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { STANDBY_EVENT } from './Standby.jsx';
+
+/* The backdrops drawn by their own components, loaded only when picked:
+   AeroShards brings WebGPU, and most visits need none of them. */
+const AeroShards = lazy(() => import('./AeroShards.jsx'));
+const ObjectCurrent = lazy(() => import('./ObjectCurrent.jsx'));
+const MicroSlats = lazy(() => import('./MicroSlats.jsx'));
+
+const hex = (c) => `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 
 /* Anything that lays a blur over the whole window can hold the streak still
    while it is up — the board opened full window does. Its own event rather
    than standby's, so standby waking underneath cannot restart it. */
 export const STREAK_HOLD_EVENT = 'casefile:streak-hold';
 import { createStreakGL } from './streakGL.js';
-import { backdropById, buildStrands, LAMP_STOPS, readColours } from './backdrops.js';
-import { KEY_ACCENT, KEY_BACKDROP, readAccent, readBackdrop, useSetting } from '../views/Settings.jsx';
+import { backdropById, buildStrands, DEFAULT_BACKDROP, LAMP_STOPS, readColours } from './backdrops.js';
+import {
+  KEY_ACCENT,
+  KEY_BACKDROP,
+  KEY_BACKDROP_BLUR,
+  readAccent,
+  readBackdrop,
+  readBackdropBlur,
+  useSetting,
+} from '../views/Settings.jsx';
 
 /* Screens that are mostly content. The streak stays, at a fraction of its
    weight, because a wall of rows over a bright strand is hard to read. */
 const DENSE = new Set(['reporting', 'settings', 'flashcards', 'cases']);
 
-const PARTICLES = 36;
+const PARTICLES = 16;
 
 /* How long one full undulation takes, give or take — the strands are on
-   several frequencies, so the bundle never quite repeats. */
-const CYCLE_MS = 9000;
+   several frequencies, so the bundle never quite repeats. Slow: it should
+   read as a current you notice, not motion that pulls at the eye. */
+const CYCLE_MS = 15000;
+
+/* The arrival: how long the light takes to pour in along its course when the
+   dashboard opens (or the backdrop changes). */
+const ARRIVAL_MS = 3800;
+
+/* Slow in, slow out — the front gathers, runs, and settles. */
+const easeInOut = (t) => 0.5 - 0.5 * Math.cos(Math.PI * t);
 
 const MAX_PARALLAX = 20;
 
@@ -63,15 +87,35 @@ export default function Streak({ view }) {
      normalises a junk stored value to the one the stylesheet is showing. */
   useSetting(KEY_ACCENT, '');
   useSetting(KEY_BACKDROP, '');
+  useSetting(KEY_BACKDROP_BLUR, '');
+  /* Set on the layer itself, never as a custom property on <html>: a
+     property up there restyles the whole document when it changes. */
+  const blurPx = readBackdropBlur();
+  const diffusion = { filter: blurPx ? `blur(${blurPx}px)` : 'none' };
   const accentId = readAccent();
-  const backdropId = readBackdrop();
+  const chosenId = readBackdrop();
+  /* A component backdrop that cannot start (no WebGPU on this machine, say)
+     falls back to the default rather than leaving the room dark. */
+  const [failed, setFailed] = useState(null);
+  const backdropId = failed === chosenId ? DEFAULT_BACKDROP : chosenId;
+  /* Counts dashboard visits: a component backdrop is remounted on each, so
+     its own intro plays the way the strands pour in. */
+  const [visit, setVisit] = useState(0);
+  /* Standby or the full-window board is up: hold the component still. */
+  const [resting, setResting] = useState(false);
+  /* When the light last started to arrive. Read by the running loop each
+     frame, so restarting it is just writing a new time here. */
+  const arrival = useRef(0);
 
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return undefined;
     const backdrop = backdropById(backdropId);
-    /* Lights Out: nothing to draw and nothing to run. */
-    if (backdrop.off) return undefined;
+    /* Lights Out: nothing to draw and nothing to run. A component backdrop
+       runs itself. */
+    if (backdrop.off || backdrop.component) return undefined;
+    /* A new look arrives the same way the dashboard does. */
+    arrival.current = performance.now();
 
     const still =
       document.documentElement.dataset.motion === 'reduced' ||
@@ -95,12 +139,12 @@ export default function Streak({ view }) {
       const small = W < 760;
       strands = buildStrands(backdrop, W);
       particles = [];
-      for (let i = 0; i < (small ? 14 : PARTICLES); i += 1) {
+      for (let i = 0; i < (small ? 8 : PARTICLES); i += 1) {
         particles.push({
           strand: Math.floor((i / PARTICLES) * strands.length),
           p: Math.random(),
-          speed: 0.015 + Math.random() * 0.04,
-          size: 0.9 + Math.random() * 1.4,
+          speed: 0.008 + Math.random() * 0.016,
+          size: 0.7 + Math.random() * 0.8,
           twinkle: Math.random() * Math.PI * 2,
         });
       }
@@ -183,6 +227,10 @@ export default function Streak({ view }) {
       curves.length = strands.length;
       for (let i = 0; i < strands.length; i += 1) curves[i] = shape(strands[i], time, fx, fy);
 
+      /* How far through the arrival: held at the whole picture when motion
+         is reduced, since there is no animation to arrive by. */
+      const reveal = still ? 1 : easeInOut(Math.min(1, Math.max(0, (now - arrival.current) / ARRIVAL_MS)));
+
       /* A few motes carried along the strands. They are what tells you the
          picture is alive when the undulation is at its slowest. */
       motes.length = 0;
@@ -192,14 +240,15 @@ export default function Streak({ view }) {
         p.p += p.speed * (dt / 1000);
         if (p.p > 1) p.p -= 1;
         const [x, y] = along(curves[i], p.p);
-        /* Brightest near the focus, like everything else here, and each one
-           glinting on its own beat. */
+        /* Brightest near the focus, like everything else here, each one
+           slowly brightening and dimming on its own beat, and only once the
+           light has arrived. */
         const lit = Math.max(0, 1 - Math.hypot(x - fx, y - fy) / (R * 0.4));
-        const glint = 0.7 + 0.3 * Math.sin(now * 0.004 + p.twinkle);
-        motes.push({ x, y, r: p.size, a: (0.14 + lit * 0.6) * glint });
+        const glint = 0.75 + 0.25 * Math.sin(now * 0.0011 + p.twinkle);
+        motes.push({ x, y, r: p.size, a: (0.06 + lit * 0.3) * glint * reveal * reveal });
       }
 
-      if (glr) glr.paint({ W, H, dpr, fx, fy, R, bloomR, strands, curves, motes, time: (now - t0) / 1000 });
+      if (glr) glr.paint({ W, H, dpr, fx, fy, R, bloomR, strands, curves, motes, time: (now - t0) / 1000, reveal });
       else paint2d(fx, fy, R, bloomR);
     };
 
@@ -358,13 +407,131 @@ export default function Streak({ view }) {
     };
   }, [accentId, backdropId]);
 
+  /* Every visit to the dashboard, the light pours in again. */
+  useEffect(() => {
+    if (view !== 'dashboard') return;
+    arrival.current = performance.now();
+    setVisit((v) => v + 1);
+  }, [view]);
+
+  useEffect(() => {
+    let asleep = false;
+    let held = false;
+    const sync = () => setResting(asleep || held);
+    const onStandby = (e) => {
+      const was = asleep;
+      asleep = Boolean(e.detail && e.detail.on);
+      /* Coming back from the idle screen is an arrival too: the light pours
+         in again, and the component backdrops replay their intro. */
+      if (was && !asleep) {
+        arrival.current = performance.now();
+        setVisit((v) => v + 1);
+      }
+      sync();
+    };
+    const onHold = (e) => { held = Boolean(e.detail && e.detail.on); sync(); };
+    window.addEventListener(STANDBY_EVENT, onStandby);
+    window.addEventListener(STREAK_HOLD_EVENT, onHold);
+    return () => {
+      window.removeEventListener(STANDBY_EVENT, onStandby);
+      window.removeEventListener(STREAK_HOLD_EVENT, onHold);
+    };
+  }, []);
+
+  const backdrop = backdropById(backdropId);
   /* Nothing behind the glass at all: no canvas, no context, no loop. */
-  if (backdropById(backdropId).off) return null;
+  if (backdrop.off) return null;
+
+  if (backdrop.component) {
+    return (
+      <div className="streak" style={diffusion} data-dense={DENSE.has(view) ? 'true' : 'false'} aria-hidden="true">
+        <Suspense fallback={null}>
+          {backdrop.component === 'shards' ? (
+            /* Tuned down from the React Bits example for running behind a
+               whole app all day. The heaviest thing it does is ray-trace every
+               shard pixel through five depth layers, so: drawn at 75% of a CSS
+               pixel (the diffusion above hides the difference), 30 frames a
+               second like the strands, 900 shards rather than 1300, lighter
+               depth of field and no bloom (both were per-frame blur passes the
+               diffusion already does the job of). Mounted once and kept: a
+               dashboard visit replays its intro instead of rebuilding WebGPU
+               and recompiling every pipeline, and a new accent is just a new
+               prop. It keeps flowing on every screen, like the strands. */
+            <AeroShards
+              key="shards"
+              replay={visit}
+              shardColor={hex(readColours().main)}
+              accentColor="#000000"
+              placement="full"
+              material="glass"
+              markers="plus"
+              count={900}
+              depthOfField={0.4}
+              glow={0}
+              vignette={0.3}
+              dpr={0.75}
+              maxFps={30}
+              mouseInteraction
+              pulseOnClick
+              holdToGather
+              mouseStrength={0.86}
+              paused={resting}
+              onError={(err) => {
+                console.warn('Glass Current could not start, falling back to Silk Fold', err);
+                setFailed('shards');
+              }}
+            />
+          ) : backdrop.component === 'needles' || backdrop.component === 'obsidian' ? (
+            /* Kept across dashboard visits like the glass: a visit replays the
+               intro. Keyed by kind, so switching between the two arrives fresh. */
+            <ObjectCurrent
+              key={backdrop.component}
+              kind={backdrop.component}
+              replay={visit}
+              accent={readColours().main}
+              paused={resting}
+              onError={(err) => {
+                console.warn(`${backdrop.name} could not start, falling back to Silk Fold`, err);
+                setFailed(backdrop.id);
+              }}
+            />
+          ) : (
+            <MicroSlats
+              key={`slats:${visit}`}
+              preset="swell"
+              color="#59545e"
+              glintColor="#4f4f4f"
+              backgroundColor="transparent"
+              slatWidth={2}
+              slatHeight={6}
+              gap={3}
+              roundness={1}
+              interactive
+              cursorStrength={1}
+              cursorSize={40}
+              swirl={0}
+              trail={0.6}
+              lean={0}
+              intro
+              speed={0.8}
+              direction={278}
+              chop={0.4}
+              glint={0.3}
+              perspective={0.15}
+              fog={0}
+              paused={resting}
+            />
+          )}
+        </Suspense>
+      </div>
+    );
+  }
 
   return (
     <canvas
       ref={ref}
       className="streak"
+      style={diffusion}
       data-dense={DENSE.has(view) ? 'true' : 'false'}
       aria-hidden="true"
     />

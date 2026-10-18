@@ -1,282 +1,48 @@
 /**
- * Settings.jsx — the app's preference surface, and the single owner of every
- * persisted client-side setting.
+ * Settings.jsx — the app's preference surface.
  *
- * Nothing here is decorative. Each control writes a real value to
- * localStorage under the `casefile.` namespace, broadcasts a
- * `casefile:settings` event so live consumers (IsoCase, the other views)
- * re-read immediately, and — for reduced motion — stamps the <html> element
- * so the stylesheet override takes effect app-wide. The accent is stamped
- * the same way, as data-accent.
- *
- * Keys owned here (all optional; absent always means "follow the default"):
- *   casefile.reducedMotion   'on' | 'off'   — force reduced motion
- *   casefile.parallax        'on' | 'off'   — IsoCase pointer parallax
- *   casefile.weekStart       '1'  | '0'     — Monday (default) or Sunday
- *   casefile.accent          'violet' (default) | 'white' | 'red' | 'green' | 'turquoise'
- *   casefile.backdrop        'silk' (default) | any other id in ui/backdrops.js
- *   casefile.backdropBlur    '0' | '1.5' (default) | '3' | '6' | '12' — px of blur over it
- *
- * Other views read these with the exported `useSetting(key, fallback)` hook.
- * Every read is wrapped in try/catch: a corrupt value, a disabled storage
- * quota or private-browsing mode must never throw.
+ * Every control writes through lib/settings.js, which owns the storage, the
+ * `casefile:settings` event and the stamps on <html>; this file is only the
+ * view. Its old exports are re-exported, so `from '../views/Settings.jsx'`
+ * still works, but anything outside this view should import the store from
+ * lib/settings.js so it does not drag the view into the first bundle.
  */
 
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from 'react'
 import { Card, CardHead, Metric, Pill, Segmented, Toggle } from '../ui/primitives.jsx'
 import { getMemory, listProjects } from '../lib/api.js'
 import * as clerk from '../lib/clerk.js'
 import { globalStats } from '../lib/metrics.js'
 import { BACKDROPS, DEFAULT_BACKDROP, paintStill, readColours } from '../ui/backdrops.js'
+import {
+  ACCENTS,
+  BLURS,
+  DEFAULT_ACCENT,
+  DEFAULT_BLUR,
+  KEY_ACCENT,
+  KEY_BACKDROP,
+  KEY_BACKDROP_BLUR,
+  KEY_PARALLAX,
+  KEY_REDUCED_MOTION,
+  KEY_WEEK_START,
+  applyAccentPreference,
+  applyMotionPreference,
+  applyPreferences,
+  clearSettings,
+  readAccent,
+  readBackdrop,
+  readBackdropBlur,
+  readSetting,
+  useSetting,
+  writeSetting,
+} from '../lib/settings.js'
 
-/* ------------------------------------------------------------------ *
- * storage
- * ------------------------------------------------------------------ */
-
-const NS = 'casefile.'
-const EVENT = 'casefile:settings'
-
-export const KEY_REDUCED_MOTION = 'reducedMotion'
-export const KEY_PARALLAX = 'parallax'
-export const KEY_WEEK_START = 'weekStart'
-export const KEY_ACCENT = 'accent'
-export const KEY_BACKDROP = 'backdrop'
-export const KEY_BACKDROP_BLUR = 'backdropBlur'
-
-/* How much the light behind the glass is diffused, in CSS px of blur. The
-   second is the default: a breath of haze, enough to soften the strands
-   without losing them. */
-export const BLURS = [
-  { value: 0, label: 'Crisp' },
-  { value: 1.5, label: 'Haze' },
-  { value: 3, label: 'Mist' },
-  { value: 6, label: 'Fog' },
-  { value: 12, label: 'Smoke' },
-]
-export const DEFAULT_BLUR = BLURS[1].value
-
-/** The stored diffusion, or the default when it is missing or not one we offer. */
-export function readBackdropBlur() {
-  const raw = Number(readRaw(KEY_BACKDROP_BLUR))
-  return BLURS.some((b) => b.value === raw) && readRaw(KEY_BACKDROP_BLUR) !== null ? raw : DEFAULT_BLUR
-}
-
-/* The order the swatches sit in. Each id has a block in styles.css under
-   ACCENTS; the first is the default and the one with no attribute at all. */
-export const ACCENTS = [
-  { id: 'violet', label: 'Violet' },
-  { id: 'white', label: 'White' },
-  { id: 'red', label: 'Red' },
-  { id: 'green', label: 'Green' },
-  { id: 'turquoise', label: 'Turquoise' },
-]
-const DEFAULT_ACCENT = ACCENTS[0].id
-
-/** Fallback store for private mode / disabled storage — session-scoped. */
-const memory = new Map()
-let storageOk = null
-
-function fullKey(key) {
-  const k = String(key)
-  return k.startsWith(NS) ? k : NS + k
-}
-
-/** localStorage when it is actually usable, otherwise null. */
-function store() {
-  if (storageOk === false) return null
-  if (typeof window === 'undefined') return null
-  try {
-    const s = window.localStorage
-    // touching a key is the only reliable availability probe
-    s.getItem(`${NS}__probe`)
-    storageOk = true
-    return s
-  } catch {
-    storageOk = false
-    return null
-  }
-}
-
-function readRaw(key) {
-  const k = fullKey(key)
-  const s = store()
-  if (s) {
-    try {
-      const v = s.getItem(k)
-      if (v !== null && v !== undefined) return v
-    } catch {
-      /* fall through to memory */
-    }
-    return null
-  }
-  return memory.has(k) ? memory.get(k) : null
-}
-
-function broadcast() {
-  if (typeof window === 'undefined') return
-  try {
-    window.dispatchEvent(new Event(EVENT))
-  } catch {
-    /* very old engines — nothing we can do, and nothing that should break */
-  }
-}
-
-/**
- * Coerce a stored string against the shape of the fallback:
- *   boolean fallback → 'on' / 'true' / '1' are true, anything else false
- *   number  fallback → Number(), falling back when it is not finite
- *   otherwise        → the raw string
- */
-function coerce(raw, fallback) {
-  if (raw === null || raw === undefined) return fallback
-  if (typeof fallback === 'boolean') {
-    return raw === 'on' || raw === 'true' || raw === '1'
-  }
-  if (typeof fallback === 'number') {
-    const n = Number(raw)
-    return Number.isFinite(n) ? n : fallback
-  }
-  return raw
-}
-
-/** Read one setting once, outside React. */
-export function readSetting(key, fallback) {
-  return coerce(readRaw(key), fallback)
-}
-
-/**
- * Write one setting and tell the app. Booleans persist as 'on' / 'off' —
- * the format IsoCase reads. Passing null removes the key (back to default).
- */
-export function writeSetting(key, value) {
-  const k = fullKey(key)
-  const raw =
-    value === null || value === undefined
-      ? null
-      : typeof value === 'boolean'
-        ? value ? 'on' : 'off'
-        : String(value)
-
-  const s = store()
-  if (s) {
-    try {
-      if (raw === null) s.removeItem(k)
-      else s.setItem(k, raw)
-    } catch {
-      /* quota / privacy — keep the session copy so the UI stays honest */
-      if (raw === null) memory.delete(k)
-      else memory.set(k, raw)
-    }
-  } else if (raw === null) {
-    memory.delete(k)
-  } else {
-    memory.set(k, raw)
-  }
-
-  broadcast()
-}
-
-/** Drop every `casefile.` key and return the app to its defaults. */
-export function clearSettings() {
-  const s = store()
-  if (s) {
-    const doomed = []
-    try {
-      for (let i = 0; i < s.length; i += 1) {
-        const k = s.key(i)
-        if (k && k.startsWith(NS)) doomed.push(k)
-      }
-      for (const k of doomed) s.removeItem(k)
-    } catch {
-      /* ignore — the memory clear below still applies */
-    }
-  }
-  memory.clear()
-  broadcast()
-}
-
-function subscribe(callback) {
-  if (typeof window === 'undefined') return () => {}
-  window.addEventListener(EVENT, callback)
-  window.addEventListener('storage', callback)
-  return () => {
-    window.removeEventListener(EVENT, callback)
-    window.removeEventListener('storage', callback)
-  }
-}
-
-/**
- * Read a persisted setting, live. `fallback` must be a primitive — its type
- * decides the coercion (boolean → 'on'/'off', number → Number(), else string).
- *
- *   const weekStart = useSetting('weekStart', 1)     // 1 | 0
- *   const parallax  = useSetting('parallax', true)   // boolean
- */
-export function useSetting(key, fallback) {
-  const snapshot = useCallback(() => coerce(readRaw(key), fallback), [key, fallback])
-  return useSyncExternalStore(subscribe, snapshot, snapshot)
-}
-
-/* ------------------------------------------------------------------ *
- * reduced motion — stamped on <html> so it applies app-wide
- * ------------------------------------------------------------------ */
-
-export function applyMotionPreference() {
-  if (typeof document === 'undefined') return
-  const on = coerce(readRaw(KEY_REDUCED_MOTION), false)
-  const root = document.documentElement
-  root.classList.toggle('motion-reduced', on)
-  if (on) root.dataset.motion = 'reduced'
-  else root.removeAttribute('data-motion')
-}
-
-/* ------------------------------------------------------------------ *
- * accent — stamped on <html> as data-accent; the stylesheet does the rest
- * ------------------------------------------------------------------ */
-
-/** The stored accent, or the default when it is missing or not one we know. */
-export function readAccent() {
-  const raw = readRaw(KEY_ACCENT)
-  return ACCENTS.some((a) => a.id === raw) ? raw : DEFAULT_ACCENT
-}
-
-/** The stored backdrop, or the default when it is missing or not one we know. */
-export function readBackdrop() {
-  let raw = readRaw(KEY_BACKDROP)
-  // Ember Current was retired: anyone on it goes back to Glass Current.
-  if (raw === 'embers') raw = 'shards'
-  return BACKDROPS.some((b) => b.id === raw) ? raw : DEFAULT_BACKDROP
-}
-
-export function applyAccentPreference() {
-  if (typeof document === 'undefined') return
-  const accent = readAccent()
-  const root = document.documentElement
-  if (accent === DEFAULT_ACCENT) root.removeAttribute('data-accent')
-  else root.dataset.accent = accent
-}
-
-// Applied at import time so the preferences survive a reload even when the
-// user never opens this view, and re-applied whenever anything (including
-// another tab) changes them. Registered before any React subscriber, so the
-// attribute is already on <html> by the time a component re-reads a token.
-function applyPreferences() {
-  applyMotionPreference()
-  applyAccentPreference()
-}
-
-if (typeof window !== 'undefined') {
-  applyPreferences()
-  window.addEventListener(EVENT, applyPreferences)
-  window.addEventListener('storage', applyPreferences)
-}
+export * from '../lib/settings.js'
 
 /* ------------------------------------------------------------------ *
  * small local helpers
@@ -565,6 +331,158 @@ function BackdropPicker({ value, accent, reduced, blur, onChange }) {
 const PREVIEW_W = 320
 const PREVIEW_H = 180
 
+/* The resting miniatures. Painting all eleven in the frame Settings opened in
+   was a 200ms hitch, and even spread out the painting is most of what makes
+   opening Settings stutter: each still is a hundred-odd glowing curves in
+   Canvas 2D, and the GPU pays for every one. So a still is painted once, ever:
+   kept for the session as a bitmap, and saved in IndexedDB so the next load
+   shows the picture instead of drawing it. A saved still carries a mark of
+   the code and colours that drew it, so a changed design or accent paints
+   fresh rather than showing a stale picture. When one does need painting, it
+   is a few at a time, at most ~6ms a frame. Measured on opening Settings from
+   a fresh load: ~780ms spent in slow frames when painting, ~350ms without. */
+const stills = new Map()
+const stillQueue = []
+let stillPumping = false
+
+function pumpStills() {
+  const start = performance.now()
+  while (stillQueue.length && performance.now() - start < 6) stillQueue.shift()()
+  if (stillQueue.length) requestAnimationFrame(pumpStills)
+  else stillPumping = false
+}
+
+/** FNV-1a, as hex: a short mark that changes when its input does. */
+function fingerprint(text) {
+  let h = 0x811c9dc5
+  for (let i = 0; i < text.length; i += 1) {
+    h ^= text.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(16)
+}
+
+const codeMarks = new WeakMap()
+/** What would change a still's picture in the code: the painter and the design. */
+function codeMark(backdrop) {
+  let mark = codeMarks.get(backdrop)
+  if (mark === undefined) {
+    mark = fingerprint(String(paintStill) + String(backdrop.shape) + String(backdrop.preview) + JSON.stringify(backdrop))
+    codeMarks.set(backdrop, mark)
+  }
+  return mark
+}
+
+/* Read once per accent: the tokens do not change while the page is open, and
+   reading them is a style lookup per tile otherwise. */
+const accentColours = new Map()
+function coloursFor(accent) {
+  let colours = accentColours.get(accent)
+  if (!colours) {
+    colours = readColours()
+    accentColours.set(accent, colours)
+  }
+  return colours
+}
+
+/* One record per backdrop and pixel ratio, { mark, blob }: a new accent or a
+   new build overwrites it rather than piling up beside it. Any failure here
+   (private mode, storage off, quota) just means painting, as before. */
+let stillDb = null
+const storedMarks = new Map() // slot → the mark the store holds, as far as this page knows
+function openStills() {
+  if (!stillDb) {
+    stillDb = new Promise((resolve) => {
+      try {
+        const req = indexedDB.open('casefile-stills', 1)
+        req.onupgradeneeded = () => req.result.createObjectStore('stills')
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => resolve(null)
+        req.onblocked = () => resolve(null)
+      } catch {
+        resolve(null)
+      }
+    })
+  }
+  return stillDb
+}
+function loadSaved(slot) {
+  return openStills().then((db) => db && new Promise((resolve) => {
+    try {
+      const req = db.transaction('stills').objectStore('stills').get(slot)
+      req.onsuccess = () => resolve(req.result || null)
+      req.onerror = () => resolve(null)
+    } catch {
+      resolve(null)
+    }
+  }))
+}
+function save(slot, record) {
+  openStills().then((db) => {
+    try {
+      db?.transaction('stills', 'readwrite').objectStore('stills').put(record, slot)
+    } catch {
+      /* not kept; it will be painted again next time */
+    }
+  })
+}
+
+/** Show a backdrop's still on the canvas; returns a cancel for the effect. */
+function showStill(canvas, backdrop, accent, size) {
+  const ratio = window.devicePixelRatio || 1
+  const key = `${backdrop.id}|${accent}|${ratio}`
+  const put = (image) => {
+    canvas.width = image.width
+    canvas.height = image.height
+    canvas.getContext('2d')?.drawImage(image, 0, 0)
+  }
+  const colours = coloursFor(accent)
+  const mark = fingerprint(`${codeMark(backdrop)}|${JSON.stringify(colours)}|${size.width}x${size.height}`)
+  const slot = `${backdrop.id}|${ratio}`
+
+  const kept = stills.get(key)
+  if (kept) {
+    put(kept)
+    // Back on an accent seen earlier this session: the store may still hold
+    // the other one, so the next load would paint for nothing. Save this one.
+    if (storedMarks.get(slot) !== mark) {
+      storedMarks.set(slot, mark)
+      canvas.toBlob((blob) => { if (blob) save(slot, { mark, blob }) })
+    }
+    return undefined
+  }
+
+  let live = true
+
+  const paint = () => {
+    stillQueue.push(() => {
+      if (!live) return
+      paintStill(canvas, backdrop, colours, size)
+      createImageBitmap(canvas).then((bitmap) => stills.set(key, bitmap)).catch(() => {})
+      storedMarks.set(slot, mark)
+      canvas.toBlob((blob) => { if (blob) save(slot, { mark, blob }) })
+    })
+    if (!stillPumping) {
+      stillPumping = true
+      requestAnimationFrame(pumpStills)
+    }
+  }
+
+  loadSaved(slot)
+    .then((saved) => (saved && saved.mark === mark && saved.blob ? createImageBitmap(saved.blob) : null))
+    .catch(() => null)
+    .then((bitmap) => {
+      if (bitmap) {
+        stills.set(key, bitmap)
+        storedMarks.set(slot, mark)
+        if (live) put(bitmap)
+      } else if (live) {
+        paint()
+      }
+    })
+  return () => { live = false }
+}
+
 function BackdropTile({ backdrop, accent, reduced, blur, checked, buttonRef, onPick }) {
   const canvasRef = useRef(null)
   const [playing, setPlaying] = useState(false)
@@ -574,12 +492,9 @@ function BackdropTile({ backdrop, accent, reduced, blur, checked, buttonRef, onP
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return undefined
-    const colours = readColours()
     const size = { width: PREVIEW_W, height: PREVIEW_H }
-    if (!playing || reduced || backdrop.off) {
-      paintStill(canvas, backdrop, colours, size)
-      return undefined
-    }
+    if (!playing || reduced || backdrop.off) return showStill(canvas, backdrop, accent, size)
+    const colours = readColours()
     let raf = 0
     let last = 0
     const t0 = performance.now()

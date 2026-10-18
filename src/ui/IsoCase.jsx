@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { KEY_ACCENT, readAccent, useSetting } from '../views/Settings.jsx';
+import { KEY_ACCENT, readAccent, useSetting } from '../lib/settings.js';
 
 /* ============================================================================
    IsoCase — the centrepiece.

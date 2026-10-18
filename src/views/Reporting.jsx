@@ -16,7 +16,7 @@ import { Card, CardHead, EmptyState, Pill, Segmented } from '../ui/primitives.js
 import { listHeadlines, listProjects, moveProject } from '../lib/api.js'
 import { dayDiff, flattenEntries, startOfDay, statusTone } from '../lib/metrics.js'
 import { applyWalk, siblingWalk } from '../lib/reorder.js'
-import { useSetting } from './Settings.jsx'
+import { useSetting } from '../lib/settings.js'
 
 /** the wire is polled no more often than this. */
 const POLL_MS = 300000

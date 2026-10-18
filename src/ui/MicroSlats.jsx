@@ -376,6 +376,8 @@ const MicroSlats = ({
   intro = true,
   introDuration = 1.5,
   paused = false,
+  maxFps = 0,
+  replay = 0,
   className = '',
   style
 }) => {
@@ -419,7 +421,9 @@ const MicroSlats = ({
       lean,
       intro,
       introDuration,
-      paused
+      paused,
+      maxFps,
+      replay
     };
     wakeRef.current?.();
   });
@@ -563,6 +567,9 @@ const MicroSlats = ({
     let last = performance.now();
     let time = 0;
     let introClock = 0;
+    // Case File: a new `replay` value runs the intro again on the same
+    // context, instead of a remount rebuilding WebGL and every target.
+    let replayed = settingsRef.current?.replay;
     let visible = true;
     let alive = true;
     let fluid = null;
@@ -734,10 +741,20 @@ const MicroSlats = ({
       raf = 0;
       if (!alive) return;
       const s = settingsRef.current;
+      // Case File: an optional frame cap. Behind blurred glass every frame
+      // re-runs the panels' blurs, so 30 drawn frames cost half of 60.
+      if (s && s.maxFps > 0 && now - last < 1000 / s.maxFps - 4) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
       const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
       last = now;
       if (!s) return;
 
+      if (s.replay !== replayed) {
+        replayed = s.replay;
+        introClock = 0;
+      }
       if (!s.paused && !reducedMotion) time += dt * s.speed;
       introClock = s.intro && !reducedMotion ? introClock + dt / Math.max(0.2, s.introDuration) : 1;
       const introLinear = Math.min(introClock, 1);

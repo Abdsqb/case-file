@@ -52,7 +52,7 @@ import {
   readBackdrop,
   readBackdropBlur,
   useSetting,
-} from '../views/Settings.jsx';
+} from '../lib/settings.js';
 
 /* Screens that are mostly content. The streak stays, at a fraction of its
    weight, because a wall of rows over a bright strand is hard to read. */
@@ -98,8 +98,9 @@ export default function Streak({ view }) {
      falls back to the default rather than leaving the room dark. */
   const [failed, setFailed] = useState(null);
   const backdropId = failed === chosenId ? DEFAULT_BACKDROP : chosenId;
-  /* Counts dashboard visits: a component backdrop is remounted on each, so
-     its own intro plays the way the strands pour in. */
+  /* Counts dashboard visits: each component backdrop takes it as `replay`
+     and plays its own intro again, the way the strands pour in, on the
+     context it already has. */
   const [visit, setVisit] = useState(0);
   /* Standby or the full-window board is up: hold the component still. */
   const [resting, setResting] = useState(false);
@@ -150,10 +151,14 @@ export default function Streak({ view }) {
       }
     };
 
+    /* Capped at 2: past that the extra pixels are invisible and the fill
+       rate is not. Under any diffusion the blur is already wider than a device
+       pixel, so one canvas pixel per CSS pixel looks the same and, on a 2x
+       screen, fills a quarter of the pixels. */
+    const pixelRatio = () => Math.min(window.devicePixelRatio || 1, readBackdropBlur() > 0 ? 1 : 2);
+
     const resize = () => {
-      /* Capped at 2: past that the extra pixels are invisible and the fill
-         rate is not. */
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      dpr = pixelRatio();
       W = window.innerWidth;
       H = window.innerHeight;
       canvas.width = Math.round(W * dpr);
@@ -380,6 +385,8 @@ export default function Streak({ view }) {
          held still or paused, nothing would, so paint the held picture now. */
       if (!raf) draw(pausedAt || performance.now(), 0);
     };
+    // Diffusion turned on or off changes the resolution worth drawing at.
+    const onSettings = () => { if (pixelRatio() !== dpr) onResize(); };
 
     resize();
     if (still) {
@@ -391,6 +398,7 @@ export default function Streak({ view }) {
     }
 
     window.addEventListener('resize', onResize, { passive: true });
+    window.addEventListener('casefile:settings', onSettings);
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener(STANDBY_EVENT, onStandby);
     window.addEventListener(STREAK_HOLD_EVENT, onHold);
@@ -400,6 +408,7 @@ export default function Streak({ view }) {
       stop();
       if (glr) glr.dispose();
       window.removeEventListener('resize', onResize);
+      window.removeEventListener('casefile:settings', onSettings);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener(STANDBY_EVENT, onStandby);
       window.removeEventListener(STREAK_HOLD_EVENT, onHold);
@@ -489,6 +498,7 @@ export default function Streak({ view }) {
               kind={backdrop.component}
               replay={visit}
               accent={readColours().main}
+              dpr={blurPx > 0 ? 1 : 1.5}
               paused={resting}
               onError={(err) => {
                 console.warn(`${backdrop.name} could not start, falling back to Silk Fold`, err);
@@ -497,7 +507,8 @@ export default function Streak({ view }) {
             />
           ) : (
             <MicroSlats
-              key={`slats:${visit}`}
+              key="slats"
+              replay={visit}
               preset="swell"
               color="#59545e"
               glintColor="#4f4f4f"
@@ -514,6 +525,7 @@ export default function Streak({ view }) {
               lean={0}
               intro
               speed={0.8}
+              maxFps={30}
               direction={278}
               chop={0.4}
               glint={0.3}

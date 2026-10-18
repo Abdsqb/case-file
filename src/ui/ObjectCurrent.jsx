@@ -38,7 +38,7 @@ const RING_SECONDS = 2.6;
 const MAX_BANK = 1.0;
 const FLOATS = 9; // x, y, r, g, b, a, across, core, halo
 /* The light, from above, slightly left and toward the viewer. */
-const LIGHT = (() => { const v = [-0.3, 0.7, 0.65]; const l = Math.hypot(...v); return v.map((x) => x / l); })();
+const [LX, LY, LZ] = (() => { const v = [-0.3, 0.7, 0.65]; const l = Math.hypot(...v); return v.map((x) => x / l); })();
 
 const COUNTS = { needles: 650, obsidian: 480 };
 
@@ -53,9 +53,6 @@ const random = (seed) => () => {
   t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 };
-const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 
 /* One point on ribbon `level` at s (0..1), in world space, for the "full"
    placement. Straight from AeroShards' ribbonPoint. */
@@ -317,7 +314,7 @@ export default function ObjectCurrent({
     };
     /* A line as a quad wide enough for its core, its halo and a pixel of
        antialiasing, run a little past each end so the ends are not cut. */
-    const line = (ax, ay, bx, by, col, a, core, halo) => {
+    const line = (ax, ay, bx, by, r, g, b, a, core, halo) => {
       let dx = bx - ax;
       let dy = by - ay;
       const len = Math.hypot(dx, dy) || 1;
@@ -330,7 +327,6 @@ export default function ObjectCurrent({
       const ex = bx + dx * ext * 0.5;
       const ey = by + dy * ext * 0.5;
       room(6);
-      const [r, g, b] = col;
       vert(sx + nx, sy + ny, r, g, b, a, ext, core, halo);
       vert(sx - nx, sy - ny, r, g, b, a, -ext, core, halo);
       vert(ex + nx, ey + ny, r, g, b, a, ext, core, halo);
@@ -338,19 +334,45 @@ export default function ObjectCurrent({
       vert(ex - nx, ey - ny, r, g, b, a, -ext, core, halo);
       vert(ex + nx, ey + ny, r, g, b, a, ext, core, halo);
     };
-    const fan = (pts, cx, cy, col, a) => {
-      room(pts.length * 3);
-      const [r, g, b] = col;
-      for (let i = 0; i < pts.length; i += 1) {
-        const p = pts[i];
-        const q = pts[(i + 1) % pts.length];
+    /* A plate's outline, from ptsX/ptsY, filled as a fan from its centre. */
+    const fan = (count, cx, cy, r, g, b, a) => {
+      room(count * 3);
+      for (let i = 0; i < count; i += 1) {
+        const j = (i + 1) % count;
         vert(cx, cy, r, g, b, a, 0, 0, -1);
-        vert(p[0], p[1], r, g, b, a, 0, 0, -1);
-        vert(q[0], q[1], r, g, b, a, 0, 0, -1);
+        vert(ptsX[i], ptsY[i], r, g, b, a, 0, 0, -1);
+        vert(ptsX[j], ptsY[j], r, g, b, a, 0, 0, -1);
       }
     };
 
+    /* The frame is built without garbage. Thirty times a second over 500-odd
+       objects, the small arrays the vector maths used to hand back (every
+       interpolation, projection and cross product a fresh one, and a fresh
+       record per object) were most of the work and kept the collector busy.
+       Same arithmetic, in scalars, into records that are reused. */
     const items = [];
+    const pool = [];
+    const POS = [0, 0, 0];
+    const ptsX = new Float64Array(8);
+    const ptsY = new Float64Array(8);
+    let focal = 1;
+    let qx = 0;
+    let qy = 0;
+    /* Projects into qx, qy. */
+    const project = (x, y, z) => {
+      const depth = Math.max(CAMERA - z, 0.35);
+      qx = W * 0.5 + (x * focal) / depth;
+      qy = H * 0.5 - (y * focal) / depth;
+    };
+    const record = (i) => pool[i] || (pool[i] = {
+      m: null, p: [0, 0, 0], tan: [0, 0, 0], ac: [0, 0, 0], li: [0, 0, 0],
+      depth: 0, blur: 0, weight: 0, flash: 0, angle: 0, s0: 0, size: 0,
+    });
+    const lerp3 = (out, arr, o0, o1, t) => {
+      out[0] = arr[o0] + (arr[o1] - arr[o0]) * t;
+      out[1] = arr[o0 + 1] + (arr[o1 + 1] - arr[o0 + 1]) * t;
+      out[2] = arr[o0 + 2] + (arr[o1 + 2] - arr[o0 + 2]) * t;
+    };
 
     const step = (s, dt, still) => {
       if (s.replay !== state.replayed) {
@@ -372,20 +394,24 @@ export default function ObjectCurrent({
       }
       const engaged = s.mouseInteraction && state.pointer.inside && !still;
       state.presence += ((engaged ? 1 : 0) - state.presence) * (1 - Math.exp(-dt / 0.25));
-      for (const r of state.rings) r.age += dt;
-      state.rings = state.rings.filter((r) => r.age < RING_SECONDS);
+      let live = 0;
+      for (const r of state.rings) {
+        r.age += dt;
+        if (r.age < RING_SECONDS) state.rings[live++] = r;
+      }
+      state.rings.length = live;
 
-      const focal = H * 0.5 * CAMERA;
+      focal = H * 0.5 * CAMERA;
       const introAge = still ? 1e3 : state.clock - state.introAt;
       const reach = H * 0.09;
       const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
       const h = dt / steps;
-      const accent = s.accent.map((v) => v / 255);
-      const bright = accent.map((v) => v + (1 - v) * 0.55);
-      const project = (p) => {
-        const depth = Math.max(CAMERA - p[2], 0.35);
-        return [W * 0.5 + (p[0] * focal) / depth, H * 0.5 - (p[1] * focal) / depth];
-      };
+      const ar = s.accent[0] / 255;
+      const ag = s.accent[1] / 255;
+      const ab = s.accent[2] / 255;
+      const br = ar + (1 - ar) * 0.55;
+      const bg = ag + (1 - ag) * 0.55;
+      const bb = ab + (1 - ab) * 0.55;
 
       items.length = 0;
       for (const m of objects) {
@@ -403,11 +429,12 @@ export default function ObjectCurrent({
         const i0 = Math.floor(f);
         const i1 = Math.min(i0 + 1, SAMPLES - 1);
         const t = f - i0;
-        const at = (arr) => [0, 1, 2].map((c) => arr[i0 * 3 + c] + (arr[i1 * 3 + c] - arr[i0 * 3 + c]) * t);
-        const pos = at(path.position);
-        const tan = at(path.tangent);
-        const ac = at(path.across);
-        const li = at(path.lift);
+        const it = record(items.length);
+        const { tan, ac, li, p } = it;
+        lerp3(POS, path.position, i0 * 3, i1 * 3, t);
+        lerp3(tan, path.tangent, i0 * 3, i1 * 3, t);
+        lerp3(ac, path.across, i0 * 3, i1 * 3, t);
+        lerp3(li, path.lift, i0 * 3, i1 * 3, t);
         const angle = s0 * TAU * 0.6 + state.twist + level * 1.7;
         const ca = Math.cos(angle);
         const sa = Math.sin(angle);
@@ -419,11 +446,15 @@ export default function ObjectCurrent({
         const billow = 0.16 * depthScale * Math.sin(s0 * TAU * 1.3 - state.drift * 0.5 + level * 1.1) * (0.4 + 0.6 * taper);
         const sway = 0.06 * depthScale * Math.sin(s0 * TAU * 0.8 - state.drift * 0.35 + level * 2.4);
         const wobble = 0.009 * depthScale;
-        const p = [0, 1, 2].map((c) => pos[c] + li[c] * billow + ac[c] * sway
-          + (ac[c] * ca + li[c] * sa) * lane + (li[c] * ca - ac[c] * sa) * layer
-          + Math.sin(state.drift * m.rate[c] + m.drift[c]) * wobble);
+        for (let c = 0; c < 3; c += 1) {
+          p[c] = POS[c] + li[c] * billow + ac[c] * sway
+            + (ac[c] * ca + li[c] * sa) * lane + (li[c] * ca - ac[c] * sa) * layer
+            + Math.sin(state.drift * m.rate[c] + m.drift[c]) * wobble;
+        }
         const depth = Math.max(CAMERA - p[2], 0.35);
-        const [sx, sy] = project(p);
+        project(p[0], p[1], p[2]);
+        const sx = qx;
+        const sy = qy;
 
         /* The cursor parts what it passes; a ring of light pushes and lights. */
         let fx = 0;
@@ -465,7 +496,15 @@ export default function ObjectCurrent({
         const blur = clamp(Math.abs(1 - FOCUS / depth) * 1.2 * s.depthOfField, 0, 1);
         const weight = FADE[level] * appear * Math.sqrt(taper);
         if (weight < 0.01) continue;
-        items.push({ m, p, tan, ac, li, depth, blur, weight, flash, angle, s0, size: m.size * GROWTH[level] * Math.sqrt(taper) });
+        it.m = m;
+        it.depth = depth;
+        it.blur = blur;
+        it.weight = weight;
+        it.flash = flash;
+        it.angle = angle;
+        it.s0 = s0;
+        it.size = m.size * GROWTH[level] * Math.sqrt(taper);
+        items.push(it);
       }
 
       n = 0;
@@ -474,48 +513,73 @@ export default function ObjectCurrent({
         items.sort((a, b) => b.depth - a.depth);
         for (const it of items) {
           const { m, p, tan } = it;
-          const v = norm([-p[0], -p[1], CAMERA - p[2]]);
-          let k = [tan[0] - v[0] * dot(tan, v), tan[1] - v[1] * dot(tan, v), tan[2] - v[2] * dot(tan, v)];
-          k = norm(k);
-          const w = cross(v, k);
+          // v: toward the camera; k: the tangent with v taken out; w = v x k
+          let vx = -p[0];
+          let vy = -p[1];
+          let vz = CAMERA - p[2];
+          let l = Math.hypot(vx, vy, vz) || 1;
+          vx /= l; vy /= l; vz /= l;
+          const tv = tan[0] * vx + tan[1] * vy + tan[2] * vz;
+          let kx = tan[0] - vx * tv;
+          let ky = tan[1] - vy * tv;
+          let kz = tan[2] - vz * tv;
+          l = Math.hypot(kx, ky, kz) || 1;
+          kx /= l; ky /= l; kz /= l;
+          const wx = vy * kz - vz * ky;
+          const wy = vz * kx - vx * kz;
+          const wz = vx * ky - vy * kx;
           const cy = Math.cos(m.yaw);
           const sy = Math.sin(m.yaw);
-          const kk = [0, 1, 2].map((c) => k[c] * cy + w[c] * sy);
-          const jj = [0, 1, 2].map((c) => w[c] * cy - k[c] * sy);
+          const kkx = kx * cy + wx * sy;
+          const kky = ky * cy + wy * sy;
+          const kkz = kz * cy + wz * sy;
+          const jjx = wx * cy - kx * sy;
+          const jjy = wy * cy - ky * sy;
+          const jjz = wz * cy - kz * sy;
           const wave = 0.8 * Math.sin(it.angle) + 0.3 * Math.sin(it.s0 * TAU * 1.6 - state.roll * 0.55 + m.level * 0.9 + m.lane * 0.7);
           const flutter = 0.06 * Math.sin(state.clock * m.flutter[1] + m.flutter[0]);
           const bank = MAX_BANK * Math.tanh((wave + m.bank + flutter) / MAX_BANK);
-          const nrm = [0, 1, 2].map((c) => v[c] * Math.cos(bank) + jj[c] * Math.sin(bank));
-          const side = norm(cross(nrm, kk));
+          const cb = Math.cos(bank);
+          const sb = Math.sin(bank);
+          const nx = vx * cb + jjx * sb;
+          const ny = vy * cb + jjy * sb;
+          const nz = vz * cb + jjz * sb;
+          // side = normalised nrm x kk
+          let sdx = ny * kkz - nz * kky;
+          let sdy = nz * kkx - nx * kkz;
+          let sdz = nx * kky - ny * kkx;
+          l = Math.hypot(sdx, sdy, sdz) || 1;
+          sdx /= l; sdy /= l; sdz /= l;
           const size = 0.07 * it.size;
-          const pts = m.outline.map(([ox, oy]) => {
-            const q = [0, 1, 2].map((c) => p[c] + (kk[c] * ox + side[c] * oy) * size);
-            const [qx, qy] = project(q);
-            return [qx + m.ox, qy + m.oy];
-          });
-          const [cx, cyy] = project(p);
-          const spec = Math.pow(Math.abs(dot(nrm, LIGHT)), 6);
+          const corners = m.outline.length;
+          for (let c = 0; c < corners; c += 1) {
+            const ox = m.outline[c][0] * size;
+            const oy = m.outline[c][1] * size;
+            project(p[0] + kkx * ox + sdx * oy, p[1] + kky * ox + sdy * oy, p[2] + kkz * ox + sdz * oy);
+            ptsX[c] = qx + m.ox;
+            ptsY[c] = qy + m.oy;
+          }
+          project(p[0], p[1], p[2]);
+          const spec = Math.pow(Math.abs(nx * LX + ny * LY + nz * LZ), 6);
           const a = it.weight;
-          fan(pts, cx + m.ox, cyy + m.oy, [0.035, 0.027, 0.06], 0.94 * a);
+          fan(corners, qx + m.ox, qy + m.oy, 0.035, 0.027, 0.06, 0.94 * a);
           const halo = 2.2 + it.blur * 6;
           const core = 0.55 * (1 - it.blur * 0.4);
           const edgeA = Math.min(1, (0.45 + spec * 0.4 + it.flash) * a * (1 - it.blur * 0.45));
           /* Two passes per edge: a wide soft glow in the accent, then a thin
              bright core on it. One line carrying both read as a grey wire. */
-          for (let e = 0; e < pts.length; e += 1) {
-            const P = pts[e];
-            const Q = pts[(e + 1) % pts.length];
-            line(P[0], P[1], Q[0], Q[1], accent, edgeA * 0.5, 0.15, halo + 3);
+          for (let e = 0; e < corners; e += 1) {
+            const g = (e + 1) % corners;
+            line(ptsX[e], ptsY[e], ptsX[g], ptsY[g], ar, ag, ab, edgeA * 0.5, 0.15, halo + 3);
           }
-          for (let e = 0; e < pts.length; e += 1) {
-            const P = pts[e];
-            const Q = pts[(e + 1) % pts.length];
-            line(P[0], P[1], Q[0], Q[1], bright, edgeA, core, halo * 0.5);
+          for (let e = 0; e < corners; e += 1) {
+            const g = (e + 1) % corners;
+            line(ptsX[e], ptsY[e], ptsX[g], ptsY[g], br, bg, bb, edgeA, core, halo * 0.5);
           }
           if (spec > 0.05) {
-            const P = pts[m.glintEdge];
-            const Q = pts[(m.glintEdge + 1) % pts.length];
-            line(P[0], P[1], Q[0], Q[1], [1, 1, 1], Math.min(1, spec * 0.95 * a), core * 0.9, halo * 0.6);
+            const e = m.glintEdge;
+            const g = (e + 1) % corners;
+            line(ptsX[e], ptsY[e], ptsX[g], ptsY[g], 1, 1, 1, Math.min(1, spec * 0.95 * a), core * 0.9, halo * 0.6);
           }
         }
       } else {
@@ -525,16 +589,28 @@ export default function ObjectCurrent({
           const phi = m.spin[0] + state.clock * m.spin[1];
           const theta = m.spin[2] + state.clock * 0.3 * m.spin[1];
           const sp = Math.sin(phi);
-          const d = norm([0, 1, 2].map((c) => tan[c] * Math.cos(phi) + (ac[c] * Math.cos(theta) + li[c] * Math.sin(theta)) * sp));
+          const cp = Math.cos(phi);
+          const ct = Math.cos(theta);
+          const st = Math.sin(theta);
+          let dx = tan[0] * cp + (ac[0] * ct + li[0] * st) * sp;
+          let dy = tan[1] * cp + (ac[1] * ct + li[1] * st) * sp;
+          let dz = tan[2] * cp + (ac[2] * ct + li[2] * st) * sp;
+          const l = Math.hypot(dx, dy, dz) || 1;
+          dx /= l; dy /= l; dz /= l;
           const half = 0.042 * it.size;
-          const [ax, ay] = project([p[0] - d[0] * half, p[1] - d[1] * half, p[2] - d[2] * half]);
-          const [bx, by] = project([p[0] + d[0] * half, p[1] + d[1] * half, p[2] + d[2] * half]);
-          const glint = Math.pow(1 - Math.abs(dot(d, LIGHT)), 4);
-          const col = bright.map((v) => v + (1 - v) * glint * 0.85);
+          project(p[0] - dx * half, p[1] - dy * half, p[2] - dz * half);
+          const ax = qx + m.ox;
+          const ay = qy + m.oy;
+          project(p[0] + dx * half, p[1] + dy * half, p[2] + dz * half);
+          const bx = qx + m.ox;
+          const by = qy + m.oy;
+          const glint = Math.pow(1 - Math.abs(dx * LX + dy * LY + dz * LZ), 4);
           const a = Math.min(1, (0.35 + glint * 0.6 + it.flash) * it.weight * 0.85 * (1 - it.blur * 0.45));
           /* A wide glow in the accent, then the bright sliver on it. */
-          line(ax + m.ox, ay + m.oy, bx + m.ox, by + m.oy, accent, a * (0.45 + glint * 0.35), 0.2, 5 + it.blur * 7);
-          line(ax + m.ox, ay + m.oy, bx + m.ox, by + m.oy, col, a, 0.45 + glint * 0.4, 1.2 + it.blur * 3);
+          line(ax, ay, bx, by, ar, ag, ab, a * (0.45 + glint * 0.35), 0.2, 5 + it.blur * 7);
+          line(ax, ay, bx, by,
+            br + (1 - br) * glint * 0.85, bg + (1 - bg) * glint * 0.85, bb + (1 - bb) * glint * 0.85,
+            a, 0.45 + glint * 0.4, 1.2 + it.blur * 3);
         }
       }
     };
@@ -572,6 +648,8 @@ export default function ObjectCurrent({
       state.last = now;
       const still = reduced();
       state.clock += dt;
+      // The resolution cap is a prop (lower under diffusion): follow it.
+      if (Math.min(window.devicePixelRatio || 1, s.dpr) !== ratio) { resize(); quiet = 0; }
       /* Nothing moving and nothing to answer: hold the last picture. */
       const transient = state.presence > 0.002 || state.rings.length > 0
         || state.clock - state.introAt < INTRO_SECONDS + 0.5 || s.replay !== state.replayed || s.kind !== builtFor;

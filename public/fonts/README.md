@@ -5,8 +5,10 @@ Nothing lives here any more, and nothing needs to.
 The app used to carry two drop-in faces: **Northlake** as the body face and
 **Ndot** as a dot-matrix display face, both declared against this folder with
 `@font-face` and both falling back to something else until you supplied the
-file. The redesign replaced the whole type system with three Google-hosted
-faces, declared once in `index.html`:
+file. The redesign replaced the whole type system with three faces, bundled from
+npm (`@fontsource-variable/geist`, `@fontsource/geist-mono`,
+`@fontsource/instrument-serif`) and imported once at the top of
+`src/main.jsx`:
 
 | | |
 |---|---|

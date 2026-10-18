@@ -56,15 +56,29 @@ export function projectRowToJson(p, tasks) {
 
 /** Every case with its entries and their subtasks — the GET /api/projects body. */
 export function loadProjects() {
+  /* Three queries, grouped here, rather than one per case and another per
+     entry: the archive is read on every load and after every edit, and the
+     old shape cost a round of SQLite work for each row it returned. The
+     orders are the same ones the per-row queries used. */
   const projects = db.prepare('SELECT * FROM projects ORDER BY sort_order ASC').all();
-  const taskStmt = db.prepare(
-    'SELECT * FROM tasks WHERE project_id = ? AND parent_task_id IS NULL ORDER BY created_at DESC',
-  );
-  const subtaskStmt = db.prepare('SELECT * FROM tasks WHERE parent_task_id = ? ORDER BY created_at ASC');
+  const entries = db.prepare('SELECT * FROM tasks WHERE parent_task_id IS NULL ORDER BY created_at DESC').all();
+  const subtasks = db.prepare('SELECT * FROM tasks WHERE parent_task_id IS NOT NULL ORDER BY created_at ASC').all();
+
+  const group = (rows, key) => {
+    const by = new Map();
+    for (const row of rows) {
+      const list = by.get(row[key]);
+      if (list) list.push(row);
+      else by.set(row[key], [row]);
+    }
+    return by;
+  };
+  const entriesOf = group(entries, 'project_id');
+  const subtasksOf = group(subtasks, 'parent_task_id');
 
   return projects.map((p) => projectRowToJson(
     p,
-    taskStmt.all(p.id).map((t) => taskRowToJson(t, subtaskStmt.all(t.id).map((s) => taskRowToJson(s)))),
+    (entriesOf.get(p.id) || []).map((t) => taskRowToJson(t, (subtasksOf.get(t.id) || []).map((s) => taskRowToJson(s)))),
   ));
 }
 

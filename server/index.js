@@ -1,3 +1,4 @@
+import compression from 'compression';
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
@@ -13,6 +14,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(__dirname, '..', 'dist');
 
 const app = express();
+/* Gzip (or Brotli, when the browser offers it) for everything over 1KB: the
+   app bundle, the stylesheet, the archive JSON. Nothing here streams, so
+   compressing whole responses holds nothing up. */
+app.use(compression());
 app.use(express.json());
 
 /* taskRowToJson / projectRowToJson / loadProjects now live in archive.js, so

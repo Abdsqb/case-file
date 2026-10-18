@@ -136,7 +136,7 @@
      and labels are set in the sans, anything that is a measurement is set
      in the mono, and exactly one word per title is set in the serif.
      ------------------------------------------------------------------ */
-  --font: 'Geist', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font: 'Geist Variable', 'Geist', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
   /* Data: counts, timestamps, ids, status, durations. Lowercase, slashed,
      and in the muted ink — it is there to be checked, not read. */

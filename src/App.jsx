@@ -1,17 +1,28 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import './styles.css';
 import './motion.css';
 import { listProjects } from './lib/api';
 import Dashboard from './views/Dashboard';
-import CaseFiles from './views/CaseFiles';
-import Reporting from './views/Reporting';
-import Calendar from './views/Calendar';
-import Flashcards from './views/Flashcards';
-import Settings from './views/Settings';
 import NotesDrawer from './ui/NotesDrawer.jsx';
 import Streak from './ui/Streak.jsx';
 import Standby from './ui/Standby.jsx';
+
+/* The dashboard is in the first bundle; the other five screens are chunks of
+   their own, fetched in the background as soon as the first screen is up (see
+   the preload in App), so the first paint parses one screen rather than six
+   and a later visit still finds its code already here. */
+const loadCaseFiles = () => import('./views/CaseFiles');
+const loadReporting = () => import('./views/Reporting');
+const loadCalendar = () => import('./views/Calendar');
+const loadFlashcards = () => import('./views/Flashcards');
+const loadSettings = () => import('./views/Settings');
+const CaseFiles = lazy(loadCaseFiles);
+const Reporting = lazy(loadReporting);
+const Calendar = lazy(loadCalendar);
+const Flashcards = lazy(loadFlashcards);
+const Settings = lazy(loadSettings);
+const PRELOAD = [loadCaseFiles, loadReporting, loadCalendar, loadFlashcards, loadSettings];
 
 const CLOCK_MS = 30000;         // drives overdue arithmetic only; nothing renders seconds
 
@@ -133,6 +144,12 @@ export default function App() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Once the browser is idle after the first screen, fetch the rest.
+  useEffect(() => {
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1200));
+    idle(() => { for (const load of PRELOAD) load().catch(() => {}); });
+  }, []);
 
   // Keep a valid selection without fighting the user: only auto-pick when the
   // current one has gone away (deleted) or nothing is chosen yet.
@@ -273,7 +290,7 @@ export default function App() {
             restarts every CSS animation inside it, so each screen assembles
             itself on arrival instead of cutting in. */}
         <BuildStage key={view} stamp={view}>
-          {body}
+          <Suspense fallback={null}>{body}</Suspense>
         </BuildStage>
       </main>
 

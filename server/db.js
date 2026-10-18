@@ -136,6 +136,14 @@ if (!taskColumns.includes('parent_task_id')) {
   db.exec('ALTER TABLE tasks ADD COLUMN parent_task_id INTEGER REFERENCES tasks(id)');
 }
 
+/* The lookups every edit makes: a case's entries, an entry's subtasks (to
+   count them, move them or delete them with it). Without these each is a scan
+   of the whole table. IF NOT EXISTS, so this is a no-op after the first run. */
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+  CREATE INDEX IF NOT EXISTS idx_tasks_parent  ON tasks(parent_task_id);
+`);
+
 /* migrate: decks gain a folder, and keep the file they were imported from.
    Holding the source text is what makes "show me what this deck came from" and
    "replace it with a corrected file" possible at all — without it an import is

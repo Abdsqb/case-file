@@ -29,7 +29,7 @@ is written. It does nothing until you put an API key in `.env` yourself — see
 | **Reporting** | Every open entry bucketed by due day — Overdue / This week / Later — plus a world-news feed from public RSS. |
 | **Calendar** | Two calendars over the same days. **Entries** is a month grid of every dated entry in the archive, coloured by how its deadline stands, and clicking one opens its case. **Classes** is a weekly timetable parsed from `src/data/class-calendar.ics`, with next class, today's agenda and term progress. |
 | **Flashcards** | Import a deck from a `.json` file or pasted text — or paste a lecture and have the clerk draft one — file it under a course, and review it on an SM-2 spaced schedule. The scheduling is offline SM-2 and always has been; only drafting a new deck calls a model, and only when you ask it to. |
-| **Settings** | The accent colour; the background, from eleven, with a live swatch of each and how much blur sits over it; motion preferences, including a reduced-motion override; what this install holds; a live reading of how much memory the app is using; and what the clerk sends where. |
+| **Settings** | The accent colour; the background, from eleven, with a live swatch of each and how much blur sits over it; motion preferences, including a reduced-motion override; the pointer, the app's soft disc or the system arrow; what this install holds; a live reading of how much memory the app is using; and what the clerk sends where. |
 
 *Every screenshot here is of the sample archive a fresh install seeds, not anyone's real
 cases.*
@@ -161,13 +161,21 @@ draws at 75% resolution, thirty frames a second, with 900 shards, light depth of
 bloom, and it is kept mounted between visits rather than rebuilt. It needs `vgpu` at exactly
 0.5.0, because 0.6 rejects the raw WGSL the component passes. **Crystal Needles** and
 **Obsidian Edges** are our own (`src/ui/ObjectCurrent.jsx`): AeroShards' current ported to
-plain WebGL, one triangle list and one draw call a frame, a fraction of the glass's cost.
-**Undertow** is React Bits' MicroSlats on WebGL2. Each falls back to Silk Fold if it cannot
-start, and says why in the console.
+plain WebGL, one triangle list and one draw call a frame, a fraction of the glass's cost;
+the list is built without allocating, in scalars and reused records, which halved its
+processor time. **Undertow** is React Bits' MicroSlats on WebGL2, given a thirty-frame cap
+and a `replay` prop so a visit replays its intro instead of rebuilding the context. Each
+falls back to Silk Fold if it cannot start, and says why in the console.
 
 **Diffusion** lays a blur over whichever is showing: Crisp, Haze (the default, 1.5px),
 Mist, Fog or Smoke (12px). It is a filter on the background layer alone, so the panels and
-text above it stay sharp.
+text above it stay sharp. Under any diffusion the strands and the objects are drawn at one
+canvas pixel per CSS pixel, since the blur is wider than a device pixel anyway.
+
+The swatches in Settings are each painted once, ever. Drawing eleven of them in Canvas 2D
+was most of what made opening Settings stutter, so a finished swatch is kept in IndexedDB
+with a mark of the code and colours that drew it, and later visits show the saved picture.
+A new accent or a changed design no longer matches its mark and paints fresh.
 
 ### The other screens
 
@@ -328,8 +336,8 @@ no background call, no analytics, no sync. Settings has a panel saying this on s
 which provider is answering which job.
 
 Remove the key and restart to turn it off. Verified rather than asserted: with no key the
-app makes no request to any model provider from anywhere, and the only thing that leaves the
-machine is the three typefaces it has always fetched from Google Fonts.
+app makes no request to any model provider from anywhere, and nothing else leaves the
+machine either: the three typefaces are bundled with the app rather than fetched from Google.
 
 ---
 
@@ -413,7 +421,7 @@ src/
   ui/           primitives, charts, the case graph, the scratchpad drawer, and the
                 backgrounds: backdrops.js (the designs), Streak.jsx and streakGL.js
                 (the strand painter), ObjectCurrent.jsx, AeroShards.jsx, MicroSlats.jsx
-  lib/          API client, metrics, the graph builder, SM-2, .ics parsing
+  lib/          API client, the settings store, metrics, the graph builder, SM-2, .ics parsing
   data/         the sample class-calendar .ics
   styles.css    the design system — every colour is a token here
   motion.css    the assembly and transition choreography
@@ -425,16 +433,36 @@ React 19 and Vite on the front, Express on the back, SQLite through Node's built
 `node:sqlite`. No ORM, no state library, no CSS framework. Icons are `lucide-react`;
 `compromise` and `fast-xml-parser` serve the news feed. Two backgrounds bring their own
 renderer and load only when picked: `vgpu` (pinned at 0.5.0) for Glass Current and `ogl`
-for Undertow.
+for Undertow. The typefaces are Fontsource packages, bundled. The dashboard is in the first
+bundle and the other five screens are their own chunks, fetched in the background once the
+first screen is up.
 
 ---
 
 ## Notes on the design
 
-Near-black ground, one accent — violet unless you pick white, red, green or turquoise in
-Settings — and panels of dark glass over a slow-moving bundle of light. Three faces, each with one job: a geometric sans for the UI, a monospace for
+Near-black ground, one accent — violet unless you pick white, red, green, turquoise or
+midnight in Settings — and panels of dark glass over a slow-moving bundle of light. Three faces, each with one job: a geometric sans for the UI, a monospace for
 anything that is a measurement rather than a sentence — counts, times, ids, status — and
 an italic serif used on exactly one word, the last word of an empty state.
+
+**Midnight is a colourway, not just a light.** A greyed steel blue on a navy ground, with a
+cold wash from the top left, a vignette that falls to navy, and a fine grain over the light.
+All of it is static, painted once, and measured at no cost per frame.
+
+**There is no top bar.** One island of the same dark glass as the panels, the page blurred behind it, names the screen you are on. Point at
+it, or tab to it, and it grows into the list of all six screens, always in the same order;
+pick one and it folds back up around the new name, and moving away folds it after a short
+pause. It moves like the Dynamic Island: on real spring curves (damped-spring samples written
+as CSS `linear()` easings), stretching sideways before it drops and pulling up before it
+narrows, overshooting a little on the way open, with the rows coming into focus as it grows. The status readout ("all clear", "2 due today") sits on its own in the top-left
+corner. The arrow keys move through the list and Escape folds it (`src/ui/TopNav.jsx`).
+
+**The pointer is drawn by the app.** A soft grey disc, after the iPad's: it sits exactly on
+the mouse, glides into a faint highlight wrapped round a button, tab or link, and narrows to
+a caret over a text field. One fixed element moved by a transform, with a loop that runs
+only while it is changing shape. It stays off for touch and pen, and Settings can hand back
+the system arrow.
 
 **One panel turns.** Every panel rests flat; the one holding the case graph rotates several
 degrees to face the pointer while it is over it, and steps toward the eye. Everything else

@@ -16,9 +16,10 @@
  *   casefile.reducedMotion   'on' | 'off'   — force reduced motion
  *   casefile.parallax        'on' | 'off'   — IsoCase pointer parallax
  *   casefile.weekStart       '1'  | '0'     — Monday (default) or Sunday
- *   casefile.accent          'violet' (default) | 'white' | 'red' | 'green' | 'turquoise'
+ *   casefile.accent          'violet' (default) | 'white' | 'red' | 'green' | 'turquoise' | 'midnight'
  *   casefile.backdrop        'silk' (default) | any other id in ui/backdrops.js
  *   casefile.backdropBlur    '0' | '1.5' (default) | '3' | '6' | '12' — px of blur over it
+ *   casefile.pointer         'soft' (default) | 'system'
  *
  * Other views read these with the exported `useSetting(key, fallback)` hook.
  * Every read is wrapped in try/catch: a corrupt value, a disabled storage
@@ -41,6 +42,14 @@ export const KEY_WEEK_START = 'weekStart'
 export const KEY_ACCENT = 'accent'
 export const KEY_BACKDROP = 'backdrop'
 export const KEY_BACKDROP_BLUR = 'backdropBlur'
+export const KEY_POINTER = 'pointer'
+
+/* The pointer: the app's soft disc (ui/SoftPointer.jsx), or the system's own. */
+export const POINTERS = [
+  { value: 'soft', label: 'Soft dot' },
+  { value: 'system', label: 'System' },
+]
+export const DEFAULT_POINTER = POINTERS[0].value
 
 /* How much the light behind the glass is diffused, in CSS px of blur. The
    second is the default: a breath of haze, enough to soften the strands
@@ -68,6 +77,7 @@ export const ACCENTS = [
   { id: 'red', label: 'Red' },
   { id: 'green', label: 'Green' },
   { id: 'turquoise', label: 'Turquoise' },
+  { id: 'midnight', label: 'Midnight' },
 ]
 export const DEFAULT_ACCENT = ACCENTS[0].id
 

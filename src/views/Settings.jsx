@@ -24,12 +24,15 @@ import {
   BLURS,
   DEFAULT_ACCENT,
   DEFAULT_BLUR,
+  DEFAULT_POINTER,
   KEY_ACCENT,
   KEY_BACKDROP,
   KEY_BACKDROP_BLUR,
   KEY_PARALLAX,
+  KEY_POINTER,
   KEY_REDUCED_MOTION,
   KEY_WEEK_START,
+  POINTERS,
   applyAccentPreference,
   applyMotionPreference,
   applyPreferences,
@@ -742,6 +745,7 @@ export function Settings({ projects, now }) {
   const backdrop = useSetting(KEY_BACKDROP, DEFAULT_BACKDROP)
   useSetting(KEY_BACKDROP_BLUR, '')
   const blur = readBackdropBlur()
+  const pointer = useSetting(KEY_POINTER, DEFAULT_POINTER)
 
   const stats = useMemo(() => globalStats(cases, clock), [cases, clock])
   /* Asked once. The answer is a function of .env, which cannot change without
@@ -824,6 +828,18 @@ export function Settings({ projects, now }) {
                   label={
                     <SwitchState name="Pointer parallax" on={parallax && !reducedMotion} />
                   }
+                />
+              </SettingRow>
+
+              <SettingRow
+                title="Pointer"
+                hint="A soft disc that wraps round buttons and turns into a caret over text, or the system arrow."
+              >
+                <Segmented
+                  items={POINTERS}
+                  value={pointer === 'system' ? 'system' : DEFAULT_POINTER}
+                  onChange={(next) => writeSetting(KEY_POINTER, next === DEFAULT_POINTER ? null : next)}
+                  label="Pointer"
                 />
               </SettingRow>
 
@@ -1018,7 +1034,7 @@ export function Settings({ projects, now }) {
 
               <SettingRow
                 title="Reset preferences"
-                hint="Forgets every setting above and returns to the defaults: violet accent, motion follows the system, parallax on, week starts Monday."
+                hint="Forgets every setting above and returns to the defaults: violet accent, motion follows the system, parallax on, the soft pointer, week starts Monday."
               >
                 <ConfirmAction
                   label="Reset"

@@ -7,6 +7,8 @@ import Dashboard from './views/Dashboard';
 import NotesDrawer from './ui/NotesDrawer.jsx';
 import Streak from './ui/Streak.jsx';
 import Standby from './ui/Standby.jsx';
+import SoftPointer from './ui/SoftPointer.jsx';
+import TopNav from './ui/TopNav.jsx';
 
 /* The dashboard is in the first bundle; the other five screens are chunks of
    their own, fetched in the background as soon as the first screen is up (see
@@ -261,28 +263,18 @@ export default function App() {
 
       <div className="app">
       <header className="topbar" ref={barRef}>
-        <nav className="topbar__nav" aria-label="Sections">
-          {NAV.map(item => (
-            <button
-              key={item.id}
-              type="button"
-              className={`navlink${view === item.id ? ' is-active' : ''}`}
-              aria-current={view === item.id ? 'page' : undefined}
-              onClick={() => go(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-
-        {/* The readout, not a control: it says how the archive is standing and
-            there is nothing to click. Loaded means loaded — before that it
-            would be reporting "all clear" about an empty list. */}
+        {/* The readout, not a control, in the top-left corner: it says how the
+            archive is standing and there is nothing to click. Loaded means
+            loaded — before that it would be reporting "all clear" about an
+            empty list. */}
         {loaded ? (
           <span className={`statpill statpill--${standing.tone} topbar__standing`}>
             {standing.text}
           </span>
         ) : null}
+
+        {/* No bar: one pill naming this screen, which opens into the rest. */}
+        <TopNav items={NAV} current={view} onGo={go} />
       </header>
 
       <main className="shell" id="main">
@@ -307,6 +299,9 @@ export default function App() {
           point — standby is about the window, not about a screen. */}
       <Standby />
       </div>
+
+      {/* The pointer, above standby and everything else; it catches no events. */}
+      <SoftPointer />
     </>
   );
 }

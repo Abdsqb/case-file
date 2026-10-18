@@ -494,26 +494,15 @@
 .segmented[data-reorder='on'] .segmented__item { user-select: none; -webkit-user-select: none; }
 
 /* ==========================================================================
-   TOP BAR — a floating pill.
-   Sized to its contents rather than the viewport, centred, and sticky so
-   navigation stays reachable while a screen scrolls under it.
+   TOP — no bar.
+   One pill names the screen you are on and opens into the rest when pointed
+   at (ui/TopNav.jsx); the status readout sits in the top-left corner. Nothing
+   spans the width, so the page runs right up to the top of the window.
    ========================================================================== */
 
-/* The status pill rides beside the nav, far enough off it to read as its own
-   object. It is a readout, so it never takes the pointer. */
-.topbar__standing {
-  pointer-events: none;
-  margin-left: 10px;
-  align-self: center;
-}
-
-@media (max-width: 760px) {
-  .topbar__standing { display: none; }
-}
-
 .topbar {
-  /* fixed, not sticky: it is hidden most of the time, so it must not reserve a
-     band of layout the content could be using. */
+  /* fixed, so it reserves no band of layout; the shell starts below it by
+     --nav-h, which App measures from this element. */
   position: fixed;
   top: 0;
   left: 0;
@@ -525,77 +514,144 @@
   justify-content: center;
   align-items: flex-start;
   gap: 0;
-  padding: 16px var(--shell-x) 10px;
-  background: linear-gradient(to bottom, var(--bg) 55%, transparent);
+  padding: 14px var(--shell-x) 18px;
+  background: none;
   border-bottom: 0;
-  /* The gutter either side of the pill must not swallow clicks meant for the
-     content scrolling beneath it. Only the pill itself takes the pointer. */
+  /* Only the pill takes the pointer: the space around it belongs to the page. */
   pointer-events: none;
 }
 
-/* The bar no longer hides. It used to start at opacity 0 and be summoned by a
-   pointer near the top edge; the opacity, the translate and the transition that
-   went with them are gone, along with the rule that had to make an invisible
-   bar unclickable. The gradient background is what keeps it legible: content
-   scrolling underneath fades out into it rather than colliding with the pill. */
-
-.topbar__nav {
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 5px;
-  max-width: 100%;
-  background: rgba(16, 16, 16, 0.74);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.6);
+/* The readout, in the corner and lined up with the pill. It has glass of its
+   own now that no bar sits behind it, and it is never a target. */
+.topbar__standing {
+  position: absolute;
+  top: 18.5px;           /* centred on the 36px pill: 14 + (36 - 27) / 2 */
+  left: var(--shell-x);
+  pointer-events: none;
+  background: rgba(var(--panel-rgb), 0.62);
   backdrop-filter: blur(16px) saturate(1.15);
   -webkit-backdrop-filter: blur(16px) saturate(1.15);
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-.topbar__nav::-webkit-scrollbar { display: none; }
 
-.navlink {
-  padding: 7px 16px;
-  border-radius: var(--radius-pill);
+/* The nav holds one row of height; the island hangs from its middle and grows
+   downward over the page without moving anything.
+
+   It moves like the Dynamic Island: a solid black shape on springs. Opening,
+   it stretches sideways first and then drops, overshooting a touch before it
+   settles; closing, it pulls up first and then narrows, with less bounce. The
+   spring curves are real damped-spring samples written as linear() easings by
+   TopNav.jsx (--pn-open, --pn-close); the cubic-bezier is only the fallback for
+   an engine without linear(). */
+.pillnav {
+  --pn-open: cubic-bezier(0.34, 1.3, 0.64, 1);
+  --pn-close: cubic-bezier(0.32, 0.72, 0, 1);
+  position: relative;
+  height: 36px;
+  pointer-events: auto;
+}
+
+.pillnav__pill {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  overflow: hidden;
+  border-radius: 18px;
+  /* The same dark glass as the panels: a translucent tint of the ground with
+     everything behind it blurred, no sheen and no brightening, so it reads as
+     one more pane of the app's glass. */
+  background: rgba(var(--panel-rgb), 0.5);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  border: 1px solid rgba(255, 255, 255, 0.04);  /* half the panels' hairline: an edge, barely */
+  box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.6);
+  /* Closing: height leads, width follows. */
+  transition:
+    height 420ms var(--pn-close),
+    width 480ms var(--pn-close) 50ms,
+    border-radius 420ms var(--pn-close),
+    transform 380ms var(--pn-open),
+    background-color 300ms ease,
+    box-shadow 300ms ease;
+}
+/* Opening: width leads, height follows, both on the bouncier spring. Open, it
+   lies over the page's text, so the glass thickens enough to keep the list
+   readable while still letting the colour through. */
+.pillnav.is-open .pillnav__pill {
+  border-radius: 26px;
+  background-color: rgba(var(--panel-rgb), 0.62);
+  box-shadow: 0 26px 60px -16px rgba(0, 0, 0, 0.75);
+  transition:
+    width 560ms var(--pn-open),
+    height 640ms var(--pn-open) 40ms,
+    border-radius 560ms var(--pn-open),
+    transform 380ms var(--pn-open),
+    background-color 300ms ease,
+    box-shadow 300ms ease;
+}
+/* A press squeezes it, and it springs back. */
+.pillnav__pill:active { transform: translateX(-50%) scale(0.96); }
+
+.pillnav__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  transition: transform 420ms var(--pn-close), padding 420ms var(--pn-close);
+}
+.pillnav.is-open .pillnav__list {
+  padding: 6px;
+  transition: transform 640ms var(--pn-open) 40ms, padding 640ms var(--pn-open) 40ms;
+}
+
+.pillnav__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  font: inherit;
   font-size: 13px;
   line-height: 1;
-  color: var(--fg-mid);
+  color: rgba(255, 255, 255, 0.55);
   white-space: nowrap;
-  flex: none;
+  cursor: pointer;
+  /* Folded, only the current row shows. The others are out of focus as well
+     as out of sight, so they sharpen in as the island opens. */
+  opacity: 0;
+  filter: blur(6px);
+  transform: scale(0.9);
   transition:
-    background-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
-    color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    opacity 140ms ease,
+    filter 140ms ease,
+    transform 200ms var(--pn-close),
+    color 160ms ease,
+    background-color 160ms ease;
 }
-/* --fill-hover was never defined anywhere, so this was a colour change and
-   nothing else. Given a real surface now. */
-.navlink:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
-
-/* The nav is the one place the active state is NOT an accent fill. A bar of
-   six links with one of them filled in would be the loudest thing on screen,
-   and it is not the thing you came to look at. It gets the full-strength ink
-   and a lit dot under it instead. */
-.navlink--active,
-.navlink.is-active,
-.navlink[aria-current='page'] {
-  background: transparent;
-  color: var(--text);
+.pillnav__item.is-current {
+  opacity: 1;
+  filter: none;
+  transform: none;
+  color: #fff;
 }
-.navlink--active:hover,
-.navlink.is-active:hover,
-.navlink[aria-current='page']:hover { background: transparent; color: var(--text); }
 
-.navlink { position: relative; }
-
-.navlink--active::after,
-.navlink.is-active::after,
-.navlink[aria-current='page']::after {
+/* The active state is the full ink and a lit dot under it, as it always was:
+   never an accent fill, which would be the loudest thing on screen. */
+.pillnav__item.is-current::after {
   content: '';
   position: absolute;
   left: 50%;
-  bottom: 2px;
+  bottom: 5px;
   width: 4px;
   height: 4px;
   margin-left: -2px;
@@ -604,10 +660,43 @@
   box-shadow: 0 0 8px 0 var(--accent-glow);
 }
 
+/* Open, the rows come into focus outward from the current one, a beat after
+   the island has started to grow. */
+.pillnav.is-open .pillnav__item {
+  opacity: 1;
+  filter: none;
+  transform: none;
+  transition:
+    opacity 260ms ease calc(var(--i) * 30ms + 120ms),
+    filter 320ms ease calc(var(--i) * 30ms + 120ms),
+    transform 520ms var(--pn-open) calc(var(--i) * 30ms + 100ms),
+    color 160ms ease,
+    background-color 160ms ease;
+}
+.pillnav.is-open .pillnav__item:not(.is-current):hover,
+.pillnav.is-open .pillnav__item:not(.is-current):focus-visible {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+.pillnav__item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent-edge);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pillnav__pill, .pillnav__list, .pillnav__item,
+  .pillnav.is-open .pillnav__pill, .pillnav.is-open .pillnav__list, .pillnav.is-open .pillnav__item {
+    transition-duration: 1ms !important; transition-delay: 0ms !important;
+  }
+  .pillnav__item { filter: none; }
+}
+[data-motion='reduced'] .pillnav__pill,
+[data-motion='reduced'] .pillnav__list,
+[data-motion='reduced'] .pillnav__item { transition-duration: 1ms !important; transition-delay: 0ms !important; filter: none; }
 
 @media (max-width: 560px) {
-  .topbar { padding: 10px 10px 8px; }
-  .navlink { padding: 7px 12px; }
+  .topbar { padding: 10px 10px 14px; }
+  .topbar__standing { top: 14.5px; left: 10px; }
 }
 
 /* ==========================================================================

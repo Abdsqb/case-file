@@ -9,7 +9,9 @@ import {
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import IslandMenu from './IslandMenu.jsx'
+import { SPRINGS } from './island.js'
 
 /* ------------------------------------------------------------------ *
  * helpers
@@ -158,11 +160,14 @@ function Popover({
   return createPortal(
     <div
       ref={ref}
-      className={cx('pop', pos && pos.flipped && 'pop--flip', className)}
+      className={cx('pop', 'island-datepop', pos && pos.flipped && 'pop--flip', className)}
       role={role}
       aria-label={ariaLabel}
       style={{
+        ...SPRINGS,
         position: 'fixed',
+        '--from-w': anchorRef.current?.getBoundingClientRect().width + 'px',
+        '--from-h': anchorRef.current?.getBoundingClientRect().height + 'px',
         top: pos ? pos.top : -9999,
         left: pos ? pos.left : -9999,
         minWidth: matchWidth && pos ? pos.width : undefined,
@@ -172,48 +177,6 @@ function Popover({
     </div>,
     document.body
   )
-}
-
-/** shared arrow-key handling for the two portalled menus */
-function handleMenuKeys(e, container, close) {
-  if (!container) return
-  const items = Array.from(container.querySelectorAll('[data-menuitem]')).filter(
-    (el) => !el.disabled
-  )
-  if (!items.length) return
-  const current = items.indexOf(document.activeElement)
-
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    e.preventDefault()
-    const step = e.key === 'ArrowDown' ? 1 : -1
-    const next = current === -1 ? (step === 1 ? 0 : items.length - 1) : (current + step + items.length) % items.length
-    items[next].focus()
-  } else if (e.key === 'Home') {
-    e.preventDefault()
-    items[0].focus()
-  } else if (e.key === 'End') {
-    e.preventDefault()
-    items[items.length - 1].focus()
-  } else if (e.key === 'Tab') {
-    // the menu lives at the end of <body>; tabbing out would be nonsense
-    e.preventDefault()
-    close()
-  }
-}
-
-function useMenuAutofocus(open, menuRef) {
-  useEffect(() => {
-    if (!open) return
-    const id = requestAnimationFrame(() => {
-      const node = menuRef.current
-      if (!node) return
-      const selected = node.querySelector('[data-menuitem][data-on="true"]')
-      const first = node.querySelector('[data-menuitem]:not([disabled])')
-      const target = selected && !selected.disabled ? selected : first
-      if (target) target.focus()
-    })
-    return () => cancelAnimationFrame(id)
-  }, [open, menuRef])
 }
 
 function normalizeOptions(options) {
@@ -297,277 +260,37 @@ export const Pill = forwardRef(function Pill(
  * PillSelect
  * ------------------------------------------------------------------ */
 
-export function PillSelect({
-  value,
-  options,
-  onChange,
-  placeholder = 'Select',
-  disabled = false,
-  className,
-  label,
-  align = 'start',
-}) {
-  const [open, setOpen] = useState(false)
-  const triggerRef = useRef(null)
-  const menuRef = useRef(null)
+export function PillSelect({ value, options, onChange, placeholder = 'Select', disabled = false,
+  className, label, align = 'start', id, name }) {
   const opts = useMemo(() => normalizeOptions(options), [options])
-  const selected = opts.find((o) => o.value === value)
-
-  const close = useCallback(() => setOpen(false), [])
-  const closeAndFocus = useCallback(() => {
-    setOpen(false)
-    if (triggerRef.current) triggerRef.current.focus()
-  }, [])
-
-  useMenuAutofocus(open, menuRef)
-
-  const pick = (opt) => {
-    if (opt.disabled) return
-    if (onChange) onChange(opt.value)
-    closeAndFocus()
-  }
-
+  const selected = opts.find(o => o.value === value)
+  const items = opts.map(o => ({ key: o.value, label: o.label, disabled: o.disabled,
+    on: o.value === value, onClick: () => onChange?.(o.value) }))
   return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={cx('pill', 'pillselect', open && 'pillselect--open', className)}
-        onClick={() => setOpen((v) => !v)}
-        onKeyDown={(e) => {
-          if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-            e.preventDefault()
-            setOpen(true)
-          }
-        }}
-        disabled={disabled}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={label}
-      >
-        <span className="pillselect__value">{selected ? selected.label : placeholder}</span>
-        <ChevronDown className="pillselect__chev" size={12} strokeWidth={1.5} aria-hidden="true" />
-      </button>
-      <Popover
-        anchorRef={triggerRef}
-        open={open}
-        onClose={closeAndFocus}
-        onDismiss={close}
-        align={align}
-        matchWidth
-        className="menu-pop"
-        role="menu"
-        ariaLabel={label}
-      >
-        <div
-          ref={menuRef}
-          className="menu-pop__list"
-          onKeyDown={(e) => handleMenuKeys(e, menuRef.current, closeAndFocus)}
-        >
-          {opts.map((opt) => {
-            const on = opt.value === value
-            return (
-              <button
-                key={String(opt.value)}
-                type="button"
-                data-menuitem=""
-                data-on={on ? 'true' : 'false'}
-                className={cx('menu-pop__item', on && 'menu-pop__item--on')}
-                role="menuitemradio"
-                aria-checked={on}
-                disabled={opt.disabled}
-                onClick={() => pick(opt)}
-              >
-                <span className="menu-pop__label">{opt.label}</span>
-                {on ? (
-                  <Check className="menu-pop__check" size={12} strokeWidth={1.75} aria-hidden="true" />
-                ) : null}
-              </button>
-            )
-          })}
-        </div>
-      </Popover>
-    </>
+    <IslandMenu id={id} name={name} items={items} label={label || placeholder} align={align}
+      disabled={disabled} className={cx('pill', 'pillselect', className)}>
+      <span className="pillselect__value">{selected ? selected.label : placeholder}</span>
+      <ChevronDown className="pillselect__chev" size={12} strokeWidth={1.5} aria-hidden="true" />
+    </IslandMenu>
   )
 }
 
-/* ------------------------------------------------------------------ *
- * IconMenu
- * ------------------------------------------------------------------ */
-
+/** Every ellipsis and action list uses the same vertical island. */
 export function IconMenu({ items, label = 'More actions', align = 'end', className, disabled = false }) {
-  const [open, setOpen] = useState(false)
-  const triggerRef = useRef(null)
-  const menuRef = useRef(null)
-  const list = items || []
-
-  const close = useCallback(() => setOpen(false), [])
-  const closeAndFocus = useCallback(() => {
-    setOpen(false)
-    if (triggerRef.current) triggerRef.current.focus()
-  }, [])
-
-  useMenuAutofocus(open, menuRef)
-
-  const run = (item) => {
-    if (item.disabled) return
-    closeAndFocus()
-    if (item.onClick) item.onClick()
-  }
-
   return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={cx('iconmenu', open && 'iconmenu--open', className)}
-        onClick={() => setOpen((v) => !v)}
-        onKeyDown={(e) => {
-          if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-            e.preventDefault()
-            setOpen(true)
-          }
-        }}
-        disabled={disabled}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={label}
-      >
-        <span className="iconmenu__dot" />
-        <span className="iconmenu__dot" />
-        <span className="iconmenu__dot" />
-      </button>
-      <Popover
-        anchorRef={triggerRef}
-        open={open}
-        onClose={closeAndFocus}
-        onDismiss={close}
-        align={align}
-        className="menu-pop"
-        role="menu"
-        ariaLabel={label}
-      >
-        <div
-          ref={menuRef}
-          className="menu-pop__list"
-          onKeyDown={(e) => handleMenuKeys(e, menuRef.current, closeAndFocus)}
-        >
-          {list.map((item, i) => (
-            <button
-              key={item.key || `${item.label}-${i}`}
-              type="button"
-              data-menuitem=""
-              className={cx('menu-pop__item', item.danger && 'menu-pop__item--danger')}
-              role="menuitem"
-              disabled={!!item.disabled}
-              onClick={() => run(item)}
-            >
-              <span className="menu-pop__label">{item.label}</span>
-            </button>
-          ))}
-          {list.length === 0 ? <div className="menu-pop__empty">No actions</div> : null}
-        </div>
-      </Popover>
-    </>
+    <IslandMenu items={items} label={label} align={align} disabled={disabled}
+      className={cx('iconmenu', className)}>
+      <span className="iconmenu__dot" />
+      <span className="iconmenu__dot" />
+      <span className="iconmenu__dot" />
+    </IslandMenu>
   )
 }
 
-/* ------------------------------------------------------------------ *
- * MenuButton
- * ------------------------------------------------------------------ */
-
-/* IconMenu's menu behind a trigger the caller draws — for a control whose face
- * says what it holds (a folder name and its count) rather than three dots.
- *
- * Items are { key, label, meta, on, danger, disabled, onClick }, or { sep: true }
- * for a rule. `on` marks the current choice: it gets the check and is where
- * focus lands when the menu opens. `meta` is a quiet value on the right. */
+/** Named action triggers, sharing the island surface and keyboard handling. */
 export function MenuButton({ items, label, className, children, align = 'start', disabled = false }) {
-  const [open, setOpen] = useState(false)
-  const triggerRef = useRef(null)
-  const menuRef = useRef(null)
-  const list = items || []
-
-  const close = useCallback(() => setOpen(false), [])
-  const closeAndFocus = useCallback(() => {
-    setOpen(false)
-    if (triggerRef.current) triggerRef.current.focus()
-  }, [])
-
-  useMenuAutofocus(open, menuRef)
-
-  const run = (item) => {
-    if (item.disabled) return
-    closeAndFocus()
-    if (item.onClick) item.onClick()
-  }
-
-  return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={cx(className, open && 'is-open')}
-        onClick={() => setOpen((v) => !v)}
-        onKeyDown={(e) => {
-          if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-            e.preventDefault()
-            setOpen(true)
-          }
-        }}
-        disabled={disabled}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={label}
-      >
-        {children}
-      </button>
-      <Popover
-        anchorRef={triggerRef}
-        open={open}
-        onClose={closeAndFocus}
-        onDismiss={close}
-        align={align}
-        className="menu-pop"
-        role="menu"
-        ariaLabel={label}
-      >
-        <div
-          ref={menuRef}
-          className="menu-pop__list"
-          onKeyDown={(e) => handleMenuKeys(e, menuRef.current, closeAndFocus)}
-        >
-          {list.map((item, i) =>
-            item.sep ? (
-              <div key={item.key || `sep-${i}`} className="menu-pop__sep" role="separator" />
-            ) : (
-              <button
-                key={item.key || `${item.label}-${i}`}
-                type="button"
-                data-menuitem=""
-                data-on={item.on ? 'true' : 'false'}
-                className={cx(
-                  'menu-pop__item',
-                  item.on && 'menu-pop__item--on',
-                  item.danger && 'menu-pop__item--danger'
-                )}
-                role={item.on === undefined ? 'menuitem' : 'menuitemradio'}
-                aria-checked={item.on === undefined ? undefined : !!item.on}
-                disabled={!!item.disabled}
-                onClick={() => run(item)}
-              >
-                <span className="menu-pop__text">{item.label}</span>
-                {item.meta !== undefined ? <span className="menu-pop__meta">{item.meta}</span> : null}
-                {item.on ? (
-                  <Check className="menu-pop__check" size={12} strokeWidth={1.75} aria-hidden="true" />
-                ) : null}
-              </button>
-            )
-          )}
-        </div>
-      </Popover>
-    </>
-  )
+  return <IslandMenu items={items} label={label} className={className} align={align}
+    disabled={disabled}>{children}</IslandMenu>
 }
 
 /* ------------------------------------------------------------------ *

@@ -28,7 +28,7 @@ import {
   Check, ChevronRight, FileText, FolderPlus, Layers, Pencil, Plus, RotateCcw, Trash2, Upload, X,
 } from 'lucide-react'
 
-import { EmptyState, Field, IconMenu, Meter, Pill } from '../ui/primitives.jsx'
+import { EmptyState, Field, IconMenu, Meter, Pill, PillSelect } from '../ui/primitives.jsx'
 import * as api from '../lib/api.js'
 import * as clerk from '../lib/clerk.js'
 import {
@@ -154,17 +154,14 @@ function ImportPanel({ folders, onImported, onCancel, busy }) {
           />
           <label className="field" htmlFor="fc-folder">
             <span className="field__label">Folder</span>
-            <select
+            <PillSelect
               id="fc-folder"
               className="fc-select"
+              label="Folder"
               value={folderId}
-              onChange={(e) => setFolderId(e.target.value)}
-            >
-              <option value="">No folder</option>
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
+              onChange={setFolderId}
+              options={[{ value: '', label: 'No folder' }, ...folders.map(f => ({ value: f.id, label: f.name }))]}
+            />
           </label>
         </div>
 
@@ -330,17 +327,14 @@ function WritePanel({ folders, onImported, onCancel, busy }) {
           />
           <label className="field" htmlFor="fc-write-folder">
             <span className="field__label">Folder</span>
-            <select
+            <PillSelect
               id="fc-write-folder"
               className="fc-select"
+              label="Folder"
               value={folderId}
-              onChange={(e) => setFolderId(e.target.value)}
-            >
-              <option value="">No folder</option>
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
+              onChange={setFolderId}
+              options={[{ value: '', label: 'No folder' }, ...folders.map(f => ({ value: f.id, label: f.name }))]}
+            />
           </label>
         </div>
 

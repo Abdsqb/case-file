@@ -1,0 +1,142 @@
+/* One material and one motion for every choice/action dropdown. */
+.island-trigger.island-trigger {
+  border-radius: 999px;
+  background: rgba(var(--panel-rgb), 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+}
+.pill.island-trigger[aria-expanded='true'] {
+  color: var(--text);
+  background: rgba(var(--panel-rgb), 0.5);
+  border-color: rgba(255, 255, 255, 0.04);
+  box-shadow: none;
+}
+.island-trigger[data-island-present='true'] { opacity: 0 !important; }
+
+.island-menu {
+  position: fixed;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  overflow: hidden;
+  border-radius: 24px;
+  background: rgba(var(--panel-rgb), 0.62);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: 0 26px 60px -16px rgba(0, 0, 0, 0.75);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  transform-origin: top left;
+}
+.island-menu.is-flipped { flex-direction: column-reverse; }
+.island-menu__cap {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.island-menu__cap .pillselect__chev { transform: rotate(180deg); }
+.island-menu__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: 2px 6px 6px;
+  scrollbar-width: thin;
+  transition: opacity 100ms ease;
+}
+.island-menu.is-flipped .island-menu__body { padding: 6px 6px 2px; }
+.island-menu:not(.is-open) .island-menu__body { opacity: 0; }
+.island-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--fg-mid);
+  font: inherit;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+.island-menu.is-open .island-menu__item {
+  animation: island-option-in 360ms var(--pn-open, cubic-bezier(.22,1,.36,1)) both;
+  animation-delay: calc(50ms + var(--i, 0) * 22ms);
+}
+@keyframes island-option-in {
+  from { opacity: 0; filter: blur(4px); transform: translateY(-3px) scale(.96); }
+  to { opacity: 1; filter: none; transform: none; }
+}
+.island-menu__item:hover,
+.island-menu__item:focus-visible { color: var(--text); background: rgba(255,255,255,.06); }
+.island-menu__item:focus-visible { outline: 1px solid var(--accent-edge); outline-offset: -1px; }
+.island-menu__item.is-current { color: var(--text); }
+.island-menu__item.is-current > svg { color: var(--accent); flex: none; }
+.island-menu__item.is-danger { color: var(--hot); }
+.island-menu__item.is-danger:hover { background: var(--hot-soft); }
+.island-menu__item:disabled { opacity: .35; cursor: not-allowed; }
+.island-menu__label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.island-menu__meta { flex: none; color: var(--fg-dim); font: 11px var(--font-mono); }
+.island-menu__sep { height: 1px; margin: 5px 10px; background: var(--line); }
+.island-menu__empty { display: block; padding: 10px 12px; color: var(--fg-dim); }
+
+.folder-island-trigger {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  max-width: min(260px, 45vw);
+  padding: 0 12px;
+  color: var(--text);
+  font-size: 13px;
+}
+.folder-island-trigger > svg:first-child { color: var(--accent); flex: none; }
+.folder-island-trigger__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-island-trigger > svg:last-child { flex: none; color: var(--fg-dim); }
+.fc-select.island-trigger { width: 100%; min-height: 36px; justify-content: space-between; }
+
+/* Calendar dropdowns keep the grid but arrive on the same spring and glass. */
+.pop.datepop.island-datepop {
+  border-radius: 24px;
+  background: rgba(var(--panel-rgb), .62);
+  border: 1px solid rgba(255,255,255,.04);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  box-shadow: 0 26px 60px -16px rgba(0,0,0,.75);
+  animation: island-calendar-in 480ms var(--pn-open, cubic-bezier(.22,1,.36,1)) both;
+}
+@keyframes island-calendar-in {
+  from { opacity: 0; transform: translateY(-6px) scale(.84, .3); border-radius: 18px; }
+  to { opacity: 1; transform: none; border-radius: 24px; }
+}
+.pop--flip.datepop.island-datepop { transform-origin: bottom center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .island-menu.is-open .island-menu__item, .pop.datepop.island-datepop { animation: none; }
+}
+[data-motion='reduced'] .island-menu.is-open .island-menu__item,
+[data-motion='reduced'] .pop.datepop.island-datepop { animation: none; }

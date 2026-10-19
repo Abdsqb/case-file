@@ -8,8 +8,8 @@
  * so brushing past does not make it flicker. Arrow keys move through the list
  * and Escape folds it; on touch, a tap on the pill opens it.
  *
- * It moves like the Dynamic Island: solid black, on springs that overshoot a
- * little, stretching sideways before it drops and pulling up before it
+ * It moves like the Dynamic Island, in the panels' dark glass: on springs
+ * (island.js) that overshoot a little, stretching sideways before it drops and pulling up before it
  * narrows, with the rows coming into focus as it grows (motion.css, TOP).
  *
  * How the fold works: the list is always rendered whole, inside a pill that
@@ -20,36 +20,13 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { CLOSE_DELAY, SPRINGS } from './island.js';
 
 const ROW = 36;           // px, one row; the folded pill is exactly one
 const PAD = 6;            // the list's inner padding while open
 const FOLDED_X = 22;      // a folded label's side padding
 const OPEN_X = 30;        // an open row's side padding: the island opens wide
 const OPEN_MIN = 200;     // and never narrower than this
-const CLOSE_DELAY = 180;  // grace before folding when the pointer leaves
-
-/* A damped spring, sampled into a CSS linear() easing. `bounce` is how far
-   past the target it swings (0 = none); the spring is scaled to settle by the
-   end of whatever duration the CSS gives it. */
-function springEasing(bounce, samples = 40) {
-  const zeta = 1 - bounce;                                  // damping ratio
-  const omega = 6.9 / zeta;                                 // settles to 0.1% at t = 1
-  const wd = omega * Math.sqrt(1 - zeta * zeta);
-  const points = [];
-  for (let i = 0; i <= samples; i += 1) {
-    const t = i / samples;
-    const decay = Math.exp(-zeta * omega * t);
-    const x = 1 - decay * (Math.cos(wd * t) + ((zeta * omega) / wd) * Math.sin(wd * t));
-    points.push(i === samples ? 1 : Number(x.toFixed(4)));
-  }
-  return `linear(${points.join(', ')})`;
-}
-const SPRINGS = (() => {
-  const open = springEasing(0.32);    // about 5% overshoot
-  const close = springEasing(0.12);   // barely any
-  const ok = typeof CSS !== 'undefined' && CSS.supports?.('transition-timing-function', open);
-  return ok ? { '--pn-open': open, '--pn-close': close } : {};
-})();
 
 export default function TopNav({ items, current, onGo }) {
   const navRef = useRef(null);

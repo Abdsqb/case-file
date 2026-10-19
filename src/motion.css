@@ -700,6 +700,253 @@
 }
 
 /* ==========================================================================
+   ISLANDS — the case bar's folder switcher and case tabs (ui/CaseIslands.jsx)
+   The same glass and the same springs as the top nav. The folder folds to its
+   name and opens downward; the cases fold to the open one and open sideways.
+   ========================================================================== */
+
+/* The bar is no longer a strip on a hairline: two islands and the tools on
+   one centred line. The islands never wrap, so the wrapper that eases the
+   bar's height can let the folder list hang out over the cards below. */
+.casebar { align-items: center; border-bottom: 0; }
+.casebar__left { align-items: center; gap: 10px; }
+.casebar__right { padding-bottom: 0; }
+.casebar__empty { padding-bottom: 0; }
+.headshift { overflow: visible; position: relative; z-index: 20; }
+
+.foldisland,
+.tabisland {
+  --pn-open: cubic-bezier(0.34, 1.3, 0.64, 1);   /* fallbacks; island.js sets the springs */
+  --pn-close: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.island {
+  position: relative;
+  overflow: hidden;
+  height: 36px;
+  border-radius: 18px;
+  background: rgba(var(--panel-rgb), 0.5);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.6);
+  /* Folding: height leads, width follows, on the gentler spring. */
+  transition:
+    height 420ms var(--pn-close),
+    width 480ms var(--pn-close) 50ms,
+    border-radius 420ms var(--pn-close),
+    background-color 300ms ease,
+    box-shadow 300ms ease;
+}
+/* Opening: width leads, height follows, on the bouncier one. */
+.foldisland.is-open .island,
+.tabisland.is-open {
+  border-radius: 20px;
+  background-color: rgba(var(--panel-rgb), 0.62);
+  box-shadow: 0 26px 60px -16px rgba(0, 0, 0, 0.75);
+  transition:
+    width 560ms var(--pn-open),
+    height 640ms var(--pn-open) 40ms,
+    border-radius 560ms var(--pn-open),
+    background-color 300ms ease,
+    box-shadow 300ms ease;
+}
+.tabisland.is-open { border-radius: 18px; }
+
+/* ---- the folder switcher ---- */
+
+/* Holds the folded size in the row, so the tabs sit beside it; the island
+   itself hangs from its top-left and grows over whatever is below. */
+.foldisland {
+  position: relative;
+  flex: none;
+  height: 36px;
+  z-index: 1;
+  transition: width 480ms var(--pn-close);
+}
+.foldisland.is-open { z-index: 30; }
+.island--down { position: absolute; top: 0; left: 0; }
+
+.island__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  transition: transform 420ms var(--pn-close), padding 420ms var(--pn-close);
+}
+.foldisland.is-open .island__list {
+  padding: 5px;
+  transition: transform 640ms var(--pn-open) 40ms, padding 640ms var(--pn-open) 40ms;
+}
+
+.islandrow {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--fg-mid);
+  white-space: nowrap;
+  cursor: pointer;
+  /* Folded, only the current folder shows; the rest sharpen in on opening. */
+  opacity: 0;
+  filter: blur(6px);
+  transform: scale(0.94);
+  transform-origin: 12px 50%;
+  transition:
+    opacity 140ms ease,
+    filter 140ms ease,
+    transform 200ms var(--pn-close),
+    color 160ms ease,
+    background-color 160ms ease;
+}
+.islandrow.is-current { opacity: 1; filter: none; transform: none; color: var(--text); font-weight: 500; }
+.foldisland.is-open .islandrow {
+  opacity: 1;
+  filter: none;
+  transform: none;
+  transition:
+    opacity 260ms ease calc(var(--i) * 30ms + 120ms),
+    filter 320ms ease calc(var(--i) * 30ms + 120ms),
+    transform 520ms var(--pn-open) calc(var(--i) * 30ms + 100ms),
+    color 160ms ease,
+    background-color 160ms ease;
+}
+.foldisland.is-open .islandrow:hover,
+.foldisland.is-open .islandrow:focus-visible { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.islandrow:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--accent-edge); }
+
+.islandrow__inner { display: inline-flex; align-items: center; gap: 8px; width: max-content; }
+.islandrow__icon { flex: none; color: var(--fg-mid); }
+.islandrow.is-current .islandrow__icon { color: var(--accent); }
+.islandrow__meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.islandrow__chev { flex: none; color: var(--fg-dim); transition: opacity 200ms ease; }
+.foldisland.is-open .islandrow__chev { opacity: 0; }
+.islandrow.is-danger,
+.islandrow.is-danger .islandrow__icon { color: var(--red); }
+
+.islandrow__sep { position: relative; height: 9px; }
+.islandrow__sep::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 4px;
+  height: 1px;
+  background: var(--border);
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.foldisland.is-open .islandrow__sep::before { opacity: 1; transition-delay: 120ms; }
+
+/* ---- the case tabs ---- */
+
+.tabisland-slot {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+}
+.tabisland { flex: none; max-width: 100%; }
+
+.tabisland__track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  transition: transform 420ms var(--pn-close);
+}
+.tabisland.is-open .tabisland__track { transition: transform 600ms var(--pn-open); }
+
+/* Segmented, as plain text in the island: no track, no thumb; the open case
+   is the full ink and a lit dot, like the top nav. Dragging still reorders. */
+.segmented--island {
+  position: relative;
+  width: max-content;
+  max-width: none;
+  overflow: visible;
+  gap: 22px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+.segmented--island .segmented__thumb { display: none; }
+.segmented--island .segmented__item {
+  border-radius: 0;
+  font-size: 13.5px;
+  color: var(--fg-mid);
+  transition: opacity 140ms ease, filter 140ms ease, color 160ms ease;
+}
+.segmented--island .segmented__item--active { color: var(--text); }
+.segmented--island .segmented__btn { position: relative; height: 34px; padding: 0; border-radius: 0; }
+.segmented--island .segmented__item--active .segmented__btn::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px 0 var(--accent-glow);
+}
+.segmented--island .segmented__menu { padding: 0 0 0 4px; }
+
+.tabisland:not(.is-open) .segmented__item:not(.segmented__item--active) {
+  opacity: 0;
+  filter: blur(6px);
+  pointer-events: none;
+}
+.tabisland.is-open .segmented__item {
+  transition:
+    opacity 240ms ease calc(var(--i, 0) * 30ms + 100ms),
+    filter 300ms ease calc(var(--i, 0) * 30ms + 100ms),
+    color 160ms ease;
+}
+.tabisland.is-open .segmented__item:hover { color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+  .island, .foldisland, .island__list, .islandrow, .tabisland__track, .segmented--island .segmented__item,
+  .foldisland.is-open .island, .tabisland.is-open, .foldisland.is-open .island__list,
+  .foldisland.is-open .islandrow, .tabisland.is-open .tabisland__track, .tabisland.is-open .segmented__item {
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+  }
+  .islandrow,
+  .tabisland:not(.is-open) .segmented__item:not(.segmented__item--active) { filter: none; }
+}
+[data-motion='reduced'] .island,
+[data-motion='reduced'] .foldisland,
+[data-motion='reduced'] .island__list,
+[data-motion='reduced'] .islandrow,
+[data-motion='reduced'] .tabisland__track,
+[data-motion='reduced'] .segmented--island .segmented__item {
+  transition-duration: 1ms !important;
+  transition-delay: 0ms !important;
+  filter: none;
+}
+
+/* ==========================================================================
    Case swap — the board moving on to the next case.
 
    CaseFlow keys its scene on the change, so the new drawing mounts fresh and

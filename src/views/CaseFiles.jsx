@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronsUpDown, CircleDot, Folder, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { Check, CircleDot, Plus, RotateCcw, Trash2 } from 'lucide-react'
 
 import {
   Card,
@@ -8,7 +8,6 @@ import {
   EmptyState,
   Field,
   IconMenu,
-  MenuButton,
   Metric,
   Meter,
   Pill,
@@ -18,6 +17,7 @@ import {
 } from '../ui/primitives.jsx'
 import { DotMatrix, MiniBars } from '../ui/charts.jsx'
 import CaseFlow from '../ui/CaseFlow.jsx'
+import { CaseTabsIsland, FolderIsland } from '../ui/CaseIslands.jsx'
 import FlowFullscreen from '../ui/FlowFullscreen.jsx'
 import useDeck from '../ui/useDeck.js'
 import { buildGraph } from '../lib/graph.js'
@@ -1603,20 +1603,16 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
       <div className="headshift" style={headH == null ? undefined : { height: headH }}>
       <div className="viewhead casebar" ref={headRef}>
         <div className="casebar__left">
-          <MenuButton
-            className="casepick"
+          {/* Two islands, like the top nav: the folder folds to its name and
+              opens downward into the others; the cases fold to the open one
+              and open sideways into the rest. */}
+          <FolderIsland
             items={folderMenu}
             label={`Switch folder, ${shownName}, ${shownGroup.items.length} ${shownGroup.items.length === 1 ? 'case' : 'cases'}`}
-          >
-            <Folder className="casepick__icon" size={14} strokeWidth={1.6} aria-hidden="true" />
-            <span className="casepick__name truncate">{shownName}</span>
-            <span className="casepick__n">{shownGroup.items.length}</span>
-            <ChevronsUpDown className="casepick__chev" size={12} strokeWidth={1.8} aria-hidden="true" />
-          </MenuButton>
+          />
 
           {tabItems.length ? (
-            <Segmented
-              className="segmented--tabs"
+            <CaseTabsIsland
               items={tabItems}
               value={activeId}
               onChange={(id) => onSelectCase && onSelectCase(id)}

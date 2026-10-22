@@ -8,10 +8,8 @@ import {
   useRef,
   useState,
 } from 'react'
-import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
-import IslandMenu from './IslandMenu.jsx'
-import { SPRINGS } from './island.js'
+import IslandMenu, { IslandSurface } from './IslandMenu.jsx'
 
 /* ------------------------------------------------------------------ *
  * helpers
@@ -19,164 +17,6 @@ import { SPRINGS } from './island.js'
 
 function cx(...parts) {
   return parts.filter(Boolean).join(' ')
-}
-
-const EDGE = 8 // viewport padding kept around a popover
-const GAP = 6 // distance between trigger and popover
-
-/**
- * Escape ownership. Only the most recently opened popover reacts, so a
- * nested popover never dismisses its parent instead of itself.
- */
-const popStack = []
-
-function computePosition(rect, el, align) {
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-  const pw = el ? el.offsetWidth : 0
-  const ph = el ? el.offsetHeight : 0
-
-  let top = rect.bottom + GAP
-  let flipped = false
-  if (top + ph > vh - EDGE && rect.top - GAP - ph > EDGE) {
-    top = rect.top - GAP - ph
-    flipped = true
-  }
-  if (ph > 0) top = Math.max(EDGE, Math.min(top, vh - EDGE - ph))
-  else top = Math.max(EDGE, top)
-
-  let left = align === 'end' ? rect.right - pw : rect.left
-  if (pw > 0) left = Math.max(EDGE, Math.min(left, vw - EDGE - pw))
-  else left = Math.max(EDGE, left)
-
-  return { top, left, width: rect.width, flipped }
-}
-
-function samePos(a, b) {
-  return (
-    !!a &&
-    !!b &&
-    a.top === b.top &&
-    a.left === b.left &&
-    a.width === b.width &&
-    a.flipped === b.flipped
-  )
-}
-
-/**
- * Every floating surface in the app goes through here: portalled to
- * document.body (the cards are overflow:hidden and would clip it),
- * position:fixed from the trigger rect, re-measured on scroll / resize /
- * content resize, flipped above the trigger when it would overflow the
- * bottom of the viewport.
- */
-function Popover({
-  anchorRef,
-  open,
-  onClose,
-  onDismiss,
-  align = 'start',
-  matchWidth = false,
-  className,
-  role,
-  ariaLabel,
-  children,
-}) {
-  const ref = useRef(null)
-  const [pos, setPos] = useState(null)
-
-  // keep the callbacks in refs so an inline arrow from the caller does not
-  // resubscribe (and re-stack) the popover on every parent render
-  const closeRef = useRef(onClose)
-  const dismissRef = useRef(onDismiss)
-  closeRef.current = onClose
-  dismissRef.current = onDismiss
-
-  const place = useCallback(() => {
-    const anchor = anchorRef && anchorRef.current
-    if (!anchor) return
-    const next = computePosition(anchor.getBoundingClientRect(), ref.current, align)
-    setPos((prev) => (samePos(prev, next) ? prev : next))
-  }, [anchorRef, align])
-
-  useLayoutEffect(() => {
-    if (!open) {
-      setPos(null)
-      return undefined
-    }
-    place()
-    let ro = null
-    if (typeof ResizeObserver !== 'undefined' && ref.current) {
-      ro = new ResizeObserver(() => place())
-      ro.observe(ref.current)
-    }
-    return () => {
-      if (ro) ro.disconnect()
-    }
-  }, [open, place])
-
-  useEffect(() => {
-    if (!open) return undefined
-
-    const token = {}
-    popStack.push(token)
-
-    const onScrollOrResize = () => place()
-    const onDown = (e) => {
-      if (ref.current && ref.current.contains(e.target)) return
-      const anchor = anchorRef && anchorRef.current
-      // the trigger's own click handler owns the toggle
-      if (anchor && anchor.contains(e.target)) return
-      const fn = dismissRef.current || closeRef.current
-      if (fn) fn()
-    }
-    const onKey = (e) => {
-      if (e.key !== 'Escape') return
-      if (popStack[popStack.length - 1] !== token) return
-      e.preventDefault()
-      e.stopPropagation()
-      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation()
-      if (closeRef.current) closeRef.current()
-    }
-
-    window.addEventListener('scroll', onScrollOrResize, true)
-    window.addEventListener('resize', onScrollOrResize)
-    document.addEventListener('mousedown', onDown, true)
-    // capture phase: a popover eats Escape before any page-level handler
-    document.addEventListener('keydown', onKey, true)
-
-    return () => {
-      const i = popStack.indexOf(token)
-      if (i !== -1) popStack.splice(i, 1)
-      window.removeEventListener('scroll', onScrollOrResize, true)
-      window.removeEventListener('resize', onScrollOrResize)
-      document.removeEventListener('mousedown', onDown, true)
-      document.removeEventListener('keydown', onKey, true)
-    }
-  }, [open, place, anchorRef])
-
-  if (!open || typeof document === 'undefined') return null
-
-  return createPortal(
-    <div
-      ref={ref}
-      className={cx('pop', 'island-datepop', pos && pos.flipped && 'pop--flip', className)}
-      role={role}
-      aria-label={ariaLabel}
-      style={{
-        ...SPRINGS,
-        position: 'fixed',
-        '--from-w': anchorRef.current?.getBoundingClientRect().width + 'px',
-        '--from-h': anchorRef.current?.getBoundingClientRect().height + 'px',
-        top: pos ? pos.top : -9999,
-        left: pos ? pos.left : -9999,
-        minWidth: matchWidth && pos ? pos.width : undefined,
-      }}
-    >
-      {children}
-    </div>,
-    document.body
-  )
 }
 
 function normalizeOptions(options) {
@@ -940,15 +780,20 @@ export function DatePopover({ anchorRef, value, onSelect, onClear, onClose, week
   }
 
   return (
-    <Popover
+    <IslandSurface
       anchorRef={anchorRef}
-      open
-      onClose={onClose}
       align={align}
-      className="datepop"
+      onDismiss={onClose}
+      onEscape={() => {
+        if (onClose) onClose()
+        anchorRef.current?.focus({ preventScroll: true })
+      }}
       role="dialog"
-      ariaLabel="Choose a date"
+      label="Choose a date"
+      minWidth={236}
+      className="island-pop--date"
     >
+      <div className="datepop">
       <div className="datepop__head">
         <button
           type="button"
@@ -1021,6 +866,7 @@ export function DatePopover({ anchorRef, value, onSelect, onClear, onClose, week
           TODAY
         </button>
       </div>
-    </Popover>
+      </div>
+    </IslandSurface>
   )
 }

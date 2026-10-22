@@ -444,6 +444,22 @@ as CSS `linear()` easings), stretching sideways before it drops and pulling up b
 narrows, overshooting a little on the way open, with the rows coming into focus as it grows. The status readout ("all clear", "2 due today") sits on its own in the top-left
 corner. The arrow keys move through the list and Escape folds it (`src/ui/TopNav.jsx`).
 
+**Every dropdown is an island too.** The ⋯ menus, the select pills (priority, sort, folder,
+report range) and the date pickers all open the same way (`src/ui/IslandMenu.jsx`): the
+control steps aside and the island takes its place, at its size, then springs out to its full
+size, growing down from it, or up when there is no room below; the options sharpen in
+beneath. Its contents hold still on screen while the frame grows around them, so nothing
+reflows. Closing, it folds back into the control, which then shows the new value. Menus open
+on a click, Enter, Space or the arrow keys, never on hover; Escape folds the innermost one
+and returns focus to its control.
+
+**So is every row of choices.** Reporting's case filter, Calendar's Entries and Classes
+and the sub-cases on Case files fold to the current choice the way the case tabs do, and open
+sideways into the rest on hover or focus, lying over whatever is beside them up to the edge
+of their row (`SegmentIsland` in `src/ui/CaseIslands.jsx`). The Settings choices are
+selects instead, like the folder switcher: a glass pill showing the value, opening downward
+into the options on a click.
+
 **The pointer is drawn by the app.** A soft grey disc, after the iPad's: it sits exactly on
 the mouse, glides into a faint highlight wrapped round a button, tab or link, and narrows to
 a caret over a text field. One fixed element moved by a transform, with a loop that runs

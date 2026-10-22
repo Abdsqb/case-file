@@ -49,22 +49,32 @@ export function FolderIsland({ items, label }) {
 }
 
 /* ------------------------------------------------------------------ *
- * CaseTabsIsland
+ * SegmentIsland
  * ------------------------------------------------------------------ */
 
-/** Segmented's props; the island wraps it. */
-export function CaseTabsIsland({ items, value, onChange, onReorder, label }) {
+/* What an open island may cover: the bar or row it belongs to. */
+const BOUND = '.casebar__left, .settings-row, .subbar, .viewhead, .card';
+
+/**
+ * Any row of choices (Segmented's props), as an island: folded to the current
+ * choice, opening sideways into all of them on hover or focus and folding
+ * back around the one picked. In the layout it holds only its folded size;
+ * open, it lies over whatever is beside it, up to the edge of its bar or row.
+ * `align="end"` anchors it on the right and grows it leftward, for controls
+ * that sit at the end of a row.
+ */
+export function SegmentIsland({ items, value, onChange, onReorder, label, align = 'start', className }) {
   const slotRef = useRef(null);
   const rootRef = useRef(null);
   const trackRef = useRef(null);
   const dragging = () => !!rootRef.current?.querySelector('.segmented__item.is-dragging');
   const { open, setOpen, handlers } = useIsland(rootRef, { keepOpen: dragging });
-  const [m, setM] = useState({ left: 0, width: 120, track: 120, slot: 600 });
+  const [m, setM] = useState({ left: 0, width: 120, track: 120, room: 600 });
   const [offset, setOffset] = useState(0);
 
-  /* Where the open case sits in the strip, how wide the strip is, and how much
-     room the bar has. Also stamps each tab's distance from the open one as
-     --i, which staggers them coming into focus. */
+  /* Where the current choice sits in the strip, how wide the strip is, and
+     how much room the island has to open into. Also stamps each choice's
+     distance from the current one as --i, which staggers them coming in. */
   useLayoutEffect(() => {
     const measure = () => {
       const strip = trackRef.current?.querySelector('.segmented');
@@ -74,28 +84,35 @@ export function CaseTabsIsland({ items, value, onChange, onReorder, label }) {
       const active = strip.querySelector('.segmented__item--active') || tabs[0];
       const at = tabs.indexOf(active);
       tabs.forEach((t, i) => t.style.setProperty('--i', Math.abs(i - at)));
+      const bound = (slot.parentElement && slot.parentElement.closest(BOUND)) || slot.parentElement;
+      const br = bound.getBoundingClientRect();
+      const sr = slot.getBoundingClientRect();
+      const room = align === 'end' ? sr.right - br.left : br.right - sr.left;
       setM({
         left: active ? active.offsetLeft : 0,
         width: active ? active.offsetWidth : 120,
         track: strip.scrollWidth,
-        slot: slot.clientWidth,
+        room: Math.max(0, Math.floor(room)),
       });
     };
     measure();
     document.fonts?.ready?.then(measure);
-    if (typeof ResizeObserver !== 'function') return undefined;
-    const ro = new ResizeObserver(measure);
-    ro.observe(slotRef.current);
-    const strip = trackRef.current?.querySelector('.segmented');
-    if (strip) ro.observe(strip);
-    return () => ro.disconnect();
-  }, [items, value]);
+    window.addEventListener('resize', measure);
+    let ro = null;
+    if (typeof ResizeObserver === 'function') {
+      ro = new ResizeObserver(measure);
+      const strip = trackRef.current?.querySelector('.segmented');
+      if (strip) ro.observe(strip);
+    }
+    return () => { ro?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [items, value, align]);
 
-  const openW = Math.min(m.track + TAB_X * 2, m.slot);
+  const foldedW = m.width + TAB_X * 2;
+  const openW = Math.max(foldedW, Math.min(m.track + TAB_X * 2, m.room));
   const overflow = Math.max(0, m.track + TAB_X * 2 - openW);
 
-  /* Opening on a strip too long for the bar: start with the open case in
-     view, centred where possible; the wheel moves along from there. */
+  /* Opening on a strip too long for its row: start with the current choice
+     in view, centred where possible; the wheel moves along from there. */
   useEffect(() => {
     if (!open) return;
     const want = m.left + m.width / 2 - openW / 2 + TAB_X;
@@ -116,7 +133,7 @@ export function CaseTabsIsland({ items, value, onChange, onReorder, label }) {
     return () => el.removeEventListener('wheel', onWheel);
   }, [open, overflow]);
 
-  const width = open ? openW : m.width + TAB_X * 2;
+  const width = open ? openW : foldedW;
   const x = open ? TAB_X - Math.min(offset, overflow) : TAB_X - m.left;
 
   const pick = (id) => {
@@ -126,7 +143,7 @@ export function CaseTabsIsland({ items, value, onChange, onReorder, label }) {
   };
 
   const onKeyDown = (e) => {
-    // Keys pressed in the ⋯ menu bubble here through its portal: they are the menu's.
+    // Keys pressed in a ⋯ menu bubble here through its portal: they are the menu's.
     if (!rootRef.current?.contains(e.target)) return;
     if (e.key === 'Escape') {
       setOpen(false);
@@ -136,11 +153,15 @@ export function CaseTabsIsland({ items, value, onChange, onReorder, label }) {
   };
 
   return (
-    <div ref={slotRef} className="tabisland-slot">
+    <div
+      ref={slotRef}
+      className={cx('tabisland-slot', align === 'end' && 'is-end', open && 'is-open', className)}
+      style={{ ...SPRINGS, width: foldedW }}
+    >
       <div
         ref={rootRef}
         className={cx('island', 'tabisland', open && 'is-open')}
-        style={{ ...SPRINGS, width }}
+        style={{ width }}
         onKeyDown={onKeyDown}
         {...handlers}
       >
@@ -158,3 +179,6 @@ export function CaseTabsIsland({ items, value, onChange, onReorder, label }) {
     </div>
   );
 }
+
+/** The case bar's tabs: a SegmentIsland of the folder's cases. */
+export const CaseTabsIsland = SegmentIsland;

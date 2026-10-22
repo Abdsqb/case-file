@@ -12,7 +12,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, RefreshCw } from 'lucide-react'
-import { Card, CardHead, EmptyState, Pill, Segmented } from '../ui/primitives.jsx'
+import { Card, CardHead, EmptyState, Pill } from '../ui/primitives.jsx'
+import { SegmentIsland } from '../ui/CaseIslands.jsx'
 import { listHeadlines, listProjects, moveProject } from '../lib/api.js'
 import { dayDiff, flattenEntries, startOfDay, statusTone } from '../lib/metrics.js'
 import { applyWalk, siblingWalk } from '../lib/reorder.js'
@@ -510,7 +511,7 @@ export function Reporting({ projects, now, onRefresh }) {
         <div className="viewhead__left">
           <span className="section-label">Reporting</span>
           {scopeItems.length > 2 ? (
-            <Segmented
+            <SegmentIsland
               items={scopeItems}
               value={scope}
               onChange={setScope}

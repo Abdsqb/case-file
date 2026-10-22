@@ -12,12 +12,11 @@ import {
   Meter,
   Pill,
   PillSelect,
-  Segmented,
   Trend,
 } from '../ui/primitives.jsx'
 import { DotMatrix, MiniBars } from '../ui/charts.jsx'
 import CaseFlow from '../ui/CaseFlow.jsx'
-import { CaseTabsIsland, FolderIsland } from '../ui/CaseIslands.jsx'
+import { CaseTabsIsland, FolderIsland, SegmentIsland } from '../ui/CaseIslands.jsx'
 import FlowFullscreen from '../ui/FlowFullscreen.jsx'
 import useDeck from '../ui/useDeck.js'
 import { buildGraph } from '../lib/graph.js'
@@ -1348,7 +1347,8 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
 
   const sortMenu = SORTS.map((s) => ({
     key: s.value,
-    label: `${sort === s.value ? '• ' : '  '}${s.label}`,
+    label: s.label,
+    on: sort === s.value,   // the island marks the current order with its check
     onClick: () => setSort(s.value),
   }))
 
@@ -1776,7 +1776,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
               <div className="card__body">
                 <div className="subbar">
                   <span className="section-label">Sub-cases</span>
-                  <Segmented
+                  <SegmentIsland
                     items={subItems}
                     value={entryProject ? entryProject.id : activeId}
                     onChange={(id) => setSubScope(id === activeId ? null : id)}

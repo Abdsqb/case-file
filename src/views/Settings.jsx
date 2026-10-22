@@ -14,7 +14,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Card, CardHead, Metric, Pill, Segmented, Toggle } from '../ui/primitives.jsx'
+import { Card, CardHead, Metric, Pill, PillSelect, Toggle } from '../ui/primitives.jsx'
 import { getMemory, listProjects } from '../lib/api.js'
 import * as clerk from '../lib/clerk.js'
 import { globalStats } from '../lib/metrics.js'
@@ -835,8 +835,10 @@ export function Settings({ projects, now }) {
                 title="Pointer"
                 hint="A soft disc that wraps round buttons and turns into a caret over text, or the system arrow."
               >
-                <Segmented
-                  items={POINTERS}
+                <PillSelect
+                  className="island-select"
+                  align="end"
+                  options={POINTERS}
                   value={pointer === 'system' ? 'system' : DEFAULT_POINTER}
                   onChange={(next) => writeSetting(KEY_POINTER, next === DEFAULT_POINTER ? null : next)}
                   label="Pointer"
@@ -847,8 +849,10 @@ export function Settings({ projects, now }) {
                 title="Week starts on"
                 hint="Used by the weekly table, the reporting window and the date picker."
               >
-                <Segmented
-                  items={weekItems}
+                <PillSelect
+                  className="island-select"
+                  align="end"
+                  options={weekItems}
                   value={weekStart}
                   onChange={(next) => writeSetting(KEY_WEEK_START, next)}
                   label="Week starts on"
@@ -909,8 +913,10 @@ export function Settings({ projects, now }) {
               title="Diffusion"
               hint="A blur laid over the background. Crisp draws every line sharp; Smoke melts it into a soft glow."
             >
-              <Segmented
-                items={BLURS}
+              <PillSelect
+                className="island-select"
+                align="end"
+                options={BLURS}
                 value={blur}
                 onChange={(next) => writeSetting(KEY_BACKDROP_BLUR, next === DEFAULT_BLUR ? null : next)}
                 label="Background diffusion"

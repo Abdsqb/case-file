@@ -19,7 +19,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
-import { Card, CardHead, EmptyState, Meter, Metric, Pill, Segmented } from '../ui/primitives.jsx'
+import { Card, CardHead, EmptyState, Meter, Metric, Pill } from '../ui/primitives.jsx'
+import { SegmentIsland } from '../ui/CaseIslands.jsx'
 import { addDays, fmtTime, minutesOf, parseCalendar, sameDay, startOfDay, weekStartOf } from '../lib/ics.js'
 import { statusTone } from '../lib/metrics.js'
 import sampleIcs from '../data/class-calendar.ics?raw'
@@ -855,7 +856,7 @@ export default function Calendar({ now, projects, onSelectCase }) {
     <div className="viewhead">
       <div className="viewhead__left">
         <span className="section-label">Calendar</span>
-        <Segmented
+        <SegmentIsland
           items={[
             { value: 'entries', label: 'Entries' },
             { value: 'classes', label: 'Classes' },

@@ -4571,11 +4571,20 @@ button.entry__title:hover { color: var(--fg); }
   color: var(--fg-dim);
   cursor: pointer;
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  /* Out of sight until the pointer comes near it (NotesDrawer sets .is-near).
+     Open, or focused from the keyboard, it stays in view. */
+  opacity: 0;
   transition:
+    opacity 220ms ease,
     color 160ms ease,
     background 160ms ease,
     transform var(--notes-slide, 440ms) var(--notes-ease, ease);
 }
+
+.notab.is-near,
+.notab:hover,
+.notab:focus-visible,
+.notab[aria-expanded='true'] { opacity: 1; }
 
 .notab:hover,
 .notab:focus-visible { color: var(--fg); background: var(--card); }

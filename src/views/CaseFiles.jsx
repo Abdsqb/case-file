@@ -755,6 +755,31 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
   const bentoRef = useRef(null)
   const lastCase = useRef(activeId)
 
+  /* The wheel anywhere over the entries card scrolls the entries and nothing
+     else. Over the list itself the browser scrolls it as usual, until the list
+     runs out; past that, and over the card's head and composer, the page would
+     take the wheel instead, so the list takes it here and the page is held
+     still. Anything inside that has already used the wheel (the sub-case strip
+     scrolling sideways) is left alone. A callback ref, because the card mounts
+     after the data does. */
+  const entriesWheel = useCallback((card) => {
+    if (!card) return undefined
+    const onWheel = (e) => {
+      if (e.defaultPrevented || e.ctrlKey) return
+      const list = card.querySelector('.entrylist')
+      const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * list?.clientHeight : e.deltaY
+      if (list && dy) {
+        const room = dy < 0 ? list.scrollTop : list.scrollHeight - list.clientHeight - list.scrollTop
+        // Over the list with room to go: the browser's own scroll, eased as usual.
+        if (list.contains(e.target) && room > 0.5) return
+        if (room > 0.5) list.scrollBy({ top: dy, behavior: Math.abs(dy) >= 50 ? 'smooth' : 'instant' })
+      }
+      e.preventDefault()
+    }
+    card.addEventListener('wheel', onWheel, { passive: false })
+    return () => card.removeEventListener('wheel', onWheel)
+  }, [])
+
   useLayoutEffect(() => {
     if (lastCase.current === activeId) return undefined
     lastCase.current = activeId
@@ -1752,7 +1777,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
               the middle third of the page. They are not in the middle third
               any more, so neither of them has to hide. */}
           <div className="span-7 col col--left casework__main">
-            <Card className="casecard">
+            <Card className="casecard" ref={entriesWheel}>
               <CardHead
                 className="card__head"
                 title="Entries"

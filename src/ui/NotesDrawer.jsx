@@ -33,6 +33,9 @@ const LiveMarkdown = lazy(loadEditor);
    flush immediately, so this only governs the idle case. */
 const SAVE_AFTER = 700;
 
+/* px: how close the pointer has to come before the notes tab shows itself. */
+const NEAR = 80;
+
 export default function NotesDrawer({ projects = [], now = Date.now(), onFiled }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState('');
@@ -244,9 +247,39 @@ export default function NotesDrawer({ projects = [], now = Date.now(), onFiled }
     return () => cancelAnimationFrame(id);
   }, [open]);
 
+  /* The tab stays out of sight until the pointer comes near it. A listener
+     rather than a bigger invisible hit area, because a hit area that wide would
+     swallow clicks meant for the page beside the tab. The class is set on the
+     element directly, so a moving pointer never re-renders the drawer. */
+  const tabRef = useRef(null);
+  useEffect(() => {
+    const tab = tabRef.current;
+    if (!tab) return undefined;
+    let box = null;
+    const measure = () => { box = null; };
+    const onMove = (e) => {
+      if (!box) box = tab.getBoundingClientRect();
+      const dx = Math.max(box.left - e.clientX, 0, e.clientX - box.right);
+      const dy = Math.max(box.top - e.clientY, 0, e.clientY - box.bottom);
+      tab.classList.toggle('is-near', Math.hypot(dx, dy) < NEAR);
+    };
+    const onLeave = (e) => { if (!e.relatedTarget) tab.classList.remove('is-near'); };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('resize', measure);
+    tab.addEventListener('transitionend', measure);
+    document.addEventListener('pointerout', onLeave, { passive: true });
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('resize', measure);
+      tab.removeEventListener('transitionend', measure);
+      document.removeEventListener('pointerout', onLeave);
+    };
+  }, []);
+
   return (
     <>
       <button
+        ref={tabRef}
         type="button"
         className="notab"
         aria-label="Notes"

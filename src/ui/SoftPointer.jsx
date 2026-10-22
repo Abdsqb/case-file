@@ -14,6 +14,12 @@
  * height are written only while the shape is changing. Nothing per-frame goes
  * on <html> (root custom properties restyle the whole document).
  *
+ * Keeping up: a drawn pointer reaches the screen a frame or so after the
+ * system's would. On the dot and the caret the position is written in the
+ * move event itself, not a frame later. It is never led ahead of the pointer:
+ * the browser's predicted positions jitter on a real mouse, and the dot shook.
+ * Snapping and settling run on quick springs.
+ *
  * Off for touch and pen, off for any device without a fine hovering pointer,
  * and off when Settings says System. Reduce motion keeps the shapes and drops
  * the glide.
@@ -28,8 +34,9 @@ const PAD = 5;             // how far the highlight sits outside the control
 const LEAN = 0.12;         // how far the highlight follows the pointer off centre
 const SNAP_W = 280;        // controls bigger than this keep the dot: wrapping a
 const SNAP_H = 72;         //   whole card in a highlight reads as a selection
-const MORPH = 18;          // settle rate, per second, for shape and the glide
-const GLIDE_MS = 240;      // after leaving a control, how long the dot eases back
+const MORPH = 32;          // settle rate, per second, for the shape
+const FOLLOW = 44;         // settle rate for the position while snapping or gliding
+const GLIDE_MS = 90;       // after leaving a control, how long the dot eases back
 
 const ALPHA = { dot: 0.4, snap: 0.11, text: 0.75 };
 
@@ -173,7 +180,7 @@ export default function SoftPointer() {
       // On a dot or a caret the position is the pointer's, with no lag at
       // all; it only eases while snapping in, and for a moment after leaving.
       const glide = !instant && (kind === 'snap' || now < glideUntil);
-      const kp = glide ? k : 1;
+      const kp = glide ? 1 - Math.exp(-dt * FOLLOW) : 1;
 
       let busy = false;
       const step = (key, rate, eps) => {
@@ -216,6 +223,15 @@ export default function SoftPointer() {
       p.y = e.clientY;
       resolve(e.target);
       show();
+      // A plain dot or caret goes where the pointer is now, in this event, not
+      // a frame from now. Only a changing shape needs the loop.
+      if (kind !== 'snap' && performance.now() >= glideUntil && cur.w === aim.w && cur.h === aim.h) {
+        place();
+        cur.x = aim.x;
+        cur.y = aim.y;
+        paint();
+        if (cur.w === aim.w && cur.h === aim.h && cur.r === aim.r && cur.a === aim.a) return;
+      }
       kick();
     };
     // HTML drag and drop swallows pointermove; dragover still knows where it is.

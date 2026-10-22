@@ -13,7 +13,6 @@
  *   GET  /api/clerk/brief[?force=1]                    → { work, news, body, model, madeAt, cached }
  *   POST /api/clerk/chat         { messages }          → { reply, changes[], toolsUsed }
  *   POST /api/clerk/changes      { changes }           → { created, updated, closed, reopened, deleted, skipped }
- *   POST /api/clerk/deck         { text, name, count } → { name, cards[] }
  */
 
 const BASE = '/api/clerk';
@@ -100,8 +99,4 @@ export function applyChanges(changes) {
   return call('POST', '/changes', { changes });
 }
 
-export function buildDeck(text, { name = '', count = 0 } = {}) {
-  return call('POST', '/deck', { text, name, count });
-}
-
-export default { status, forgetStatus, file, apply, brief, chat, applyChanges, buildDeck, ClerkError };
+export default { status, forgetStatus, file, apply, brief, chat, applyChanges, ClerkError };

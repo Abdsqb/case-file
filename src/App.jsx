@@ -17,14 +17,12 @@ import TopNav from './ui/TopNav.jsx';
 const loadCaseFiles = () => import('./views/CaseFiles');
 const loadReporting = () => import('./views/Reporting');
 const loadCalendar = () => import('./views/Calendar');
-const loadFlashcards = () => import('./views/Flashcards');
 const loadSettings = () => import('./views/Settings');
 const CaseFiles = lazy(loadCaseFiles);
 const Reporting = lazy(loadReporting);
 const Calendar = lazy(loadCalendar);
-const Flashcards = lazy(loadFlashcards);
 const Settings = lazy(loadSettings);
-const PRELOAD = [loadCaseFiles, loadReporting, loadCalendar, loadFlashcards, loadSettings];
+const PRELOAD = [loadCaseFiles, loadReporting, loadCalendar, loadSettings];
 
 const CLOCK_MS = 30000;         // drives overdue arithmetic only; nothing renders seconds
 
@@ -66,7 +64,6 @@ const NAV = [
   { id: 'cases', label: 'Case files' },
   { id: 'reporting', label: 'Reporting' },
   { id: 'calendar', label: 'Calendar' },
-  { id: 'flashcards', label: 'Flashcards' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -236,9 +233,6 @@ export default function App() {
         onMutate={refresh}
       />
     );
-  } else if (view === 'flashcards') {
-    // Its own store (decks/cards); nothing to do with projects.
-    body = <Flashcards />;
   } else if (view === 'calendar') {
     // Two calendars: the entry month, which is every dated entry in the
     // archive, and the class timetable, which is the bundled .ics with those

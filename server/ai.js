@@ -11,7 +11,7 @@
  * CAPABILITY — 'fast' or 'deep' — and the routing below picks a provider that
  * has a key and a model that fits the job:
  *
- *   deep   filing and deck-building. Wants a large window (your whole archive
+ *   deep   filing. Wants a large window (your whole archive
  *          plus a syllabus) and careful structure. Gemini first.
  *   fast   the brief and the chat. Wants to be on screen before you have
  *          finished reading the heading. Groq first — a 70B at Groq's speed

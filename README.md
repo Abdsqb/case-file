@@ -28,7 +28,6 @@ is written. It does nothing until you put an API key in `.env` yourself — see
 | **Case files** | The working screen. Create, rename, reorder and delete cases; add sub-cases; log entries with dates and priorities; nest subtasks under an entry. Along the top sit two islands like the top nav: the folder you are in, which opens downward into the other folders and new, rename and delete folder; and the open case, which opens sideways into every case in that folder (still draggable to reorder) and folds back around the one you pick. A new case lands in the folder you are looking at. The entries take the left of the screen; the case structure stands on the right, with the seven readings of the case paged one at a time underneath it. Everything rests flat, and the drawing turns toward the pointer while you are over it. Click the drawing to open the whole case full window. |
 | **Reporting** | Every open entry bucketed by due day — Overdue / This week / Later — plus a world-news feed from public RSS. |
 | **Calendar** | Two calendars over the same days. **Entries** is a month grid of every dated entry in the archive, coloured by how its deadline stands, and clicking one opens its case. **Classes** is a weekly timetable parsed from `src/data/class-calendar.ics`, with next class, today's agenda and term progress. |
-| **Flashcards** | Import a deck from a `.json` file or pasted text — or paste a lecture and have the clerk draft one — file it under a course, and review it on an SM-2 spaced schedule. The scheduling is offline SM-2 and always has been; only drafting a new deck calls a model, and only when you ask it to. |
 | **Settings** | The accent colour; the background, from eleven, with a live swatch of each and how much blur sits over it; motion preferences, including a reduced-motion override; the pointer, the app's soft disc or the system arrow; what this install holds; a live reading of how much memory the app is using; and what the clerk sends where. |
 
 *Every screenshot here is of the sample archive a fresh install seeds, not anyone's real
@@ -193,12 +192,6 @@ feed.
 Classes is the term's timetable from the `.ics` file, with the next class and how far
 through the term you are on the left.
 
-![A flashcard review](docs/screenshots/flashcards.png)
-
-**Flashcards** is SM-2 spaced repetition. Each grade button shows what it will do to the
-card before you press it, so *Good* reads "1 day" and *Easy* reads "4 days". The number
-keys 1–4 grade the card and space shows the answer.
-
 ![Settings, with the memory reading](docs/screenshots/settings.png)
 
 **Settings** includes a **Memory** panel that refreshes every five seconds while it is
@@ -259,13 +252,6 @@ edited (title, due date, priority), closed, reopened and deleted; cases themselv
 left to the Case files screen. It is told to close finished work rather than delete it,
 and to ask rather than guess when it is not clear which entry you mean.
 
-**Writing a deck — Flashcards.** Paste a lecture, a chapter or a set of notes and the clerk
-drafts cards from it. You read the draft and cut, because a model will write forty cards
-where thirty are worth reviewing — and importing all forty does not cost you ten bad cards
-once, it costs you them on a spaced schedule for months, with the schedule preferentially
-showing you the ones you keep failing. The material is kept as the deck's source, so a deck
-written this way is no less traceable than one imported from a file.
-
 ### Reads loop, writes are proposals
 
 The clerk has four tools that read: `case_detail`, `search_entries`, `timetable`,
@@ -295,7 +281,7 @@ Both providers have a free tier, and one key is a complete installation.
 
 | | where | what it is used for |
 |---|---|---|
-| `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) | Filing and deck-writing. A huge context window, so a syllabus plus your whole archive fits in one call. |
+| `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) | Filing. A huge context window, so a syllabus plus your whole archive fits in one call. |
 | `GROQ_API_KEY` | [console.groq.com](https://console.groq.com/keys) | The brief and the chat. It answered in 84ms in testing, which is most of what makes those two feel good. |
 | `OPENROUTER_API_KEY` | [openrouter.ai](https://openrouter.ai/keys) | Fallback, used only if neither of the above is set. |
 
@@ -329,7 +315,7 @@ each picked by calling them and checking all three.
 
 ### What leaves the machine
 
-When you file the pad, ask the chat a question, draft a deck or the brief regenerates: the
+When you file the pad, ask the chat a question or the brief regenerates: the
 text involved, your case names, the entries in them and the courses on your timetable are
 sent to whichever provider is configured. **Nothing is sent at any other time** — there is
 no background call, no analytics, no sync. Settings has a panel saying this on screen, with
@@ -415,13 +401,13 @@ server/
   ai.js         the only file that talks to a model, and the only one that sees a key
   archive.js    the archive as JSON, plus the facts the clerk is handed
   clerk.js      the agent: read tools, staged write tools, the loop, filing / brief /
-                chat / decks, and applying what you approve
+                chat, and applying what you approve
 src/
   views/        one file per screen
   ui/           primitives, charts, the case graph, the scratchpad drawer, and the
                 backgrounds: backdrops.js (the designs), Streak.jsx and streakGL.js
                 (the strand painter), ObjectCurrent.jsx, AeroShards.jsx, MicroSlats.jsx
-  lib/          API client, the settings store, metrics, the graph builder, SM-2, .ics parsing
+  lib/          API client, the settings store, metrics, the graph builder, .ics parsing
   data/         the sample class-calendar .ics
   styles.css    the design system — every colour is a token here
   motion.css    the assembly and transition choreography
@@ -451,7 +437,7 @@ cold wash from the top left, a vignette that falls to navy, and a fine grain ove
 All of it is static, painted once, and measured at no cost per frame.
 
 **There is no top bar.** One island of the same dark glass as the panels, the page blurred behind it, names the screen you are on. Point at
-it, or tab to it, and it grows into the list of all six screens, always in the same order;
+it, or tab to it, and it grows into the list of all five screens, always in the same order;
 pick one and it folds back up around the new name, and moving away folds it after a short
 pause. It moves like the Dynamic Island: on real spring curves (damped-spring samples written
 as CSS `linear()` easings), stretching sideways before it drops and pulling up before it

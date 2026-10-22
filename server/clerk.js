@@ -26,7 +26,6 @@
  *   brief(now)   the day in two sentences, then one thing off the news wire
  *   ask(turns)   the chat card — questions about the archive, answered from it,
  *                and edits to entries, staged for the reader to apply
- *   deck(text)   lecture notes in, proposed flashcards out
  */
 
 import { randomUUID } from 'node:crypto';
@@ -60,9 +59,9 @@ Never congratulate or encourage. State what is true and what to do about it.`;
 
 /* The brief gets its own, and only the brief.
    --------------------------------------------------------------------------
-   VOICE above is written for the other three jobs, where the clerk is
+   VOICE above is written for the other two jobs, where the clerk is
    transcribing: filing is a list of proposed rows, chat is an answer to a
-   question, a deck is pairs of cards. Flat is right for all of those — a
+   question. Flat is right for both — a
    personality in a proposed row is a personality getting between the reader
    and a thing they are about to approve.
 
@@ -1639,103 +1638,4 @@ ${snap.classesToday.length ? snap.classesToday.map((c) => `  ${c.from}–${c.to}
   }
 
   throw new AiError('the clerk could not settle on an answer.');
-}
-
-/* -------------------------------------------------------------------- deck */
-
-const DECK_SCHEMA = {
-  name: 'deck',
-  schema: {
-    type: 'object',
-    properties: {
-      name: { type: 'string' },
-      cards: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: { front: { type: 'string' }, back: { type: 'string' } },
-          required: ['front', 'back'],
-        },
-      },
-    },
-    required: ['cards'],
-  },
-}
-
-/**
- * Lecture notes in, proposed cards out. Nothing is imported until you say so.
- *
- * The deck table already keeps `source_text`, so a generated deck is no less
- * traceable than an imported file — "show me what this came from" gives you
- * the lecture back.
- */
-export async function deck(text, { name = '', count = 0, now = Date.now() } = {}) {
-  const body = String(text || '').trim().slice(0, MAX_INPUT_CHARS);
-  if (!body) throw new AiError('there is no source text to build a deck from.', { status: 400 });
-
-  const target = Number(count) > 0 ? Math.min(60, Math.round(Number(count))) : 0;
-
-  const system = `${ROLE}
-
-Your job here is building a flashcard deck out of a piece of source material —
-lecture notes, a chapter, a summary. The deck is reviewed on an SM-2 spaced
-schedule, which is what makes the card format matter:
-
-- One fact per card. A card that asks two things cannot be graded.
-- The front is a question or a prompt that can be answered from memory, not a
-  topic heading. "what does ACID stand for" — not "ACID".
-- The back is the shortest complete answer. A sentence or two. Never a
-  paragraph, never a list of six things unless the six are the answer.
-- Write cards for what the material actually teaches: definitions, mechanisms,
-  distinctions, the conditions under which something holds, worked rules. Skip
-  administrivia, slide numbers, the lecturer's asides and anything that is only
-  true of this one document.
-- Do not pad. ${target ? `Aim for about ${target} cards.` : 'Make as many as the material supports and no more — fifteen good cards beat forty thin ones.'}
-- Keep the material's own terminology and notation.
-- Never invent content that is not in the source. If something is unclear in
-  the source, leave it out.
-
-Return JSON only: {"name": "a short deck name", "cards": [{"front": "...", "back": "..."}]}`;
-
-  const user = `${name ? `The reader called this "${name}".\n\n` : ''}--- source ---
-${body}
---- end ---
-
-Build the deck.`;
-
-  const result = await complete({
-    capability: 'deep',
-    messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-    schema: DECK_SCHEMA,
-    temperature: 0.3,
-    maxTokens: 6000,
-  });
-
-  const parsed = parseObject(result.text);
-
-  const seen = new Set();
-  const cards = (Array.isArray(parsed.cards) ? parsed.cards : [])
-    .map((c) => ({
-      front: typeof c?.front === 'string' ? c.front.trim().slice(0, 600) : '',
-      back: typeof c?.back === 'string' ? c.back.trim().slice(0, 1200) : '',
-    }))
-    .filter((c) => {
-      if (!c.front || !c.back) return false;
-      /* A deck with the same question twice schedules the same fact twice and
-         teaches you it is two facts. */
-      const key = c.front.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 120);
-
-  if (!cards.length) throw new AiError('nothing in that text turned into a card.');
-
-  return {
-    name: (typeof parsed.name === 'string' && parsed.name.trim()) || name || 'Untitled deck',
-    cards,
-    model: result.model,
-    provider: result.providerLabel,
-  };
 }

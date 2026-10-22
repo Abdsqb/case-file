@@ -948,8 +948,8 @@ export function Settings({ projects, now }) {
           <div className="card__body">
             <p className="settings-row__hint" style={{ maxWidth: '72ch', marginTop: 0 }}>
               Everything else in Case File runs on this machine against a local
-              database. The clerk does not. When you ask it something, file the pad
-              or draft a deck, the text involved is sent to whichever provider is
+              database. The clerk does not. When you ask it something or file the
+              pad, the text involved is sent to whichever provider is
               configured below, together with your case names, the entries in them
               and the courses on your timetable. Nothing is sent at any other time —
               there is no background call, no analytics and no sync. Turn it off by
@@ -970,7 +970,7 @@ export function Settings({ projects, now }) {
             {clerkState?.ready ? (
               <div className="fc-routing">
                 <SettingRow
-                  title="Filing and decks"
+                  title="Filing"
                   hint="The long jobs — a syllabus plus your whole archive in one call. Routed to the biggest context window available."
                 >
                   <span className="mono dim">

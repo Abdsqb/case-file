@@ -20,18 +20,6 @@
  *   PATCH  /api/tasks/:id                { title?, completed?, priority?, dueDate? }
  *   DELETE /api/tasks/:id
  *   GET    /api/headlines
- *   GET    /api/decks
- *   POST   /api/decks                    { name, cards:[{front,back}] }
- *   PATCH  /api/decks/:id                { name }
- *   DELETE /api/decks/:id
- *   GET    /api/cards/due?deckId=        omit deckId for every deck
- *   PATCH  /api/cards/:id                { ef, interval, reps, due, lastReviewed }
- *   GET    /api/decks/:id/source
- *   POST   /api/decks/:id/replace        { cards, sourceText, sourceName, name }
- *   GET    /api/folders
- *   POST   /api/folders                  { name }
- *   PATCH  /api/folders/:id              { name }
- *   DELETE /api/folders/:id              decks are unfiled, never deleted
  *   GET    /api/system/memory            the server process, the archive on disk, the machine
  *
  * Paths are relative, so this works behind the Vite dev proxy and from the
@@ -244,84 +232,7 @@ const api = {
   getNotes,
   saveNotes,
   listHeadlines,
-  listDecks,
-  createDeck,
-  updateDeck,
-  renameDeck,
-  deleteDeck,
-  getDeckSource,
-  replaceDeck,
-  listDueCards,
-  updateCard,
-  listFolders,
-  createFolder,
-  renameFolder,
-  deleteFolder,
 };
-
-/* ---------------------------------------------------------------- flashcards */
-
-export function listDecks() {
-  return request('GET', '/decks');
-}
-
-/** Import one file's worth of cards as a new deck, in a single transaction. */
-export function createDeck(name, cards, meta = {}) {
-  const { folderId = null, sourceText = null, sourceName = null } = meta;
-  return request('POST', '/decks', { name, cards, folderId, sourceText, sourceName });
-}
-
-/** Rename, move between folders, or both. `folderId: null` unfiles it. */
-export function updateDeck(deckId, patch) {
-  return request('PATCH', `/decks/${enc(deckId)}`, patch);
-}
-
-export function getDeckSource(deckId) {
-  return request('GET', `/decks/${enc(deckId)}/source`);
-}
-
-/** Swap in a corrected file. Cards whose front is unchanged keep their schedule. */
-export function replaceDeck(deckId, payload) {
-  return request('POST', `/decks/${enc(deckId)}/replace`, payload);
-}
-
-export function listFolders() {
-  return request('GET', '/folders');
-}
-
-export function createFolder(name) {
-  return request('POST', '/folders', { name });
-}
-
-export function renameFolder(folderId, name) {
-  return request('PATCH', `/folders/${enc(folderId)}`, { name });
-}
-
-export function deleteFolder(folderId) {
-  return request('DELETE', `/folders/${enc(folderId)}`);
-}
-
-export function renameDeck(deckId, name) {
-  return request('PATCH', `/decks/${enc(deckId)}`, { name });
-}
-
-export function deleteDeck(deckId) {
-  return request('DELETE', `/decks/${enc(deckId)}`);
-}
-
-/** The review queue, due-ascending. Omit deckId to study everything due. */
-/** Scope by deck, by folder, or neither for everything due. */
-export function listDueCards(scope = {}) {
-  const { deckId = null, folderId = null } = scope;
-  if (deckId) return request('GET', `/cards/due?deckId=${enc(deckId)}`);
-  if (folderId) return request('GET', `/cards/due?folderId=${enc(folderId)}`);
-  return request('GET', '/cards/due');
-}
-
-/** Persist one review. The caller computes the new state with scheduleCard. */
-export function updateCard(cardId, state) {
-  return request('PATCH', `/cards/${enc(cardId)}`, state);
-}
 
 /* --------------------------------- system --------------------------------- */
 

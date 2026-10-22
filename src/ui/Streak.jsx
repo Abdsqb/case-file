@@ -56,7 +56,7 @@ import {
 
 /* Screens that are mostly content. The streak stays, at a fraction of its
    weight, because a wall of rows over a bright strand is hard to read. */
-const DENSE = new Set(['reporting', 'settings', 'flashcards', 'cases']);
+const DENSE = new Set(['reporting', 'settings', 'cases']);
 
 const PARTICLES = 16;
 

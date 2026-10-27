@@ -5,7 +5,8 @@
 // differs from the one the browser already has.
 //
 // v5: the mark became the orb on a disc — see public/favicon.svg.
-const CACHE = 'case-file-v5';
+// v6: the mark became a folder tab over the entries, in turquoise.
+const CACHE = 'case-file-v6';
 const SHELL = ['/', '/index.html', '/manifest.json', '/favicon.svg', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', event => {

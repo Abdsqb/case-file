@@ -28,7 +28,7 @@ is written. It does nothing until you put an API key in `.env` yourself — see
 | **Case files** | The working screen. Create, rename, reorder and delete cases; add sub-cases; log entries with dates and priorities; nest subtasks under an entry. Along the top sit two islands like the top nav: the folder you are in, which opens downward into the other folders and new, rename and delete folder; and the open case, which opens sideways into every case in that folder (still draggable to reorder) and folds back around the one you pick. A new case lands in the folder you are looking at. The entries take the left of the screen; the case structure stands on the right, with the seven readings of the case paged one at a time underneath it. Everything rests flat, and the drawing turns toward the pointer while you are over it. Click the drawing to open the whole case full window. |
 | **Reporting** | Every open entry bucketed by due day — Overdue / This week / Later — plus a world-news feed from public RSS. |
 | **Calendar** | Two calendars over the same days. **Entries** is a month grid of every dated entry in the archive, coloured by how its deadline stands, and clicking one opens its case. **Classes** is a weekly timetable parsed from `src/data/class-calendar.ics`, with next class, today's agenda and term progress. |
-| **Settings** | The accent colour; the background, from eleven, with a live swatch of each and how much blur sits over it; motion preferences, including a reduced-motion override; the pointer, the app's soft disc or the system arrow; what this install holds; a live reading of how much memory the app is using; and what the clerk sends where. |
+| **Settings** | The accent colour; the background, from eleven, with a live swatch of each and how much blur sits over it; motion preferences, including a reduced-motion override; what this install holds; a live reading of how much memory the app is using; and what the clerk sends where. |
 
 *Every screenshot here is of the sample archive a fresh install seeds, not anyone's real
 cases.*
@@ -428,13 +428,9 @@ first screen is up.
 ## Notes on the design
 
 Near-black ground, one accent — violet unless you pick white, red, green, turquoise or
-midnight in Settings — and panels of dark glass over a slow-moving bundle of light. Three faces, each with one job: a geometric sans for the UI, a monospace for
+ember in Settings — and panels of dark glass over a slow-moving bundle of light. Three faces, each with one job: a geometric sans for the UI, a monospace for
 anything that is a measurement rather than a sentence — counts, times, ids, status — and
 an italic serif used on exactly one word, the last word of an empty state.
-
-**Midnight is a colourway, not just a light.** A greyed steel blue on a navy ground, with a
-cold wash from the top left, a vignette that falls to navy, and a fine grain over the light.
-All of it is static, painted once, and measured at no cost per frame.
 
 **There is no top bar.** One island of the same dark glass as the panels, the page blurred behind it, names the screen you are on. Point at
 it, or tab to it, and it grows into the list of all five screens, always in the same order;
@@ -460,11 +456,6 @@ of their row (`SegmentIsland` in `src/ui/CaseIslands.jsx`). The Settings choices
 selects instead, like the folder switcher: a glass pill showing the value, opening downward
 into the options on a click.
 
-**The pointer is drawn by the app.** A soft grey disc, after the iPad's: it sits exactly on
-the mouse, glides into a faint highlight wrapped round a button, tab or link, and narrows to
-a caret over a text field. One fixed element moved by a transform, with a loop that runs
-only while it is changing shape. It stays off for touch and pen, and Settings can hand back
-the system arrow.
 
 **One panel turns.** Every panel rests flat; the one holding the case graph rotates several
 degrees to face the pointer while it is over it, and steps toward the eye. Everything else

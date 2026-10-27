@@ -7,7 +7,6 @@ import Dashboard from './views/Dashboard';
 import NotesDrawer from './ui/NotesDrawer.jsx';
 import Streak from './ui/Streak.jsx';
 import Standby from './ui/Standby.jsx';
-import SoftPointer from './ui/SoftPointer.jsx';
 import TopNav from './ui/TopNav.jsx';
 
 /* The dashboard is in the first bundle; the other five screens are chunks of
@@ -294,8 +293,6 @@ export default function App() {
       <Standby />
       </div>
 
-      {/* The pointer, above standby and everything else; it catches no events. */}
-      <SoftPointer />
     </>
   );
 }

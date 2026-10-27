@@ -590,16 +590,17 @@ export default function CaseFlow({
             {/* The branch labels, in HTML rather than in the SVG, so they are
                 the same monospace pill as every other label in the app. Only
                 on the links that say something: an entry hanging off its case
-                is the ordinary case and needs no word for it. */}
+                is the ordinary case and needs no word for it, and neither is a
+                subtask hanging off its entry — the column says it already. */}
             {wires
-              .filter((w) => w.tier === 'subtask' || w.tier === 'subcase')
+              .filter((w) => w.tier === 'subcase')
               .map((w) => (
                 <span
                   key={`l:${w.key}`}
                   className="flow__tag"
                   style={{ left: `${w.mx}px`, top: `${w.my}px` }}
                 >
-                  {w.tier === 'subtask' ? 'subtask' : 'sub-case'}
+                  sub-case
                 </span>
               ))}
 

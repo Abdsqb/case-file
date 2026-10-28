@@ -41,6 +41,11 @@ function enc(value) {
   return encodeURIComponent(String(value ?? ''));
 }
 
+export const SIGNED_OUT = 'casefile:signed-out';
+export function signedOut() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(SIGNED_OUT));
+}
+
 async function request(method, path, payload) {
   const url = `${BASE}${path}`;
   const hasBody = payload !== undefined;
@@ -55,6 +60,10 @@ async function request(method, path, payload) {
   } catch (cause) {
     throw new ApiError(`${method} ${url} — the server is unreachable.`, 0, null);
   }
+
+  /* Hosted, a session can run out or be signed out from another device. Any
+     401 puts the sign-in screen back up (see ui/SignIn.jsx). */
+  if (res.status === 401) signedOut();
 
   if (res.status === 204) return null;
 
@@ -204,6 +213,44 @@ export function getNotes() {
 /** Replaces the pad wholesale. → { body, updatedAt } */
 export function saveNotes(body) {
   return request('PUT', '/notes', { body: typeof body === 'string' ? body : '' });
+}
+
+/* -------------------------------- sign-in --------------------------------- */
+
+/** → { required, authenticated } — whether this install has a password, and
+ *  whether this browser holds a session. Never an error. */
+export function getSession() {
+  return request('GET', '/session');
+}
+
+/** → { authenticated: true }, or throws with the server's reason (401, 429). */
+export function login(password) {
+  return request('POST', '/login', { password: String(password ?? '') });
+}
+
+export function logout() {
+  return request('POST', '/logout', {});
+}
+
+/* ------------------------------- timetable -------------------------------- */
+
+/** Raised after an upload or a reset, so an open Calendar re-reads. */
+export const TIMETABLE_CHANGED = 'casefile:timetable';
+
+/** → { ics, name, updatedAt } or { ics: null } when none has been uploaded. */
+export function getTimetable() {
+  return request('GET', '/timetable');
+}
+
+/** Stores a registrar .ics. Refused (400) if it holds no classes.
+ *  → { name, updatedAt, calendarName, courses } */
+export function saveTimetable(ics, name) {
+  return request('PUT', '/timetable', { ics: String(ics ?? ''), name: name || null });
+}
+
+/** Back to the file in src/data (the sample, on a fresh clone). */
+export function clearTimetable() {
+  return request('DELETE', '/timetable');
 }
 
 /* --------------------------------- today ---------------------------------- */

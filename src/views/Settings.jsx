@@ -9,13 +9,23 @@
  */
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react'
 import { Card, CardHead, Metric, Pill, PillSelect, Toggle } from '../ui/primitives.jsx'
-import { getMemory, listProjects } from '../lib/api.js'
+import {
+  TIMETABLE_CHANGED,
+  clearTimetable,
+  getMemory,
+  getSession,
+  getTimetable,
+  listProjects,
+  logout,
+  saveTimetable,
+} from '../lib/api.js'
 import * as clerk from '../lib/clerk.js'
 import { globalStats } from '../lib/metrics.js'
 import { BACKDROPS, DEFAULT_BACKDROP, paintStill, readColours } from '../ui/backdrops.js'
@@ -576,7 +586,11 @@ function MemoryCard() {
 
   const rss = server?.server?.rss
   const db = server?.database?.bytes
-  const total = server?.machine?.total
+  /* Hosted, the server is a cloud function on someone else's machine: its RAM
+     is not this computer's, so the share and the machine totals are left out
+     rather than shown as if they were. */
+  const hosted = !!server?.hosted
+  const total = hosted ? null : server?.machine?.total
   const free = server?.machine?.free
   const together = Number.isFinite(rss) ? rss + (Number.isFinite(tab) ? tab : 0) : null
   const share = together !== null && total > 0 ? (together / total) * 100 : null
@@ -617,13 +631,13 @@ function MemoryCard() {
             label="Together"
             value={togetherSize.value}
             unit={togetherSize.unit}
-            sub={share === null ? 'unavailable' : `${share < 0.1 ? '<0.1' : share.toFixed(1)}% of RAM`}
+            sub={hosted ? 'server and tab' : share === null ? 'unavailable' : `${share < 0.1 ? '<0.1' : share.toFixed(1)}% of RAM`}
           />
           <StatTile
             label="Database"
             value={dbSize.value}
             unit={dbSize.unit}
-            sub="on disk, not in RAM"
+            sub={hosted ? 'in the cloud database' : 'on disk, not in RAM'}
           />
         </div>
         <p className="settings-row__hint" style={{ maxWidth: '72ch', marginBottom: 0 }}>
@@ -635,13 +649,89 @@ function MemoryCard() {
       </div>
       <div className="card__foot">
         <span>
-          {Number.isFinite(total)
-            ? `${sizeText(total)} of RAM on this computer, ${sizeText(free)} free.`
-            : 'Machine totals unavailable.'}
+          {hosted
+            ? 'Hosted: the server runs in the cloud, so only its own process is measured.'
+            : Number.isFinite(total)
+              ? `${sizeText(total)} of RAM on this computer, ${sizeText(free)} free.`
+              : 'Machine totals unavailable.'}
         </span>
         <span className="dim">every {MEMORY_POLL_MS / 1000}s</span>
       </div>
     </Card>
+  )
+}
+
+/**
+ * The class timetable: the registrar's .ics, uploaded once and kept in the
+ * database, so the Calendar and the clerk read the same classes on your PC and
+ * hosted. Refused by the server if the file holds no classes.
+ */
+function TimetableRow() {
+  const [info, setInfo] = useState(undefined)   // undefined: loading; null: none stored
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const fileRef = useRef(null)
+
+  const load = useCallback(() => {
+    getTimetable()
+      .then((t) => setInfo(t && t.ics ? { name: t.name, updatedAt: t.updatedAt } : null))
+      .catch(() => setInfo(null))
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const changed = () => {
+    load()
+    window.dispatchEvent(new Event(TIMETABLE_CHANGED))
+  }
+
+  const upload = async (file) => {
+    if (!file) return
+    setBusy(true)
+    setError('')
+    try {
+      await saveTimetable(await file.text(), file.name)
+      changed()
+    } catch (err) {
+      setError(err && err.body && err.body.error ? err.body.error : 'that file could not be read.')
+    } finally {
+      setBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  const status = info === undefined
+    ? 'Checking…'
+    : info
+      ? `${info.name || 'Your timetable'} · updated ${new Date(info.updatedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+      : 'Using the timetable file bundled with the app.'
+
+  return (
+    <SettingRow
+      title="Timetable"
+      hint={error ? <span style={{ color: 'var(--red)' }}>{error}</span> : `Your registrar's calendar export (.ics). ${status}`}
+    >
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".ics,text/calendar"
+          style={{ display: 'none' }}
+          onChange={(e) => upload(e.target.files && e.target.files[0])}
+        />
+        {info ? (
+          <Pill
+            className="pill--ghost"
+            disabled={busy}
+            onClick={async () => { setBusy(true); try { await clearTimetable(); changed() } finally { setBusy(false) } }}
+          >
+            Remove
+          </Pill>
+        ) : null}
+        <Pill onClick={() => fileRef.current && fileRef.current.click()} disabled={busy}>
+          {busy ? 'Saving…' : info ? 'Replace .ics' : 'Upload .ics'}
+        </Pill>
+      </div>
+    </SettingRow>
   )
 }
 
@@ -739,6 +829,12 @@ export function Settings({ projects, now }) {
   const parallax = useSetting(KEY_PARALLAX, true)
   const weekStart = useSetting(KEY_WEEK_START, 1)
   const accent = useSetting(KEY_ACCENT, DEFAULT_ACCENT)
+  const [signInRequired, setSignInRequired] = useState(false)
+  useEffect(() => {
+    let alive = true
+    getSession().then((s) => { if (alive) setSignInRequired(!!(s && s.required)) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
   const backdrop = useSetting(KEY_BACKDROP, DEFAULT_BACKDROP)
   useSetting(KEY_BACKDROP_BLUR, '')
   const blur = readBackdropBlur()
@@ -840,6 +936,8 @@ export function Settings({ projects, now }) {
                   label="Week starts on"
                 />
               </SettingRow>
+
+              <TimetableRow />
             </div>
           </div>
           <div className="card__foot">
@@ -1034,6 +1132,24 @@ export function Settings({ projects, now }) {
                   }}
                 />
               </SettingRow>
+
+              {/* Only where there is a sign-in to leave: the hosted app. */}
+              {signInRequired ? (
+                <SettingRow
+                  title="Sign out"
+                  hint="Signs this browser out. Your archive stays as it is; signing in again brings it back."
+                >
+                  <ConfirmAction
+                    label="Sign out"
+                    confirmLabel="Confirm sign out"
+                    busyLabel="Signing out…"
+                    onRun={async () => {
+                      await logout()
+                      window.location.reload()
+                    }}
+                  />
+                </SettingRow>
+              ) : null}
             </div>
           </div>
         </Card>

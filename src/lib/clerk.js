@@ -15,6 +15,8 @@
  *   POST /api/clerk/changes      { changes }           → { created, updated, closed, reopened, deleted, skipped }
  */
 
+import { signedOut } from './api.js';
+
 const BASE = '/api/clerk';
 
 export class ClerkError extends Error {
@@ -39,6 +41,8 @@ async function call(method, path, payload) {
   } catch {
     throw new ClerkError('the server is unreachable.', 0);
   }
+
+  if (res.status === 401) signedOut();
 
   const text = await res.text();
   let data = null;

@@ -23,6 +23,7 @@ import { Card, CardHead, EmptyState, Meter, Metric, Pill } from '../ui/primitive
 import { SegmentIsland } from '../ui/CaseIslands.jsx'
 import { addDays, fmtTime, minutesOf, parseCalendar, sameDay, startOfDay, weekStartOf } from '../lib/ics.js'
 import { statusTone } from '../lib/metrics.js'
+import { TIMETABLE_CHANGED, getTimetable } from '../lib/api.js'
 import sampleIcs from '../data/class-calendar.ics?raw'
 
 /* The repo ships a fictional sample so a fresh clone builds and this screen has
@@ -36,7 +37,28 @@ const overrides = import.meta.glob('../data/*.local.ics', {
   import: 'default',
   eager: true,
 })
-const icsText = Object.values(overrides)[0] ?? sampleIcs
+const bundledIcs = Object.values(overrides)[0] ?? sampleIcs
+
+/* The timetable uploaded in Settings lives in the database, so the hosted app
+   has it too, and it wins over anything bundled. Fetched once per session and
+   kept here; Settings announces an upload with TIMETABLE_CHANGED.
+   undefined = not asked yet, null = none stored, string = the stored .ics. */
+let storedIcs
+
+function useStoredTimetable() {
+  const [ics, setIcs] = useState(storedIcs)
+  useEffect(() => {
+    let alive = true
+    const load = () => getTimetable()
+      .then((t) => { storedIcs = t && t.ics ? t.ics : null })
+      .catch(() => { if (storedIcs === undefined) storedIcs = null })
+      .finally(() => { if (alive) setIcs(storedIcs) })
+    if (storedIcs === undefined) load()
+    window.addEventListener(TIMETABLE_CHANGED, load)
+    return () => { alive = false; window.removeEventListener(TIMETABLE_CHANGED, load) }
+  }, [])
+  return ics
+}
 
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -522,10 +544,13 @@ function ScheduleTip({ meeting, series, anchor, nowTs }) {
 
 export default function Calendar({ now, projects, onSelectCase }) {
   const nowTs = Number.isFinite(now) ? now : Date.now()
-  const usingSample = Object.keys(overrides).length === 0
+  const stored = useStoredTimetable()
+  const loadingTimetable = stored === undefined
+  const icsText = stored || (loadingTimetable ? '' : bundledIcs)
+  const usingSample = !loadingTimetable && !stored && Object.keys(overrides).length === 0
 
-  // The file never changes at runtime, so this is parsed once for the session.
-  const { calendarName, series, meetings } = useMemo(() => parseCalendar(icsText), [])
+  // Parsed once per timetable, not per render: expanding every RRULE is the costly part.
+  const { calendarName, series, meetings } = useMemo(() => parseCalendar(icsText), [icsText])
 
   /* The export names itself "Class Calendar - Fall 2026", which next to the
      section label just stutters. Keep the part that says something. */
@@ -869,7 +894,7 @@ export default function Calendar({ now, projects, onSelectCase }) {
           <span className="micro dim">{termLabel || calendarName || 'Schedule'}</span>
         ) : null}
         {mode === 'classes' && usingSample ? (
-          <span className="micro dim" title="Add src/data/class-calendar.local.ics to use your own">
+          <span className="micro dim" title="Upload your own in Settings → Timetable">
             sample data
           </span>
         ) : null}
@@ -944,13 +969,13 @@ export default function Calendar({ now, projects, onSelectCase }) {
         <div className="bento">
           {mode === 'entries' ? (
             monthCard('span-12')
-          ) : (
+          ) : loadingTimetable ? null : (
             <Card className="span-12">
               <CardHead className="card__head" title="No schedule" subtitle="The calendar file holds no events" />
               <div className="card__body">
                 <EmptyState
                   lead="Nothing to show."
-                  hint="Replace src/data/class-calendar.ics with a registrar export."
+                  hint="Upload your registrar's .ics in Settings → Timetable."
                 />
               </div>
             </Card>

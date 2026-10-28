@@ -4905,10 +4905,26 @@ button.entry__title:hover { color: var(--fg); }
 
 /* ==========================================================================
    SIGN-IN — the one screen in front of the hosted app (ui/SignIn.jsx).
-   The same glass as every panel, alone in the middle of the ground.
+
+   The case structure card without the drawing: its title bar, a body where
+   the canvas would be, and its foot. No border — the panel is glass lying on
+   a blurred picture of the dashboard (sample data only), so the screen reads
+   as the app with a pane of frosted glass over it rather than as a form.
    ========================================================================== */
 
 .signin {
+  /* The screen can wear an accent of its own (Turquoise, until this device
+     has signed in), set as data-accent on this element. The tokens built
+     from the accent on :root were resolved up there, in the page's accent,
+     so the ones this screen uses are rebuilt here from its own. */
+  --panel:         rgba(var(--panel-rgb), 0.46);
+  --text-muted:    rgba(var(--text-rgb), 0.55);
+  --text-faint:    rgba(var(--text-rgb), 0.32);
+  --accent-glow:   rgba(var(--accent-rgb), 0.35);
+  --accent-faint:  rgba(var(--accent-rgb), 0.10);
+  --fg:            var(--text);
+  --glow:          var(--accent);
+
   position: relative;
   z-index: 3;
   min-height: 100vh;
@@ -4916,43 +4932,81 @@ button.entry__title:hover { color: var(--fg); }
   display: grid;
   place-items: center;
   padding: 24px 16px;
+  overflow: hidden;
 }
 
-.signin__card {
-  width: min(380px, 100%);
-  padding: 26px 24px 22px;
-  gap: 0;
+/* The dashboard behind, out of focus. Inset past the edges so the blur has
+   picture to draw from all the way out, and dimmed so the panel is the
+   brightest thing on screen. Static: painted once. */
+.signin__backdrop {
+  position: fixed;
+  inset: -48px;
+  z-index: -1;
+  pointer-events: none;
 }
 
-.signin__head {
+.signin__backdrop img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(9px) saturate(1.15) brightness(0.9);
+  transform: scale(1.04);
+}
+
+/* Signed in here before: your own background, live, out of focus — and the
+   dashboard's layout (sample data on black) screened over it, so black drops
+   out and only the panels, type and nodes stay, lit by your effect. */
+.signin__live {
+  position: fixed;
+  inset: -32px;
+  z-index: -2;
+  filter: blur(10px) brightness(0.8);
+  pointer-events: none;
+}
+
+.signin__backdrop--layout { mix-blend-mode: screen; }
+.signin__backdrop--layout img { filter: blur(12px) brightness(0.75); }
+
+/* The phone picture is a third the width, so the same blur would take three
+   times as much of it away; less blur keeps the dashboard recognisable. */
+@media (max-width: 640px) {
+  .signin__backdrop img { filter: blur(5px) saturate(1.15) brightness(0.9); }
+}
+
+.signin__backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 50%, rgba(0, 0, 0, 0.05) 30%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+.signin__panel {
+  position: relative;
+  width: min(420px, 100%);
   display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 26px;
+  flex-direction: column;
+  border-radius: var(--radius);
+  background: var(--panel);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 30px 80px -30px rgba(0, 0, 0, 0.95);
 }
 
-.signin__mark { border-radius: 9px; flex: none; }
-
-.signin__name {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 500;
-  letter-spacing: -0.015em;
-  color: var(--text);
+.signin__body {
+  display: flex;
+  flex-direction: column;
+  padding: 22px 18px 6px;
 }
 
-.signin__sub {
-  margin: 2px 0 0;
-  font-size: 12.5px;
-  color: var(--fg-dim);
-}
-
+/* Lower case and monospace, like every label on the card it borrows from. */
 .signin__label {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   color: var(--text-faint);
-  margin-bottom: 7px;
+  margin-bottom: 8px;
 }
 
 .signin__input {
@@ -4961,41 +5015,37 @@ button.entry__title:hover { color: var(--fg); }
   padding: 0 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: rgba(var(--raised-rgb), 0.7);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   font: inherit;
   font-size: 14px;
-  outline: none;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  letter-spacing: 0.08em;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
-.signin__input:focus {
-  border-color: rgba(var(--accent-rgb), 0.55);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.14);
+/* Its own focus glow in the accent, in place of the app-wide white ring: the
+   field has focus from the moment the screen opens, and a hard ring around
+   the only thing on screen reads as an error. */
+.signin__input:focus,
+.signin__input:focus-visible {
+  outline: none;
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
 }
 
 .signin__error {
-  min-height: 18px;
-  margin: 8px 0 10px;
-  font-size: 12px;
+  min-height: 17px;
+  margin: 8px 0 0;
+  font-size: 11.5px;
   color: var(--red);
 }
 
-.signin__go {
-  height: 40px;
-  border-radius: var(--radius-pill);
-  border: 0;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 160ms ease, opacity 160ms ease;
+.signin__foot {
+  border-top: 1px solid var(--line-soft);
 }
 
-.signin__go:hover { background: var(--accent-hover); }
-.signin__go:disabled { opacity: 0.45; cursor: default; }
+.signin__foot .pill:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .card.todo, .card.todo.is-open, .todoscrim { transition: none; }

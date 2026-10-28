@@ -106,6 +106,29 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_tasks_parent  ON tasks(parent_task_id);
 `);
 
+/* Today's to-do: which entries (or subtasks) you picked for a day, in the
+   order you put them. Keyed by the day as the browser reads it, YYYY-MM-DD in
+   local time, so "today" is the reader's day and not the server's. Nothing is
+   copied out of tasks: a row is only a pointer, so ticking it off in the
+   window and closing it in its case are the same write.
+
+   today_days remembers that the morning question (bring yesterday's
+   unfinished items over, or start fresh) has been answered for a day, so it
+   is asked once and not on every open. */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS today_items (
+    day TEXT NOT NULL,
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    sort_order INTEGER NOT NULL,
+    PRIMARY KEY (day, task_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS today_days (
+    day TEXT PRIMARY KEY,
+    decided INTEGER NOT NULL DEFAULT 0
+  );
+`);
+
 const { n: projectCount } = db.prepare('SELECT COUNT(*) AS n FROM projects').get();
 if (projectCount === 0) seed();
 

@@ -40,6 +40,13 @@ clerk, which proposes entries you review before anything is written.
 
 ![The scratchpad, open over the dashboard](docs/screenshots/notes.png)
 
+Today's to-do opens on **Shift+T**, a window in the middle of the screen laid out like the
+case structure card, with a completion bar along the bottom. You fill it yourself: every
+entry and subtask in a case has a **Today** button. In the window you drag the rows (or
+Alt+Up/Down) into the order you want and tick them off, which closes the entry in its case
+too. Each day starts empty; the first time it opens after a day with unfinished items, it
+offers to bring them over.
+
 ![Case files](docs/screenshots/case-files.png)
 
 Entries come first on the Case files screen, with the diagram behind them — the two dots

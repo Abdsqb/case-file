@@ -4792,6 +4792,125 @@ button.entry__title:hover { color: var(--fg); }
 [data-motion='reduced'] .notab { transition: none; }
 
 /* ==========================================================================
+   TODAY — the to-do window on Shift+T, in the middle of the screen.
+
+   Laid out like the case structure card: the same title bar, the body, and
+   the completion bar along the bottom. The rows are entry rows, so an entry
+   looks the same here as in its case.
+   ========================================================================== */
+
+/* Unlike the pad, this one dims what is behind it a little: it sits over the
+   middle of the screen, on top of whatever was being read there. */
+.todoscrim {
+  position: fixed;
+  inset: 0;
+  z-index: 195;
+  background: rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms ease;
+}
+.todoscrim.is-open { opacity: 1; pointer-events: auto; }
+
+/* `.card.todo`, not `.todo`: motion.css gives every .card a short hover
+   transition and loads after this file, so at equal weight it won and the
+   window lost its fade and spring — and, closing, the visibility delay, so it
+   vanished in a frame instead of folding away. */
+.card.todo {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 196;
+  width: min(580px, calc(100vw - 36px));
+  max-height: min(640px, calc(100vh - 120px));
+  /* A touch more solid than a panel lying on the page: it floats over other
+     panels, and two layers of the same glass read as a smear. */
+  background: rgba(var(--panel-rgb), 0.86);
+  outline: none;
+
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -47%) scale(0.96);
+  transition:
+    opacity 200ms ease,
+    transform 420ms var(--notes-ease, cubic-bezier(0.22, 1, 0.3, 1)),
+    visibility 0s linear 420ms;
+}
+
+.card.todo.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, -50%) scale(1);
+  transition:
+    opacity 200ms ease,
+    transform 420ms var(--notes-ease, cubic-bezier(0.22, 1, 0.3, 1)),
+    visibility 0s;
+}
+
+/* Focus is moved onto the window when it opens, so the keyboard lands inside
+   it; the window itself is not a control and takes no focus ring. */
+.todo:focus,
+.todo:focus-visible { outline: none; }
+
+.todo__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.todo__list { display: flex; flex-direction: column; }
+
+.todo__row { cursor: grab; }
+.todo__row:active { cursor: grabbing; }
+.todo__title { cursor: inherit; }
+
+.todo__icon { padding: 4px 6px; }
+.todo__icon:disabled { opacity: 0.35; pointer-events: none; }
+
+/* The morning question: yesterday's unfinished, offered once. */
+.todo__offer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  border-radius: var(--radius-sm);
+  background: rgba(var(--accent-rgb), 0.06);
+}
+.todo__offer-text {
+  flex: 1 1 200px;
+  font-size: 12px;
+  color: var(--fg);
+}
+
+.todo__empty {
+  margin: 28px 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+}
+
+/* On the case's own rows: the Today action lit, and the tag in the meta line. */
+.entry__action--today {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.35);
+}
+.entry__case--today { color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .card.todo, .card.todo.is-open, .todoscrim { transition: none; }
+}
+[data-motion='reduced'] .card.todo,
+[data-motion='reduced'] .card.todo.is-open,
+[data-motion='reduced'] .todoscrim { transition: none; }
+
+/* ==========================================================================
    STANDBY
    Left alone for a minute, the app goes soft and a clock takes the middle.
    ========================================================================== */

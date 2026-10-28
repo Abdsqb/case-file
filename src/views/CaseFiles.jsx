@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Check, CircleDot, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { Check, CircleDot, Plus, RotateCcw, Sun, Trash2 } from 'lucide-react'
 
 import {
   Card,
@@ -22,6 +22,7 @@ import useDeck from '../ui/useDeck.js'
 import { buildGraph } from '../lib/graph.js'
 import api from '../lib/api.js'
 import { applyWalk, siblingWalk } from '../lib/reorder.js'
+import { toggleToday, useToday } from '../lib/today.js'
 import {
   caseStats,
   globalStats,
@@ -344,6 +345,8 @@ function EntryRow({
   const inputRef = useRef(null)
   const confirmRef = useRef(false)
   confirmRef.current = confirm
+  const today = useToday()
+  const onToday = today.taskIds.includes(entry.id)
 
   useEffect(() => {
     if (!editing) setDraft(entry.title || '')
@@ -482,6 +485,7 @@ function EntryRow({
           {from ? <span className="entry__case">{from}</span> : null}
           {!completed && entry.priority === 'high' ? <span className="entry__case">high</span> : null}
           {isSub ? <span className="entry__case">subtask</span> : null}
+          {onToday ? <span className="entry__case entry__case--today">today</span> : null}
           {!isSub && subCount > 0 ? (
             <button
               type="button"
@@ -532,6 +536,21 @@ function EntryRow({
             Sub
           </button>
         ) : null}
+
+        {/* Onto today's to-do (Shift+T), or off it. Lit while it is on; the
+            "today" tag in the meta line says the same while the actions are
+            folded away. */}
+        <button
+          type="button"
+          className={cx('entry__action', onToday && 'entry__action--today')}
+          onClick={() => toggleToday(entry.id)}
+          disabled={disabled}
+          aria-pressed={onToday}
+          title={onToday ? "On today's to-do. Click to take it off" : "Add to today's to-do"}
+        >
+          <Sun size={13} strokeWidth={1.5} aria-hidden="true" />
+          Today
+        </button>
 
         <button
           type="button"

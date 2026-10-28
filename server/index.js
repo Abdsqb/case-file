@@ -27,6 +27,7 @@ app.use(express.json());
 function deleteProjectRecursive(id) {
   const children = db.prepare('SELECT id FROM projects WHERE parent_id = ?').all(id);
   for (const child of children) deleteProjectRecursive(child.id);
+  db.prepare('DELETE FROM today_items WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)').run(id);
   db.prepare('DELETE FROM tasks WHERE project_id = ?').run(id);
   db.prepare('DELETE FROM projects WHERE id = ?').run(id);
 }
@@ -302,9 +303,87 @@ app.delete('/api/tasks/:taskId', (req, res) => {
     return res.status(404).json({ error: 'task not found' });
   }
 
+  db.prepare('DELETE FROM today_items WHERE task_id = ? OR task_id IN (SELECT id FROM tasks WHERE parent_task_id = ?)')
+    .run(taskId, taskId);
   db.prepare('DELETE FROM tasks WHERE parent_task_id = ?').run(taskId);
   db.prepare('DELETE FROM tasks WHERE id = ?').run(taskId);
   res.status(204).end();
+});
+
+// ---------- today's to-do ----------
+
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/* The list for a day, in order, and — until the morning question has been
+   answered — what is left over from the last day that had a list: the
+   entries on it that are still open, still exist, and are not already on
+   today's. Joined against tasks, so an entry deleted by any route (the clerk
+   included) simply drops out rather than leaving a dangling row. */
+function readToday(day) {
+  const taskIds = db.prepare(`
+    SELECT ti.task_id AS id FROM today_items ti JOIN tasks t ON t.id = ti.task_id
+     WHERE ti.day = ? ORDER BY ti.sort_order ASC
+  `).all(day).map((r) => r.id);
+
+  let offer = null;
+  const decided = db.prepare('SELECT decided FROM today_days WHERE day = ?').get(day);
+  if (!decided || !decided.decided) {
+    const prev = db.prepare('SELECT MAX(day) AS day FROM today_items WHERE day < ?').get(day);
+    if (prev && prev.day) {
+      const have = new Set(taskIds);
+      const left = db.prepare(`
+        SELECT ti.task_id AS id FROM today_items ti JOIN tasks t ON t.id = ti.task_id
+         WHERE ti.day = ? AND t.completed = 0 ORDER BY ti.sort_order ASC
+      `).all(prev.day).map((r) => r.id).filter((id) => !have.has(id));
+      if (left.length) offer = { day: prev.day, taskIds: left };
+    }
+  }
+  return { day, taskIds, offer };
+}
+
+app.get('/api/today/:day', (req, res) => {
+  const { day } = req.params;
+  if (!DAY_KEY.test(day)) return res.status(400).json({ error: 'day must be YYYY-MM-DD' });
+  res.json(readToday(day));
+});
+
+/* Replaces the day's list wholesale with the order given: adding, removing
+   and reordering are all this one write, so the server never has to merge
+   two views of the order. `decided: true` records that the morning question
+   was answered. Ids that are not entries are dropped rather than refused. */
+app.put('/api/today/:day', (req, res) => {
+  const { day } = req.params;
+  if (!DAY_KEY.test(day)) return res.status(400).json({ error: 'day must be YYYY-MM-DD' });
+  const body = req.body ?? {};
+  if (!Array.isArray(body.taskIds)) return res.status(400).json({ error: 'taskIds must be an array' });
+
+  const exists = db.prepare('SELECT 1 FROM tasks WHERE id = ?');
+  const seen = new Set();
+  const ids = [];
+  for (const raw of body.taskIds) {
+    const id = Number(raw);
+    if (!Number.isInteger(id) || seen.has(id) || !exists.get(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+
+  const insert = db.prepare('INSERT INTO today_items (day, task_id, sort_order) VALUES (?, ?, ?)');
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM today_items WHERE day = ?').run(day);
+    ids.forEach((id, i) => insert.run(day, id, i));
+    if (body.decided) {
+      db.prepare(`
+        INSERT INTO today_days (day, decided) VALUES (?, 1)
+        ON CONFLICT(day) DO UPDATE SET decided = 1
+      `).run(day);
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+  res.json(readToday(day));
 });
 
 // ---------- the scratchpad ----------

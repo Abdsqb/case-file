@@ -206,6 +206,21 @@ export function saveNotes(body) {
   return request('PUT', '/notes', { body: typeof body === 'string' ? body : '' });
 }
 
+/* --------------------------------- today ---------------------------------- */
+
+/** The to-do list for a local day (YYYY-MM-DD).
+ *  → { day, taskIds, offer: { day, taskIds } | null } — offer is yesterday's
+ *  unfinished items until the morning question has been answered. */
+export function getToday(day) {
+  return request('GET', `/today/${enc(day)}`);
+}
+
+/** Replaces the day's list with these ids, in this order. `decided` records
+ *  that the morning question was answered. → the same shape as getToday. */
+export function saveToday(day, taskIds, decided = false) {
+  return request('PUT', `/today/${enc(day)}`, { taskIds, decided: !!decided });
+}
+
 /* ---------------------------------- wire ---------------------------------- */
 
 /** → [{ id, source, title, url, publishedAt }] */
@@ -231,6 +246,8 @@ const api = {
   deleteTask,
   getNotes,
   saveNotes,
+  getToday,
+  saveToday,
   listHeadlines,
 };
 

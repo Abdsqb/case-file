@@ -7,6 +7,7 @@ import Dashboard from './views/Dashboard';
 import NotesDrawer from './ui/NotesDrawer.jsx';
 import Streak from './ui/Streak.jsx';
 import Standby from './ui/Standby.jsx';
+import TodayWindow from './ui/TodayWindow.jsx';
 import TopNav from './ui/TopNav.jsx';
 
 /* The dashboard is in the first bundle; the other five screens are chunks of
@@ -286,6 +287,10 @@ export default function App() {
           It takes the cases so filing can offer them by name, and `refresh` so
           that what the clerk writes is on screen before the drawer has closed. */}
       <NotesDrawer projects={projects} now={now} onFiled={refresh} />
+
+      {/* Today's to-do, on Shift+T. It takes the cases to show each row's
+          entry, and `refresh` so ticking one off shows in its case too. */}
+      <TodayWindow projects={projects} now={now} onChanged={refresh} />
 
       {/* Last, and above everything: left alone for a minute the app goes soft
           behind a clock. It covers the pad and its tab as well, which is the

@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { db } from './db.js';
+import { all, batch, get } from './db.js';
 
 /* The app's own arithmetic, imported rather than reimplemented.
    ---------------------------------------------------------------------------
@@ -55,14 +55,17 @@ export function projectRowToJson(p, tasks) {
 }
 
 /** Every case with its entries and their subtasks — the GET /api/projects body. */
-export function loadProjects() {
+export async function loadProjects() {
   /* Three queries, grouped here, rather than one per case and another per
      entry: the archive is read on every load and after every edit, and the
      old shape cost a round of SQLite work for each row it returned. The
-     orders are the same ones the per-row queries used. */
-  const projects = db.prepare('SELECT * FROM projects ORDER BY sort_order ASC').all();
-  const entries = db.prepare('SELECT * FROM tasks WHERE parent_task_id IS NULL ORDER BY created_at DESC').all();
-  const subtasks = db.prepare('SELECT * FROM tasks WHERE parent_task_id IS NOT NULL ORDER BY created_at ASC').all();
+     orders are the same ones the per-row queries used. Sent as one batch, so
+     hosted it is one round trip to the database rather than three. */
+  const [projects, entries, subtasks] = await batch([
+    ['SELECT * FROM projects ORDER BY sort_order ASC'],
+    ['SELECT * FROM tasks WHERE parent_task_id IS NULL ORDER BY created_at DESC'],
+    ['SELECT * FROM tasks WHERE parent_task_id IS NOT NULL ORDER BY created_at ASC'],
+  ], 'read');
 
   const group = (rows, key) => {
     const by = new Map();
@@ -82,40 +85,70 @@ export function loadProjects() {
   ));
 }
 
-export function loadCaseFolders() {
-  return db.prepare('SELECT * FROM case_folders ORDER BY created_at ASC').all()
+export async function loadCaseFolders() {
+  return (await all('SELECT * FROM case_folders ORDER BY created_at ASC'))
     .map((f) => ({ id: f.id, name: f.name }));
 }
 
 /* ------------------------------------------------------------------ classes */
 
-/* Same precedence as the frontend: your own timetable wins over the sample, and
-   the sample is what makes a fresh clone work at all. */
+/* Same precedence as the frontend: the timetable you uploaded (stored in the
+   database, so the hosted app has it too) wins, then a local file, and the
+   sample is what makes a fresh clone work at all. */
 const ICS_CANDIDATES = [
   path.join(__dirname, '..', 'src', 'data', 'class-calendar.local.ics'),
   path.join(__dirname, '..', 'src', 'data', 'class-calendar.ics'),
 ];
 
+let fileCache = null;
 let icsCache = null;
+let storedAt = undefined;   // the stored timetable's updated_at the cache was parsed from
 
-function readCalendar() {
-  /* Parsed once. The file only changes when a term does, and that is a restart
-     either way — re-expanding every RRULE on each brief would be work done for
-     nothing several times a day. */
-  if (icsCache) return icsCache;
+function readFiles() {
+  if (fileCache) return fileCache;
   for (const file of ICS_CANDIDATES) {
     try {
       if (!fs.existsSync(file)) continue;
       const parsed = parseCalendar(fs.readFileSync(file, 'utf8'));
-      icsCache = { ...parsed, sample: file.endsWith('class-calendar.ics') };
-      return icsCache;
+      fileCache = { ...parsed, sample: file.endsWith('class-calendar.ics') };
+      return fileCache;
     } catch {
       /* A malformed timetable must not take the clerk down with it — the brief
          is still worth reading without the classes in it. */
     }
   }
-  icsCache = { calendarName: '', series: [], meetings: [], sample: true };
+  fileCache = { calendarName: '', series: [], meetings: [], sample: true };
+  return fileCache;
+}
+
+/**
+ * Brings the parsed timetable up to date with the database. One small query
+ * when nothing has changed; the .ics is only fetched and re-expanded when the
+ * stored one is newer than the copy in memory, which matters hosted, where an
+ * upload lands on one server instance and the others have to notice.
+ * Called by snapshot() and by the clerk's timetable tool before reading.
+ */
+export async function loadCalendar() {
+  try {
+    const row = await get('SELECT updated_at FROM timetable WHERE id = 1');
+    const at = row ? row.updated_at : null;
+    if (at === storedAt && icsCache) return icsCache;
+    if (at === null) {
+      icsCache = readFiles();
+    } else {
+      const full = await get('SELECT ics FROM timetable WHERE id = 1');
+      icsCache = { ...parseCalendar(full ? full.ics : ''), sample: false };
+    }
+    storedAt = at;
+  } catch {
+    if (!icsCache) icsCache = readFiles();
+  }
   return icsCache;
+}
+
+/* The synchronous readers below use whatever loadCalendar() last settled on. */
+function readCalendar() {
+  return icsCache || readFiles();
 }
 
 const dayKey = (d) => {
@@ -177,8 +210,8 @@ const ymd = (ts) => {
  * and one visibly wrong number costs more trust than the whole feature earns.
  * It is asked to read these numbers and say what to do about them.
  */
-export function snapshot(now = Date.now(), { limit = 24 } = {}) {
-  const projects = loadProjects();
+export async function snapshot(now = Date.now(), { limit = 24 } = {}) {
+  const [projects] = await Promise.all([loadProjects(), loadCalendar()]);
   const entries = flattenEntries(projects);
   const stats = globalStats(projects, now);
 

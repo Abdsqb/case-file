@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { XMLParser } from 'fast-xml-parser';
 import nlp from 'compromise';
-import { db } from './db.js';
+import { get, run } from './db.js';
 
 // Public news feeds — no API key, no signup. Fetched server-side both because
 // most outlets don't send CORS headers and because it lets one process cache
@@ -251,19 +251,19 @@ async function geocode(place) {
 
 // ---------- resolve: cache -> extract -> geocode ----------
 
-const selectPlace = db.prepare('SELECT * FROM headline_places WHERE headline_key = ?');
-const insertPlace = db.prepare(`
+const selectPlace = (key) => get('SELECT * FROM headline_places WHERE headline_key = ?', [key]);
+const insertPlace = (...args) => run(`
   INSERT INTO headline_places (headline_key, place, lat, lng, zoom, label, resolved_at)
   VALUES (?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(headline_key) DO UPDATE SET
     place = excluded.place, lat = excluded.lat, lng = excluded.lng,
     zoom = excluded.zoom, label = excluded.label, resolved_at = excluded.resolved_at
-`);
+`, args);
 
 export async function resolveHeadlineLocation(title) {
   const key = headlineKey(title);
 
-  const cached = selectPlace.get(key);
+  const cached = await selectPlace(key);
   if (cached) {
     if (cached.lat == null) return { located: false, cached: true };
     return {
@@ -277,7 +277,7 @@ export async function resolveHeadlineLocation(title) {
   const place = await extractPlace(title);
   const target = place ? await geocode(place) : null;
 
-  insertPlace.run(
+  await insertPlace(
     key,
     place,
     target?.lat ?? null,

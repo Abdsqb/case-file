@@ -30,11 +30,11 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { db } from './db.js';
+import { get, run, tx } from './db.js';
 import { complete, ready, status, AiError } from './ai.js';
 import { getHeadlines } from './news.js';
 import {
-  classWeek, classesOn, courses, loadCaseFolders, loadProjects, snapshot,
+  classWeek, classesOn, courses, loadCalendar, loadCaseFolders, loadProjects, snapshot,
 } from './archive.js';
 
 /* Re-exported so the routes import one module. `status` is what the browser
@@ -290,14 +290,18 @@ function ymdOf(ms) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-function taskRow(id) {
+/* Both take the verbs to read with, so applyChanges can look rows up inside
+   its own transaction and see what it has already changed. */
+const base = { get, run };
+
+async function taskRow(id, q = base) {
   const n = Number(id);
   if (!Number.isInteger(n)) return null;
-  return db.prepare('SELECT * FROM tasks WHERE id = ?').get(n) || null;
+  return (await q.get('SELECT * FROM tasks WHERE id = ?', [n])) || null;
 }
 
-function caseName(projectId) {
-  const row = db.prepare('SELECT name FROM projects WHERE id = ?').get(projectId);
+async function caseName(projectId, q = base) {
+  const row = await q.get('SELECT name FROM projects WHERE id = ?', [String(projectId ?? '')]);
   return row ? row.name : '';
 }
 
@@ -319,7 +323,7 @@ function stage(staged, change) {
   if (staged.length < MAX_STAGED) staged.push(change);
 }
 
-function runWrite(name, a, staged) {
+async function runWrite(name, a, staged) {
   if (!staged) return { error: 'changes can only be proposed from the chat' };
   if (staged.length >= MAX_STAGED) return { error: `that is ${MAX_STAGED} changes already — stop and reply` };
 
@@ -330,25 +334,26 @@ function runWrite(name, a, staged) {
     let projectId = String(a.caseId || '').trim();
     let under = null;
     if (a.under !== undefined && a.under !== null && a.under !== '') {
-      const parent = taskRow(a.under);
+      const parent = await taskRow(a.under);
       if (!parent) return { error: 'no entry with that id to put it under' };
       if (parent.parent_task_id) return { error: 'subtasks only go one level deep' };
       under = { id: parent.id, title: parent.title };
       projectId = parent.project_id;
     }
-    if (!projectId || !caseName(projectId)) return { error: 'no case with that id' };
+    const named = projectId ? await caseName(projectId) : '';
+    if (!named) return { error: 'no case with that id' };
 
     const { due, dueText } = dueOf(a.due);
     const priority = PRIORITIES.has(a.priority) ? a.priority : 'normal';
     stage(staged, {
-      id: randomUUID(), op: 'create', caseId: projectId, caseName: caseName(projectId),
+      id: randomUUID(), op: 'create', caseId: projectId, caseName: named,
       title, due, dueText, priority: under ? 'normal' : priority, under,
     });
     return { staged: `new ${under ? 'subtask' : 'entry'} "${title}"` };
   }
 
   if (name === 'update_entry') {
-    const row = taskRow(a.entryId);
+    const row = await taskRow(a.entryId);
     if (!row) return { error: 'no entry with that id' };
 
     const set = {};
@@ -380,13 +385,13 @@ function runWrite(name, a, staged) {
     const done = a.done !== false;
     const out = { staged: [], skipped: [] };
     for (const id of ids.slice(0, MAX_STAGED)) {
-      const row = taskRow(id);
+      const row = await taskRow(id);
       if (!row) { out.skipped.push(`${id}: no such entry`); continue; }
       if (name === 'close_entries') {
         if (!!row.completed === done) { out.skipped.push(`"${row.title}" is already ${done ? 'closed' : 'open'}`); continue; }
         stage(staged, { id: randomUUID(), op: 'close', taskId: row.id, title: row.title, done });
       } else {
-        const subs = db.prepare('SELECT COUNT(*) AS n FROM tasks WHERE parent_task_id = ?').get(row.id).n;
+        const subs = (await get('SELECT COUNT(*) AS n FROM tasks WHERE parent_task_id = ?', [row.id])).n;
         stage(staged, { id: randomUUID(), op: 'delete', taskId: row.id, title: row.title, subtasks: subs });
       }
       out.staged.push(row.title);
@@ -397,13 +402,13 @@ function runWrite(name, a, staged) {
   return { error: `no tool named ${name}` };
 }
 
-function runTool(name, args, now, staged) {
+async function runTool(name, args, now, staged) {
   const a = args && typeof args === 'object' ? args : {};
 
   if (WRITE_NAMES.has(name)) return runWrite(name, a, staged);
 
   if (name === 'case_detail') {
-    const project = loadProjects().find((p) => p.id === String(a.caseId || ''));
+    const project = (await loadProjects()).find((p) => p.id === String(a.caseId || ''));
     if (!project) return { error: 'no case with that id' };
     return {
       id: project.id,
@@ -424,7 +429,7 @@ function runTool(name, args, now, staged) {
     if (!q) return { matches: [] };
     const words = q.split(/\s+/).filter(Boolean);
     const out = [];
-    for (const p of loadProjects()) {
+    for (const p of await loadProjects()) {
       for (const t of p.tasks || []) {
         for (const e of [t, ...(t.subtasks || [])]) {
           if (!a.includeDone && e.completed) continue;
@@ -446,11 +451,12 @@ function runTool(name, args, now, staged) {
 
   if (name === 'timetable') {
     const days = Math.min(28, Math.max(1, Number(a.days) || 7));
+    await loadCalendar();
     return { courses: courses(), week: classWeek(now, days) };
   }
 
   if (name === 'standing') {
-    const s = snapshot(now);
+    const s = await snapshot(now);
     return { today: s.today, counts: s.counts, dueNext: s.dueNext, classesToday: s.classesToday };
   }
 
@@ -477,7 +483,7 @@ function runTool(name, args, now, staged) {
  */
 const SAME_TOOL_LIMIT = 2;
 
-function dispatch(calls, { now, used, ledger, staged = null }) {
+async function dispatch(calls, { now, used, ledger, staged = null }) {
   const out = [];
 
   for (const call of calls) {
@@ -507,7 +513,7 @@ function dispatch(calls, { now, used, ledger, staged = null }) {
     } else {
       ledger.signatures.add(signature);
       try {
-        payload = runTool(fn, args, now, staged);
+        payload = await runTool(fn, args, now, staged);
       } catch (err) {
         /* A thrown tool is a bug here, not there. Tell the model plainly and
            let it carry on without it rather than failing the whole job. */
@@ -580,7 +586,7 @@ async function runAgent({ capability, system, user, schema, now, temperature = 0
       tool_calls: result.toolCalls,
     });
 
-    for (const m of dispatch(result.toolCalls, { now, used, ledger })) messages.push(m);
+    for (const m of await dispatch(result.toolCalls, { now, used, ledger })) messages.push(m);
   }
 
   throw new AiError('the clerk could not settle on an answer.', { status: 502 });
@@ -725,8 +731,8 @@ export async function file(text, now = Date.now()) {
   const body = String(text || '').trim().slice(0, MAX_INPUT_CHARS);
   if (!body) throw new AiError('there is nothing on the pad to file.', { status: 400 });
 
-  const snap = snapshot(now, { limit: 12 });
-  const folders = loadCaseFolders();
+  const snap = await snapshot(now, { limit: 12 });
+  const folders = await loadCaseFolders();
 
   const system = `${ROLE}
 
@@ -816,7 +822,7 @@ File it.`;
   });
 
   const parsed = parseObject(result.text);
-  const proposals = normaliseProposals(parsed.proposals, now);
+  const proposals = await normaliseProposals(parsed.proposals, now);
 
   return {
     summary: typeof parsed.summary === 'string' ? parsed.summary.trim() : '',
@@ -865,10 +871,10 @@ export function dateToMs(value) {
  * whole review step exists to prevent. Each survivor carries `ok: true` and its
  * own id so the browser can let you toggle and edit it.
  */
-function normaliseProposals(list, now) {
+async function normaliseProposals(list, now) {
   if (!Array.isArray(list)) return [];
 
-  const caseIds = new Set(loadProjects().map((p) => p.id));
+  const caseIds = new Set((await loadProjects()).map((p) => p.id));
   const seenRefs = new Map();
   const out = [];
 
@@ -953,12 +959,14 @@ function firstCaseId(raw, caseIds) {
 
 /* ------------------------------------------------------------------- apply */
 
-const insertProject = () => db.prepare(
+const insertProject = (q, ...args) => q.run(
   'INSERT INTO projects (id, name, opened_at, sort_order, parent_id, folder_id) VALUES (?, ?, ?, ?, NULL, NULL)',
+  args,
 );
-const insertTask = () => db.prepare(
+const insertTask = (q, ...args) => q.run(
   `INSERT INTO tasks (project_id, title, priority, created_at, due_date, completed, blocked_by, parent_task_id)
    VALUES (?, ?, ?, ?, ?, 0, NULL, ?)`,
+  args,
 );
 
 /**
@@ -972,73 +980,64 @@ const insertTask = () => db.prepare(
  * One transaction. A filing that half-applied would leave entries under a case
  * that does not exist, and the reader would have no way to tell which half.
  */
-export function apply(list, now = Date.now()) {
+export async function apply(list, now = Date.now()) {
   if (!Array.isArray(list) || !list.length) {
     throw new AiError('nothing was approved.', { status: 400 });
   }
 
   const rows = list.filter((r) => r && typeof r === 'object').slice(0, 200);
-  const caseIds = new Set(loadProjects().map((p) => p.id));
+  const caseIds = new Set((await loadProjects()).map((p) => p.id));
 
   const made = { cases: 0, entries: 0, subtasks: 0 };
   const refToCase = new Map();
   const refToTask = new Map();
 
-  const run = db.prepare('BEGIN');
-  const commit = db.prepare('COMMIT');
-  const rollback = db.prepare('ROLLBACK');
-
-  const projectStmt = insertProject();
-  const taskStmt = insertTask();
-
-  run.run();
   try {
-    const nextOrder = () => {
-      const { n } = db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM projects').get();
-      return n;
-    };
+    await tx(async (q) => {
+      const nextOrder = async () => {
+        const { n } = await q.get('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM projects');
+        return n;
+      };
 
-    for (const row of rows) {
-      if (String(row.kind) !== 'case') continue;
-      const name = String(row.name || '').trim().slice(0, 120);
-      if (!name) continue;
-      const id = randomUUID();
-      projectStmt.run(id, name, now, nextOrder());
-      caseIds.add(id);
-      if (row.ref) refToCase.set(String(row.ref), id);
-      made.cases += 1;
-    }
+      for (const row of rows) {
+        if (String(row.kind) !== 'case') continue;
+        const name = String(row.name || '').trim().slice(0, 120);
+        if (!name) continue;
+        const id = randomUUID();
+        await insertProject(q, id, name, now, await nextOrder());
+        caseIds.add(id);
+        if (row.ref) refToCase.set(String(row.ref), id);
+        made.cases += 1;
+      }
 
-    for (const row of rows) {
-      if (String(row.kind) !== 'entry') continue;
-      const title = String(row.title || '').trim().slice(0, 300);
-      if (!title) continue;
+      for (const row of rows) {
+        if (String(row.kind) !== 'entry') continue;
+        const title = String(row.title || '').trim().slice(0, 300);
+        if (!title) continue;
 
-      const viaRef = row.caseRef ? refToCase.get(String(row.caseRef)) : null;
-      const direct = String(row.caseId || '').trim();
-      const projectId = viaRef || (caseIds.has(direct) ? direct : null);
-      if (!projectId) continue;
+        const viaRef = row.caseRef ? refToCase.get(String(row.caseRef)) : null;
+        const direct = String(row.caseId || '').trim();
+        const projectId = viaRef || (caseIds.has(direct) ? direct : null);
+        if (!projectId) continue;
 
-      const priority = PRIORITIES.has(row.priority) ? row.priority : 'normal';
-      const due = Number.isFinite(row.due) ? row.due : dateToMs(row.dueText);
+        const priority = PRIORITIES.has(row.priority) ? row.priority : 'normal';
+        const due = Number.isFinite(row.due) ? row.due : dateToMs(row.dueText);
 
-      const res = taskStmt.run(projectId, title, priority, now, due ?? null, null);
-      if (row.ref) refToTask.set(String(row.ref), { id: res.lastInsertRowid, projectId });
-      made.entries += 1;
-    }
+        const res = await insertTask(q, projectId, title, priority, now, due ?? null, null);
+        if (row.ref) refToTask.set(String(row.ref), { id: res.lastInsertRowid, projectId });
+        made.entries += 1;
+      }
 
-    for (const row of rows) {
-      if (String(row.kind) !== 'subtask') continue;
-      const title = String(row.title || '').trim().slice(0, 300);
-      const parent = refToTask.get(String(row.under || ''));
-      if (!title || !parent) continue;
-      taskStmt.run(parent.projectId, title, 'normal', now, null, parent.id);
-      made.subtasks += 1;
-    }
-
-    commit.run();
+      for (const row of rows) {
+        if (String(row.kind) !== 'subtask') continue;
+        const title = String(row.title || '').trim().slice(0, 300);
+        const parent = refToTask.get(String(row.under || ''));
+        if (!title || !parent) continue;
+        await insertTask(q, parent.projectId, title, 'normal', now, null, parent.id);
+        made.subtasks += 1;
+      }
+    });
   } catch (err) {
-    rollback.run();
     throw new AiError(`filing failed and nothing was written: ${err.message}`, { status: 500 });
   }
 
@@ -1057,7 +1056,7 @@ export function apply(list, now = Date.now()) {
  * The statements are the REST routes' own, so a change made here is exactly
  * the change the case screen would have made. One transaction.
  */
-export function applyChanges(list, now = Date.now()) {
+export async function applyChanges(list, now = Date.now()) {
   if (!Array.isArray(list) || !list.length) {
     throw new AiError('nothing was approved.', { status: 400 });
   }
@@ -1066,65 +1065,68 @@ export function applyChanges(list, now = Date.now()) {
   const made = { created: 0, updated: 0, closed: 0, reopened: 0, deleted: 0, skipped: 0 };
   const skip = () => { made.skipped += 1; };
 
-  db.prepare('BEGIN').run();
   try {
-    for (const c of rows) {
-      const op = String(c.op || '');
+    await tx(async (q) => {
+      for (const c of rows) {
+        const op = String(c.op || '');
 
-      if (op === 'create') {
-        const title = String(c.title || '').trim().slice(0, 300);
-        if (!title) { skip(); continue; }
-        let projectId = String(c.caseId || '');
-        let parentId = null;
-        if (c.under && c.under.id !== undefined) {
-          const parent = taskRow(c.under.id);
-          if (!parent || parent.parent_task_id) { skip(); continue; }
-          parentId = parent.id;
-          projectId = parent.project_id;
-        }
-        if (!caseName(projectId)) { skip(); continue; }
-        const priority = parentId ? 'normal' : (PRIORITIES.has(c.priority) ? c.priority : 'normal');
-        const due = parentId ? null : dateToMs(c.dueText);
-        insertTask().run(projectId, title, priority, now, due ?? null, parentId);
-        made.created += 1;
-        continue;
-      }
-
-      const row = taskRow(c.taskId);
-      if (!row) { skip(); continue; }
-
-      if (op === 'update') {
-        const set = c.set && typeof c.set === 'object' ? c.set : {};
-        const title = typeof set.title === 'string' && set.title.trim()
-          ? set.title.trim().slice(0, 300) : row.title;
-        const priority = PRIORITIES.has(set.priority) ? set.priority : row.priority;
-        let due = row.due_date;
-        if (Object.prototype.hasOwnProperty.call(set, 'dueText')) {
-          if (set.dueText === null) due = null;
-          else {
-            const ms = dateToMs(set.dueText);
-            if (ms === null) { skip(); continue; }
-            due = ms;
+        if (op === 'create') {
+          const title = String(c.title || '').trim().slice(0, 300);
+          if (!title) { skip(); continue; }
+          let projectId = String(c.caseId || '');
+          let parentId = null;
+          if (c.under && c.under.id !== undefined) {
+            const parent = await taskRow(c.under.id, q);
+            if (!parent || parent.parent_task_id) { skip(); continue; }
+            parentId = parent.id;
+            projectId = parent.project_id;
           }
+          if (!(await caseName(projectId, q))) { skip(); continue; }
+          const priority = parentId ? 'normal' : (PRIORITIES.has(c.priority) ? c.priority : 'normal');
+          const due = parentId ? null : dateToMs(c.dueText);
+          await insertTask(q, projectId, title, priority, now, due ?? null, parentId);
+          made.created += 1;
+          continue;
         }
-        db.prepare('UPDATE tasks SET title = ?, priority = ?, due_date = ? WHERE id = ?')
-          .run(title, priority, due, row.id);
-        made.updated += 1;
-      } else if (op === 'close') {
-        const done = c.done !== false;
-        db.prepare('UPDATE tasks SET completed = ? WHERE id = ?').run(done ? 1 : 0, row.id);
-        made[done ? 'closed' : 'reopened'] += 1;
-      } else if (op === 'delete') {
-        db.prepare('DELETE FROM tasks WHERE parent_task_id = ?').run(row.id);
-        db.prepare('DELETE FROM tasks WHERE id = ?').run(row.id);
-        made.deleted += 1;
-      } else {
-        skip();
+
+        const row = await taskRow(c.taskId, q);
+        if (!row) { skip(); continue; }
+
+        if (op === 'update') {
+          const set = c.set && typeof c.set === 'object' ? c.set : {};
+          const title = typeof set.title === 'string' && set.title.trim()
+            ? set.title.trim().slice(0, 300) : row.title;
+          const priority = PRIORITIES.has(set.priority) ? set.priority : row.priority;
+          let due = row.due_date;
+          if (Object.prototype.hasOwnProperty.call(set, 'dueText')) {
+            if (set.dueText === null) due = null;
+            else {
+              const ms = dateToMs(set.dueText);
+              if (ms === null) { skip(); continue; }
+              due = ms;
+            }
+          }
+          await q.run('UPDATE tasks SET title = ?, priority = ?, due_date = ? WHERE id = ?',
+            [title, priority, due, row.id]);
+          made.updated += 1;
+        } else if (op === 'close') {
+          const done = c.done !== false;
+          await q.run('UPDATE tasks SET completed = ? WHERE id = ?', [done ? 1 : 0, row.id]);
+          made[done ? 'closed' : 'reopened'] += 1;
+        } else if (op === 'delete') {
+          /* The same three statements the delete route runs, so a deleted entry
+             leaves no pointer behind on any day's to-do list either. */
+          await q.run('DELETE FROM today_items WHERE task_id = ? OR task_id IN (SELECT id FROM tasks WHERE parent_task_id = ?)',
+            [row.id, row.id]);
+          await q.run('DELETE FROM tasks WHERE parent_task_id = ?', [row.id]);
+          await q.run('DELETE FROM tasks WHERE id = ?', [row.id]);
+          made.deleted += 1;
+        } else {
+          skip();
+        }
       }
-    }
-    db.prepare('COMMIT').run();
+    });
   } catch (err) {
-    db.prepare('ROLLBACK').run();
     throw new AiError(`the changes failed and nothing was written: ${err.message}`, { status: 500 });
   }
 
@@ -1181,16 +1183,6 @@ function briefOut(row, cached) {
     cached,
   };
 }
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS clerk_brief (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    cache_key TEXT NOT NULL,
-    body TEXT NOT NULL,
-    model TEXT,
-    made_at INTEGER NOT NULL
-  );
-`);
 
 /* The prompt asks for two or three sentences under fifty words. This is what
    makes that a fact rather than a request.
@@ -1362,8 +1354,8 @@ World:
 ${wire.world.length ? list(wire.world) : '  nothing on the world wire'}`;
 }
 
-export function cachedBrief(now = Date.now()) {
-  const row = db.prepare('SELECT * FROM clerk_brief WHERE id = 1').get();
+export async function cachedBrief(now = Date.now()) {
+  const row = await get('SELECT * FROM clerk_brief WHERE id = 1');
   if (!row) return null;
   const sameDay = new Date(row.made_at).toDateString() === new Date(now).toDateString();
   if (!sameDay) return null;
@@ -1409,12 +1401,12 @@ function briefPart(text, budget, facts, names) {
  * days and a four-hour gap between classes this afternoon.
  */
 export async function brief(now = Date.now(), { force = false } = {}) {
-  const snap = snapshot(now, { limit: 10 });
+  const snap = await snapshot(now, { limit: 10 });
   const wire = await readWire();
   const key = briefKey(snap, wire);
 
   if (!force) {
-    const row = db.prepare('SELECT * FROM clerk_brief WHERE id = 1').get();
+    const row = await get('SELECT * FROM clerk_brief WHERE id = 1');
     if (row && row.cache_key === key) return briefOut(row, true);
   }
 
@@ -1519,11 +1511,11 @@ Write the brief.`;
   const madeAt = Date.now();
   const row = { body: JSON.stringify({ work, news }), model: result.model, made_at: madeAt };
 
-  db.prepare(`
+  await run(`
     INSERT INTO clerk_brief (id, cache_key, body, model, made_at) VALUES (1, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET cache_key = excluded.cache_key, body = excluded.body,
                                   model = excluded.model, made_at = excluded.made_at
-  `).run(key, row.body, row.model, madeAt);
+  `, [key, row.body, row.model ?? null, madeAt]);
 
   return briefOut(row, false);
 }
@@ -1550,7 +1542,7 @@ export async function ask(turns, now = Date.now()) {
     throw new AiError('there is no question to answer.', { status: 400 });
   }
 
-  const snap = snapshot(now, { limit: 10 });
+  const snap = await snapshot(now, { limit: 10 });
 
   const system = `${ROLE}
 
@@ -1634,7 +1626,7 @@ ${snap.classesToday.length ? snap.classesToday.map((c) => `  ${c.from}–${c.to}
 
     messages.push({ role: 'assistant', content: result.text || '', tool_calls: result.toolCalls });
 
-    for (const m of dispatch(result.toolCalls, { now, used, ledger, staged })) messages.push(m);
+    for (const m of await dispatch(result.toolCalls, { now, used, ledger, staged })) messages.push(m);
   }
 
   throw new AiError('the clerk could not settle on an answer.');

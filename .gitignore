@@ -34,3 +34,6 @@ server/*.sqlite
 # A real class schedule is personal data. The repo ships a fictional
 # src/data/class-calendar.ics; drop yours in as *.local.ics and it wins.
 src/data/*.local.ics
+
+# Dated copies of the archive (npm run db:backup, pre-migration snapshots).
+server/backups/

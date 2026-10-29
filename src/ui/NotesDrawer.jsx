@@ -17,8 +17,10 @@
  */
 
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 
 import api from '../lib/api.js';
+import { useSheetDrag } from './sheet.js';
 import * as clerk from '../lib/clerk.js';
 import Filing from './Filing.jsx';
 /* The editor is CodeMirror, which is most of 300KB — every screen should not
@@ -35,6 +37,10 @@ const SAVE_AFTER = 700;
 
 /* px: how close the pointer has to come before the notes tab shows itself. */
 const NEAR = 80;
+
+/* Raised by the top island's "Notes" row: the way in on a phone, which has no
+   Shift+N and no mouse to bring the tab out of hiding. */
+export const OPEN_NOTES = 'casefile:open-notes';
 
 export default function NotesDrawer({ projects = [], now = Date.now(), onFiled }) {
   const [open, setOpen] = useState(false);
@@ -213,9 +219,17 @@ export default function NotesDrawer({ projects = [], now = Date.now(), onFiled }
       if (openRef.current) close();
       else setOpen(true);
     };
+    const onOpen = () => setOpen(true);
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener(OPEN_NOTES, onOpen);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener(OPEN_NOTES, onOpen);
+    };
   }, [close]);
+
+  const sheetRef = useRef(null);
+  const sheetDrag = useSheetDrag(sheetRef, close);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -304,7 +318,15 @@ export default function NotesDrawer({ projects = [], now = Date.now(), onFiled }
         aria-hidden="true"
       />
 
-      <aside className={`notes${open ? ' is-open' : ''}`} aria-label="Notes">
+      <aside ref={sheetRef} className={`notes${open ? ' is-open' : ''}`} aria-label="Notes">
+        {/* Phone only (mobile.css): the pad opens as a sheet from the bottom,
+            with a handle to pull it down by and a close button, because there
+            is no Escape key and no page left beside it to tap. */}
+        <div className="sheet__grab" aria-hidden="true" {...sheetDrag}><span /></div>
+        <button type="button" className="sheet__close notes__close" aria-label="Close notes" onClick={close}>
+          <X strokeWidth={1.8} aria-hidden="true" />
+        </button>
+
         {/* Markdown, rendered live: every line but the one being edited shows
             its finished form. What is saved is still the plain markdown.
 

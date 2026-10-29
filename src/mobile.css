@@ -136,7 +136,7 @@
 @media (max-width: 640px) {
   /* The notes tab floats over the middle of the left edge, which on a phone
      is the middle of the content. Notes opens from the top island here. */
-  .notab:not([aria-expanded='true']) { display: none; }
+  .notab { display: none; }
 
   /* An entry row has its title, its pills and its actions side by side.
      At this width that left the title no room at all and it stacked one
@@ -145,4 +145,83 @@
   .entry__main { flex: 1 1 calc(100% - 28px); }
   .entry__cluster,
   .entry__actions { margin-left: 16px; flex-wrap: wrap; }
+}
+
+/* --- 5. sheets: the to-do window and the notes pad on a phone ------------
+   On a desktop the to-do floats in the middle and the pad slides in from the
+   left. On a phone both rise from the bottom edge as sheets: full width,
+   rounded top, a handle to pull them down by (ui/sheet.js) and a close button,
+   because there is no Escape key and no page left beside them to tap. */
+.sheet__grab,
+.sheet__close { display: none; }
+
+@media (max-width: 640px) {
+  .sheet__grab {
+    display: flex;
+    justify-content: center;
+    flex: none;
+    padding: 10px 0 4px;
+    touch-action: none;
+    cursor: grab;
+  }
+  .sheet__grab span {
+    width: 38px;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(var(--text-rgb), 0.22);
+  }
+
+  .sheet__close {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 40px;
+    height: 40px;
+    margin: -6px -8px -6px 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-muted);
+  }
+  .sheet__close svg { width: 18px; height: 18px; }
+
+  /* The to-do sheet. */
+  .card.todo {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: 100%;
+    max-height: calc(100dvh - env(safe-area-inset-top) - 36px);
+    border-radius: 20px 20px 0 0;
+    border-bottom: 0;
+    transform: translateY(100%);
+  }
+  .card.todo.is-open { transform: translateY(var(--sheet-drag, 0px)); }
+  .card.todo.is-dragging { transition: none; }
+  .card.todo > .card__foot { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+
+  /* Its title bar: the name, the state and the close button on one line, the
+     measurements under them rather than printed across the name. */
+  .todo__bar { flex-wrap: wrap; row-gap: 4px; padding-top: 6px; }
+  .todo__bar .flow__count { order: 3; flex-basis: 100%; }
+
+  /* The notes sheet: taller, because it is for typing and the keyboard will
+     take the bottom half of the screen. */
+  .notes {
+    left: 0;
+    right: 0;
+    top: calc(env(safe-area-inset-top) + 14px);
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    padding: 0 18px calc(16px + env(safe-area-inset-bottom));
+    border-bottom: 0;
+    border-radius: 20px 20px 0 0;
+    transform: translateY(100%);
+  }
+  .notes.is-open { transform: translateY(var(--sheet-drag, 0px)); }
+  .notes.is-dragging { transition: none; }
+  .notes__close { position: absolute; top: 8px; right: 14px; margin: 0; }
 }

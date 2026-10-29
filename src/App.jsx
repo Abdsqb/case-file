@@ -5,10 +5,10 @@ import './motion.css';
 import './mobile.css';
 import { listProjects } from './lib/api';
 import Dashboard from './views/Dashboard';
-import NotesDrawer from './ui/NotesDrawer.jsx';
+import NotesDrawer, { OPEN_NOTES } from './ui/NotesDrawer.jsx';
 import Streak from './ui/Streak.jsx';
 import Standby from './ui/Standby.jsx';
-import TodayWindow from './ui/TodayWindow.jsx';
+import TodayWindow, { OPEN_TODAY } from './ui/TodayWindow.jsx';
 import TopNav from './ui/TopNav.jsx';
 
 /* The dashboard is in the first bundle; the other five screens are chunks of
@@ -66,6 +66,14 @@ const NAV = [
   { id: 'reporting', label: 'Reporting' },
   { id: 'calendar', label: 'Calendar' },
   { id: 'settings', label: 'Settings' },
+];
+
+/* Under the screens in the top island: the two things that open over the
+   page. Shift+T and Shift+N on a keyboard; on a phone, these rows. Defined
+   once, out here, so the island does not re-measure on every render. */
+const NAV_ACTIONS = [
+  { id: 'today', label: "Today's to-do", hint: 'Shift+T', run: () => window.dispatchEvent(new Event(OPEN_TODAY)) },
+  { id: 'notes', label: 'Notes', hint: 'Shift+N', run: () => window.dispatchEvent(new Event(OPEN_NOTES)) },
 ];
 
 // How long the longest card in a screen takes to finish assembling. The tail is
@@ -269,7 +277,7 @@ export default function App() {
         ) : null}
 
         {/* No bar: one pill naming this screen, which opens into the rest. */}
-        <TopNav items={NAV} current={view} onGo={go} />
+        <TopNav items={NAV} current={view} onGo={go} actions={NAV_ACTIONS} />
       </header>
 
       <main className="shell" id="main">

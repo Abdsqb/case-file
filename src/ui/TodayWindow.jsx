@@ -23,6 +23,11 @@ import api from '../lib/api.js';
 import { dayDiff } from '../lib/metrics.js';
 import { answerOffer, removeFromToday, reorderToday, useToday } from '../lib/today.js';
 import { Meter } from './primitives.jsx';
+import { useSheetDrag } from './sheet.js';
+
+/* Raised by the top island's "Today's to-do" row: the way in on a phone,
+   which has no Shift+T. */
+export const OPEN_TODAY = 'casefile:open-today';
 
 const cx = (...parts) => parts.filter(Boolean).join(' ');
 
@@ -101,9 +106,16 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
       e.preventDefault();
       setOpen((v) => !v);
     };
+    const onOpen = () => setOpen(true);
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener(OPEN_TODAY, onOpen);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener(OPEN_TODAY, onOpen);
+    };
   }, []);
+
+  const sheetDrag = useSheetDrag(panelRef, close);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -179,7 +191,10 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
         inert={!open || undefined}
         tabIndex={-1}
       >
-        <header className="flow__bar">
+        {/* Phone only (mobile.css): the handle to pull the sheet down by. */}
+        <div className="sheet__grab" aria-hidden="true" {...sheetDrag}><span /></div>
+
+        <header className="flow__bar todo__bar">
           <span className="flow__name">Today</span>
           <span className="flow__count">
             {dayLabel}
@@ -189,6 +204,9 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
             {doneCount} done
           </span>
           <span className={cx('statpill', `statpill--${standing.tone}`, 'flow__state')}>{standing.text}</span>
+          <button type="button" className="sheet__close" aria-label="Close today's to-do" onClick={close}>
+            <X strokeWidth={1.8} aria-hidden="true" />
+          </button>
         </header>
 
         <div className="todo__body">

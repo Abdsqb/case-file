@@ -17,6 +17,11 @@
  * and the list is slid up so the current row sits in that window. Open, the
  * pill grows to fit every row and the list slides back. Width, height and the
  * slide all transition together, so it reads as one shape growing.
+ *
+ * Below the screens, after a hairline, sit `actions`: today's to-do and the
+ * notes pad. On a desktop they have Shift+T and Shift+N; on a phone there is
+ * no Shift key, and this is how they are reached. They come after every
+ * screen, so the fold's arithmetic (which row sits in the window) is untouched.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -27,8 +32,9 @@ const PAD = 6;            // the list's inner padding while open
 const FOLDED_X = 22;      // a folded label's side padding
 const OPEN_X = 30;        // an open row's side padding: the island opens wide
 const OPEN_MIN = 200;     // and never narrower than this
+const SEP = 9;            // the hairline between the screens and the actions
 
-export default function TopNav({ items, current, onGo }) {
+export default function TopNav({ items, current, onGo, actions = [] }) {
   const navRef = useRef(null);
   const labelRefs = useRef({});
   const quiet = useRef(false);
@@ -43,7 +49,7 @@ export default function TopNav({ items, current, onGo }) {
     const measure = () => {
       if (!alive) return;
       const next = {};
-      for (const { id } of items) {
+      for (const { id } of [...items, ...actions]) {
         const el = labelRefs.current[id];
         next[id] = el ? Math.ceil(el.getBoundingClientRect().width) : 80;
       }
@@ -52,15 +58,16 @@ export default function TopNav({ items, current, onGo }) {
     measure();
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
     return () => { alive = false; };
-  }, [items]);
+  }, [items, actions]);
 
   useEffect(() => () => clearTimeout(closeTimer.current), []);
 
   const index = Math.max(0, items.findIndex((i) => i.id === current));
   const widest = widths ? Math.max(...Object.values(widths)) : 90;
   const here = widths ? widths[current] ?? widest : 90;
+  const extra = actions.length ? SEP + actions.length * ROW : 0;
   const size = open
-    ? { width: Math.max(OPEN_MIN, widest + OPEN_X * 2 + PAD * 2), height: items.length * ROW + PAD * 2 }
+    ? { width: Math.max(OPEN_MIN, widest + OPEN_X * 2 + PAD * 2), height: items.length * ROW + extra + PAD * 2 }
     : { width: here + FOLDED_X * 2, height: ROW };
   const slide = open ? 0 : -(index * ROW);
 
@@ -84,6 +91,15 @@ export default function TopNav({ items, current, onGo }) {
     if (id !== current) onGo(id);
   };
 
+  /* Focus is let go of first: the sheet it opens hands focus back to whatever
+     had it when it closes, and landing back in here would quietly reopen the
+     island behind it. */
+  const act = (action) => {
+    setOpen(false);
+    if (navRef.current?.contains(document.activeElement)) document.activeElement.blur();
+    action.run();
+  };
+
   const onPointerEnter = (e) => {
     if (e.pointerType !== 'mouse') return;
     clearTimeout(closeTimer.current);
@@ -94,8 +110,15 @@ export default function TopNav({ items, current, onGo }) {
     clearTimeout(closeTimer.current);
     closeTimer.current = setTimeout(() => setOpen(false), CLOSE_DELAY);
   };
+  /* Focus opens it for the keyboard. A tap focuses the button too (on Android
+     and in most browsers), and the click right after it would then find the
+     island already open and fold it straight back up — so focus that a press
+     brought is left to the click to deal with. */
+  const pressing = useRef(false);
+  const onPointerDownCapture = () => { pressing.current = true; };
+  const onClickCapture = () => { pressing.current = false; };
   const onFocus = () => {
-    if (quiet.current) return;
+    if (quiet.current || pressing.current) return;
     clearTimeout(closeTimer.current);
     setOpen(true);
   };
@@ -136,6 +159,8 @@ export default function TopNav({ items, current, onGo }) {
       aria-label="Sections"
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
+      onPointerDownCapture={onPointerDownCapture}
+      onClickCapture={onClickCapture}
       onFocus={onFocus}
       onBlur={onBlur}
       onKeyDown={onKeyDown}
@@ -161,6 +186,23 @@ export default function TopNav({ items, current, onGo }) {
               </li>
             );
           })}
+          {actions.length ? <li className="pillnav__sep" aria-hidden="true" /> : null}
+          {actions.map((action, i) => (
+            <li key={action.id}>
+              <button
+                type="button"
+                className="pillnav__item pillnav__item--action"
+                tabIndex={open ? 0 : -1}
+                style={{ '--i': items.length - index + i }}
+                onClick={() => act(action)}
+                title={action.hint || undefined}
+              >
+                <span className="pillnav__label" ref={(el) => { labelRefs.current[action.id] = el; }}>
+                  {action.label}
+                </span>
+              </button>
+            </li>
+          ))}
         </ul>
       </div>
     </nav>

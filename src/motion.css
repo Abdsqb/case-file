@@ -660,6 +660,25 @@
   box-shadow: 0 0 8px 0 var(--accent-glow);
 }
 
+/* Today's to-do and Notes, below the screens: a hairline, then two rows in a
+   quieter ink, because they open something over the page rather than
+   going somewhere. */
+.pillnav__sep {
+  position: relative;
+  flex: none;
+  height: 9px;
+}
+.pillnav__sep::after {
+  content: '';
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 4px;
+  height: 1px;
+  background: rgba(var(--text-rgb), 0.1);
+}
+.pillnav__item--action { color: rgba(var(--text-rgb), 0.72); }
+
 /* Open, the rows come into focus outward from the current one, a beat after
    the island has started to grow. */
 .pillnav.is-open .pillnav__item {

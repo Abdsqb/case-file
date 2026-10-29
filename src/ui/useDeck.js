@@ -40,9 +40,26 @@ const GLIDE = 170
    a style write per frame. */
 const REACH = 1.3
 
+/* On a phone the deck runs sideways: the cards sit side by side, a finger
+   swipes between them, and the wheel (which a phone does not have) is moot. */
+const ACROSS = '(max-width: 640px)'
+const ACROSS_GAP = 18
+/* How far a finger has to travel before a swipe turns the card, in px; less
+   than that settles back on the nearer one. */
+const FLICK = 40
+
 export default function useDeck(count, { shift = 62, shrink = 0.055 } = {}) {
   const [at, setAt] = useState(0)
   const index = Math.min(at, Math.max(0, count - 1))
+  const [across, setAcross] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(ACROSS).matches
+  )
+  useEffect(() => {
+    const mq = window.matchMedia(ACROSS)
+    const on = () => setAcross(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
 
   /* The element the wheel is read from, and the element the cards are in.
      Two, not one, because the frame usually holds the dots as well and a
@@ -60,6 +77,7 @@ export default function useDeck(count, { shift = 62, shrink = 0.055 } = {}) {
     if (!stack) return
     const pos = posRef.current
     const kids = stack.children
+    const step = across ? stack.clientWidth + ACROSS_GAP : 0
     for (let i = 0; i < kids.length; i += 1) {
       const el = kids[i]
       const d = i - pos
@@ -72,11 +90,16 @@ export default function useDeck(count, { shift = 62, shrink = 0.055 } = {}) {
         continue
       }
       el.style.visibility = 'visible'
+      if (across) {
+        el.style.opacity = String(Math.max(0, 1 - m * 0.6).toFixed(3))
+        el.style.transform = `translateX(${(d * step).toFixed(1)}px)`
+        continue
+      }
       el.style.opacity = String(Math.max(0, 1 - m * 1.15).toFixed(3))
       el.style.transform =
         `translateY(${(d * shift).toFixed(1)}px) scale(${(1 - Math.min(m, 1) * shrink).toFixed(4)})`
     }
-  }, [shift, shrink])
+  }, [shift, shrink, across])
 
   const tick = useCallback(() => {
     rafRef.current = 0
@@ -143,6 +166,64 @@ export default function useDeck(count, { shift = 62, shrink = 0.055 } = {}) {
     },
     []
   )
+
+  /* A finger, sideways, on a phone: the cards follow it, and letting go turns
+     to the next one if it travelled far enough, or settles back. A swipe that
+     starts vertical is the page scrolling and is left alone; a swipe that
+     moved is not also a tap on the card it began on. */
+  useEffect(() => {
+    const el = frameRef.current
+    if (!el || !across) return undefined
+    let s = null
+    const stepPx = () => (stackRef.current ? stackRef.current.clientWidth + ACROSS_GAP : 1)
+    const onDown = (e) => {
+      if (e.pointerType === 'mouse') return
+      s = { x: e.clientX, y: e.clientY, from: posRef.current, way: null, dx: 0 }
+    }
+    const onMove = (e) => {
+      if (!s) return
+      const dx = e.clientX - s.x
+      const dy = e.clientY - s.y
+      if (!s.way) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+        s.way = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y'
+      }
+      if (s.way !== 'x') return
+      s.dx = dx
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0 }
+      posRef.current = Math.max(-0.3, Math.min(count - 0.7, s.from - dx / stepPx()))
+      aimRef.current = posRef.current
+      lay()
+      const now = Math.round(posRef.current)
+      setAt((v) => (v === now ? v : now))
+    }
+    const onUp = () => {
+      if (!s) return
+      if (s.way === 'x') {
+        const turn = Math.abs(s.dx) > FLICK ? -Math.sign(s.dx) : 0
+        goTo(Math.round(s.from) + turn)
+        s.swiped = true
+      } else {
+        s = null
+      }
+    }
+    const onClickCapture = (e) => {
+      if (s && s.swiped) { e.preventDefault(); e.stopPropagation() }
+      s = null
+    }
+    el.addEventListener('pointerdown', onDown)
+    el.addEventListener('pointermove', onMove)
+    el.addEventListener('pointerup', onUp)
+    el.addEventListener('pointercancel', onUp)
+    el.addEventListener('click', onClickCapture, true)
+    return () => {
+      el.removeEventListener('pointerdown', onDown)
+      el.removeEventListener('pointermove', onMove)
+      el.removeEventListener('pointerup', onUp)
+      el.removeEventListener('pointercancel', onUp)
+      el.removeEventListener('click', onClickCapture, true)
+    }
+  }, [across, count, goTo, lay])
 
   /* Where the cards start, and where they go if the deck changes length under
      them. Before paint, so the first card is never seen arriving. */

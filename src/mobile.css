@@ -288,3 +288,72 @@
     border-radius: var(--radius-pill);
   }
 }
+
+/* --- 8. Dashboard -------------------------------------------------------- */
+@media (max-width: 640px) {
+  /* The brief and the list were indented to clear the notes tab's lane, a
+     quarter of a phone's width; there is no tab on a phone. */
+  .dash__read { padding-left: 13px; }
+  .dash__up { padding-left: 0; }
+
+  /* Up next as two lines: the title in full, then when and which case. */
+  .dash__row {
+    grid-template-columns: 6px minmax(0, 1fr) auto;
+    grid-template-areas: 'dot what what' 'dot when case';
+    row-gap: 3px;
+    column-gap: 10px;
+    padding: 10px 8px;
+  }
+  .dash__row > .status-dot { grid-area: dot; align-self: start; margin-top: 7px; }
+  .dash__row > .dash__what {
+    grid-area: what;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    font-size: 14px;
+  }
+  .dash__row > .dash__when { grid-area: when; }
+  .dash__row > .dash__case { grid-area: case; }
+
+  /* The deck runs sideways here (useDeck): the cards above, the dots in a
+     row beneath them. Vertical drags still scroll the page; sideways ones
+     are the deck's. */
+  .dash__deck {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    row-gap: 16px;
+    height: auto;
+    touch-action: pan-y;
+  }
+  .dash__stack { grid-column: 1; grid-row: 1; height: clamp(440px, 72dvh, 620px); }
+  .dash__dots { grid-column: 1; grid-row: 2; flex-direction: row; }
+  .readdeck { touch-action: pan-y; }
+  /* And on everything inside: a browser only combines touch-action up to the
+     nearest scroll container, so inside a card with a scrolling area of its
+     own (the clerk's chat) the deck's rule stopped applying and a sideways
+     swipe was taken as a scroll. Vertical scrolling inside still works. */
+  .dash__deck *,
+  .readdeck * { touch-action: pan-y; }
+
+  /* A card taller than the deck (Total workload is) scrolls its own body
+     rather than being cut off at the bottom. */
+  .dash__slide > .card { max-height: 100%; }
+  .dash__slide > .card > .card__body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+}
+
+/* --- 9. the page scrolls, not the body ------------------------------------
+   html, body and #root are height: 100%, and body clips sideways overflow
+   with overflow-x: hidden — which quietly makes BODY the scroller instead of
+   the window. On an iPhone that costs Safari's collapsing toolbar, the tap on
+   the status bar that jumps to the top, and every scroll-to-element.
+
+   On a phone the page grows to its content and the window scrolls. What used
+   to need the body's clip (the deck's side-by-side cards waiting off the
+   edge) is clipped one level down, on #root, with `clip` — which hides it
+   without making #root a scroller either. Left unclipped, a phone browser
+   sees content wider than the screen and zooms the whole page out to fit. */
+@media (max-width: 640px) {
+  html, body, #root { height: auto; min-height: 100%; }
+  body { overflow-x: visible; }
+  #root { overflow-x: clip; }
+}

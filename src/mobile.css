@@ -392,6 +392,17 @@
   /* The hairline between Focus and New is room the case's name needs more. */
   .casebar__rule { display: none; }
   .casebar__right { gap: 8px; }
+
+  /* The entries card runs its full length and the page scrolls it, rather
+     than a box of its own inside a page that also scrolls: two scrollers, one
+     inside the other, under one thumb. clip, not hidden, sideways: hidden
+     would make the other axis a scroller again. */
+  .casecard { height: auto; }
+  .casecard .entrylist {
+    overflow-y: visible;
+    overflow-x: clip;
+    overscroll-behavior: auto;
+  }
 }
 
 /* The ⋯ on an entry that files it elsewhere: the touch stand-in for dragging

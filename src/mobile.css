@@ -34,6 +34,10 @@
   .topbar__standing { top: calc(14.5px + env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); }
 }
 #root { padding-bottom: env(safe-area-inset-bottom); }
+@media (max-width: 640px) {
+  /* Room under the last thing on a page for the to-do button to rest over. */
+  #root { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+}
 
 /* --- 2. a finger ---------------------------------------------------------- */
 @media (hover: none) and (pointer: coarse) {
@@ -116,17 +120,26 @@
      panels each re-blur what is behind them on every scrolled frame and on
      every frame of every pulsing status dot, and a phone's GPU (an iPhone's
      especially) cannot keep up. So the panels become solid, a touch
-     translucent; over a dark ground they read the same. The sign-in panel
-     keeps its frost: nothing scrolls under it. */
+     translucent; over a dark ground they read the same.
+
+     What lies over a page that has stopped keeps its frost — one blur, over
+     a still image: the sign-in panel, the two sheets and standby's clock.
+     Without it they were clear glass, the page's text read straight through
+     the list on top of it. */
   :root {
     --panel-blur: none;
     --panel: rgba(var(--panel-rgb), 0.9);
   }
-  *:not(.signin__panel) {
+  *:not(.signin__panel):not(.todo):not(.notes):not(.standby) {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
   }
   .signin { --panel-blur: blur(30px) saturate(1.25); }
+  .card.todo,
+  .notes {
+    --panel-blur: blur(26px) saturate(1.2);
+    background: rgba(var(--panel-rgb), 0.9);
+  }
 
   /* The glass that floats over other content was translucent because the
      blur made what was behind it unreadable. Without the blur it has to be
@@ -237,6 +250,25 @@
     transform: translateY(100%);
   }
   .card.todo.is-open { transform: translateY(var(--sheet-drag, 0px)); }
+
+  /* Closing, a sheet slides all the way down still drawn. The desktop
+     window's 200ms fade, on a sheet, had it gone before it had moved a
+     third of the way, which read as no transition at all. */
+  .card.todo,
+  .notes {
+    opacity: 1;
+    visibility: hidden;
+    transition:
+      transform 420ms cubic-bezier(0.4, 0, 0.2, 1),
+      visibility 0s linear 420ms;
+  }
+  .card.todo.is-open,
+  .notes.is-open {
+    visibility: visible;
+    transition:
+      transform 460ms var(--notes-ease, cubic-bezier(0.22, 1, 0.3, 1)),
+      visibility 0s;
+  }
   .card.todo.is-dragging { transition: none; }
   .card.todo > .card__foot { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
 
@@ -262,6 +294,53 @@
   .notes.is-open { transform: translateY(var(--sheet-drag, 0px)); }
   .notes.is-dragging { transition: none; }
   .notes__close { position: absolute; top: 8px; right: 14px; margin: 0; }
+}
+
+/* The to-do's own button on a phone (TodayWindow.jsx). Solid, like the other
+   things that float, and under both sheets (z 189 and up). */
+.todofab { display: none; }
+@media (max-width: 640px) {
+  .todofab {
+    position: fixed;
+    right: max(18px, env(safe-area-inset-right));
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    z-index: 188;
+    display: inline-grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 50%;
+    background: rgb(var(--panel-rgb));
+    color: var(--text);
+    box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.85);
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      transform 360ms var(--notes-ease, cubic-bezier(0.22, 1, 0.3, 1)),
+      opacity 220ms ease;
+  }
+  .todofab svg { width: 21px; height: 21px; }
+  .todofab:active { transform: scale(0.93); }
+  .todofab.is-hidden {
+    opacity: 0;
+    transform: translateY(14px) scale(0.9);
+    pointer-events: none;
+  }
+  .todofab__count {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: 600 11px/19px var(--font-mono, ui-monospace, monospace);
+    text-align: center;
+    box-shadow: 0 0 10px var(--accent-glow);
+  }
 }
 
 /* --- 6. the case graph as an outline -------------------------------------
@@ -310,6 +389,9 @@
   /* New case as a + : the bar holds the folder, the open case and it. */
   .casebar__newlabel { display: none; }
   .casebar__new { padding-inline: 12px; min-width: 44px; }
+  /* The hairline between Focus and New is room the case's name needs more. */
+  .casebar__rule { display: none; }
+  .casebar__right { gap: 8px; }
 }
 
 /* The ⋯ on an entry that files it elsewhere: the touch stand-in for dragging

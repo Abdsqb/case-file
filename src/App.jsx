@@ -75,6 +75,20 @@ const NAV_ACTIONS = [
   { id: 'today', label: "Today's to-do", hint: 'Shift+T', run: () => window.dispatchEvent(new Event(OPEN_TODAY)) },
   { id: 'notes', label: 'Notes', hint: 'Shift+N', run: () => window.dispatchEvent(new Event(OPEN_NOTES)) },
 ];
+// A phone opens the to-do from its own button at the bottom (TodayWindow).
+const PHONE_NAV_ACTIONS = NAV_ACTIONS.filter((a) => a.id !== 'today');
+const PHONE = '(max-width: 640px)';
+
+function usePhoneWidth() {
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(PHONE).matches);
+  useEffect(() => {
+    const mql = window.matchMedia(PHONE);
+    const on = () => setPhone(mql.matches);
+    mql.addEventListener('change', on);
+    return () => mql.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
 
 // How long the longest card in a screen takes to finish assembling. The tail is
 // the case render's pin sequence, which finishes at ~1920ms; this keeps headroom
@@ -113,6 +127,7 @@ export default function App() {
   const [projects, setProjects] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  const phone = usePhoneWidth();
   // The view lives in the hash so sections are linkable and the browser's back
   // button works. Anything unrecognised falls back to the dashboard.
   const [view, setView] = useState(() => readHash());
@@ -277,7 +292,7 @@ export default function App() {
         ) : null}
 
         {/* No bar: one pill naming this screen, which opens into the rest. */}
-        <TopNav items={NAV} current={view} onGo={go} actions={NAV_ACTIONS} />
+        <TopNav items={NAV} current={view} onGo={go} actions={phone ? PHONE_NAV_ACTIONS : NAV_ACTIONS} />
       </header>
 
       <main className="shell" id="main">

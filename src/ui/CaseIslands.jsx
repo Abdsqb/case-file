@@ -91,9 +91,23 @@ export function SegmentIsland({ items, value, onChange, onReorder, label, align 
          into; it lies over its neighbours anyway, so there it opens to the
          edge of the screen. */
       const vw = document.documentElement.clientWidth;
+      const outer = slot.closest('.casebar, .card');
+      const edge = outer ? outer.getBoundingClientRect() : { left: 16, right: vw - 16 };
       const room = vw <= 640
-        ? (align === 'end' ? sr.right - 16 : vw - 16 - sr.left)
+        ? (align === 'end' ? sr.right - edge.left : edge.right - sr.left)
         : (align === 'end' ? sr.right - br.left : br.right - sr.left);
+      /* Folded, though, it must fit its own bar: on a phone a long case name
+         ("Operating Systems") ran the pill in under the buttons beside it.
+         The name gives way, with an ellipsis (--fold-cap, motion.css); the ⋯
+         beside it keeps its place. */
+      if (vw <= 640 && active) {
+        const fit = align === 'end' ? sr.right - br.left : br.right - sr.left;
+        const btn = active.querySelector('.segmented__btn');
+        const rest = active.offsetWidth - (btn ? btn.offsetWidth : 0);
+        strip.style.setProperty('--fold-cap', `${Math.max(48, Math.floor(fit - TAB_X * 2 - rest))}px`);
+      } else {
+        strip.style.removeProperty('--fold-cap');
+      }
       setM({
         left: active ? active.offsetLeft : 0,
         width: active ? active.offsetWidth : 120,

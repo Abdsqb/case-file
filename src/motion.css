@@ -935,6 +935,17 @@
 }
 .segmented--island .segmented__menu { padding: 0 0 0 4px; }
 
+/* Folded on a phone, the current choice's name is capped to the room its bar
+   leaves (CaseIslands.jsx sets --fold-cap there and nowhere else). */
+.tabisland:not(.is-open) .segmented__item--active .segmented__btn {
+  display: block;            /* an ellipsis needs a block, not the button's flex */
+  line-height: 34px;
+  max-width: var(--fold-cap, none);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tabisland:not(.is-open) .segmented__item:not(.segmented__item--active) {
   opacity: 0;
   filter: blur(6px);

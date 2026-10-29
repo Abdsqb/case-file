@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Check, GripVertical, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, GripVertical, ListTodo, X } from 'lucide-react';
 
 import api from '../lib/api.js';
 import { dayDiff } from '../lib/metrics.js';
@@ -374,6 +374,20 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
           <Meter value={completion} label="Today's completion" className="grow" />
         </div>
       </section>
+
+      {/* Phone only (mobile.css): a phone has no Shift+T, so the list has a
+          button of its own, resting at the bottom edge where a thumb is. It
+          steps aside while the sheet is up. */}
+      <button
+        type="button"
+        className={cx('todofab', open && 'is-hidden')}
+        onClick={() => setOpen(true)}
+        aria-label={openCount ? `Today's to-do, ${openCount} open` : "Today's to-do"}
+        tabIndex={open ? -1 : undefined}
+      >
+        <ListTodo strokeWidth={1.7} aria-hidden="true" />
+        {openCount ? <span className="todofab__count">{openCount}</span> : null}
+      </button>
     </>
   );
 }

@@ -110,9 +110,46 @@
   .dash__slide,
   .casework__side { perspective: none; }
 
-  /* A lighter frost: two dozen glass panels re-blurring the light behind
-     them is a desktop GPU's job, not a phone's. */
-  :root { --panel-blur: blur(18px) saturate(1.2); }
+  /* No live glass on a touch screen. Measured on a phone-sized, CPU-throttled
+     page with the background and diffusion both off: the dashboard dropped
+     13 frames in a few seconds of scrolling with the blur, 2 without. Twenty
+     panels each re-blur what is behind them on every scrolled frame and on
+     every frame of every pulsing status dot, and a phone's GPU (an iPhone's
+     especially) cannot keep up. So the panels become solid, a touch
+     translucent; over a dark ground they read the same. The sign-in panel
+     keeps its frost: nothing scrolls under it. */
+  :root {
+    --panel-blur: none;
+    --panel: rgba(var(--panel-rgb), 0.9);
+  }
+  *:not(.signin__panel) {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .signin { --panel-blur: blur(30px) saturate(1.25); }
+
+  /* The glass that floats over other content was translucent because the
+     blur made what was behind it unreadable. Without the blur it has to be
+     near opaque instead, or the text behind shows through the text on it. */
+  .topbar__standing,
+  .pillnav__pill,
+  .island,
+  .island-pop,
+  .folder-island-trigger,
+  .pillselect.island-select { background: rgb(var(--panel-rgb)) !important; }
+  .flow__node { background: rgba(var(--raised-rgb), 0.98); }
+  .flowfull__veil { background: rgba(var(--overlay-rgb), 0.88); }
+
+  /* Rows coming into focus as an island opens (the top island's screens, a
+     row of choices, a menu's options) were blurred and sharpened as they
+     arrived — a filter animated per row, per frame, which a phone pays for
+     on every open. They keep the fade and the slide. !important because the
+     menus' keyframes set the filter, and only an !important rule outranks an
+     animation. */
+  .pillnav__item,
+  .islandrow,
+  .tabisland .segmented__item,
+  .island-pop * { filter: none !important; }
 }
 
 /* --- 3. a phone, upright or on its side ----------------------------------- */

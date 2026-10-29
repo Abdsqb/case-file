@@ -257,6 +257,33 @@ function MonthGrid({ month, nowTs, hot, onEnter, onLeave, onOpen }) {
           </div>
         ))}
       </div>
+
+      {/* The same month as a list, shown only on a phone (mobile.css): seven
+          columns on a 390px screen leave a chip room for two letters, so the
+          grid stays as the shape of the month and this is where it is read. */}
+      <ol className="month__agenda">
+        {month.cells.filter((cell) => !cell.out && cell.items.length).map((cell) => (
+          <li key={cell.date.getTime()} className={cx('agenda__day', cell.today && 'is-today')}>
+            <span className="agenda__date">
+              {cell.date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}
+            </span>
+            <div className="agenda__items">
+              {cell.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={cx('agenda__item', `agenda__item--${entryTone(item, nowTs)}`, item.done && 'is-done')}
+                  aria-label={workLabel(item, nowTs)}
+                  onClick={() => onOpen(item)}
+                >
+                  <span className="agenda__title">{item.title}</span>
+                  <span className="agenda__meta">{item.course} · {workStanding(item, nowTs).text}</span>
+                </button>
+              ))}
+            </div>
+          </li>
+        ))}
+      </ol>
     </div>
   )
 }

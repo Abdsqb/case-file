@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Check, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, GripVertical, X } from 'lucide-react';
 
 import api from '../lib/api.js';
 import { dayDiff } from '../lib/metrics.js';
@@ -156,6 +156,47 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
     }
   };
 
+  /* Reordering by touch. The browser's drag and drop is mouse-only, so on a
+     touch screen each row has a grip (mobile.css shows it there only): held
+     and dragged, the row moves through the list as the finger passes the
+     middle of its neighbours, and the order is written once, on release. The
+     grip takes the gesture itself (touch-action: none), so dragging anywhere
+     else on a row still scrolls the sheet. */
+  /* The finger is followed on the window, not by capturing it on the grip:
+     moving a row through the list moves its element in the page, and a moved
+     element loses its pointer capture, so the release never arrived. */
+  const listRef = useRef(null);
+  const dragRef = useRef(null);
+  dragRef.current = drag;
+  const gripDown = (e, id) => {
+    if (e.pointerType === 'mouse') return;
+    e.preventDefault();
+    const pointer = e.pointerId;
+    setDrag({ id, ids: today.taskIds, from: today.taskIds, touch: true });
+    const onMove = (ev) => {
+      if (ev.pointerId !== pointer || !listRef.current) return;
+      const rows = [...listRef.current.children];
+      let to = rows.length - 1;
+      for (let i = 0; i < rows.length; i += 1) {
+        const r = rows[i].getBoundingClientRect();
+        if (ev.clientY < r.top + r.height / 2) { to = i; break; }
+      }
+      setDrag((d) => (d && d.ids.indexOf(d.id) !== to ? { ...d, ids: move(d.ids, d.id, to) } : d));
+    };
+    const onUp = (ev) => {
+      if (ev.pointerId !== pointer) return;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      const d = dragRef.current;
+      setDrag(null);
+      if (d && d.touch && d.ids.join() !== d.from.join()) reorderToday(d.ids);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
   const step = (id, by) => {
     const at = today.taskIds.indexOf(id);
     if (at < 0) return;
@@ -225,7 +266,7 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
           ) : null}
 
           {items.length ? (
-            <div className="todo__list">
+            <div className="todo__list" ref={listRef}>
               {items.map((item, i) => {
                 const id = item.task.id;
                 const done = isDone(item);
@@ -277,6 +318,14 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
                         {item.parent ? <span className="entry__case truncate">in {item.parent}</span> : null}
                       </div>
                     </div>
+
+                    <span
+                      className="todo__grip"
+                      aria-hidden="true"
+                      onPointerDown={(e) => gripDown(e, id)}
+                    >
+                      <GripVertical strokeWidth={1.6} />
+                    </span>
 
                     <div className="entry__actions">
                       <button

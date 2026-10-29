@@ -55,8 +55,8 @@
      get real height; the ones whose small size IS the design (dots, swatches,
      the check box, calendar chips, the ⋯) keep it and get an invisible reach
      around them instead. */
-  .pill { min-height: 36px; padding-inline: 14px; }
-  .pill--micro { min-height: 34px; padding: 6px 12px; font-size: 12px; }
+  button.pill, a.pill { min-height: 36px; padding-inline: 14px; }
+  button.pill--micro, a.pill--micro { min-height: 34px; padding: 6px 12px; font-size: 12px; }
   .entry__action { min-height: 34px; padding: 7px 12px; }
   .entry__action svg { width: 15px; height: 15px; }
   .segmented__btn { min-height: 36px; }
@@ -91,11 +91,11 @@
   /* Taller where a line of text is the target: the reach grows by padding
      and is handed straight back by a negative margin, so nothing moves. */
   .entry__title { padding-block: 8px; margin-block: -8px; }
-  .tip__link { display: inline-block; padding: 12px 8px; margin: -12px -8px; }
+  .tip__link { padding: 12px 8px; margin: -12px -8px; }
   .entry__check::before { inset: -13px; }
   .chat__seed { min-height: 36px; }
   .segmented__btn,
-  .pill--micro { min-width: 40px; }
+  button.pill--micro { min-width: 40px; }
   .chat__send,
   .toggle__track { position: relative; }
   .chat__send::before,
@@ -356,4 +356,106 @@
   html, body, #root { height: auto; min-height: 100%; }
   body { overflow-x: visible; }
   #root { overflow-x: clip; }
+}
+
+/* --- 10. Calendar and Reporting ------------------------------------------ */
+.month__agenda { display: none; }
+
+@media (max-width: 640px) {
+  /* The month grid stays as the month's shape, its entries drawn as marks in
+     their deadline colour; they are read in the list beneath it. */
+  .moncell { min-height: 52px; }
+  .moncell .enttag:not(.enttag--more) {
+    height: 5px;
+    min-height: 0;
+    padding: 0;
+    font-size: 0;
+    border-radius: 3px;
+    background: var(--tag);
+    pointer-events: none;
+  }
+  .moncell .enttag:not(.enttag--more)::before { display: none; }
+  .moncell .enttag--more { font-size: 10px; padding: 0 2px; }
+
+  .month__agenda {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    list-style: none;
+    margin: 18px 0 0;
+    padding: 16px 0 0;
+    border-top: 1px solid var(--line-soft);
+  }
+  .agenda__day {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .agenda__date {
+    padding-top: 11px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: lowercase;
+    color: var(--text-faint);
+  }
+  .agenda__day.is-today .agenda__date { color: var(--accent); }
+  .agenda__items { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .agenda__item {
+    --tag: var(--pin-open);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 44px;
+    padding: 8px 12px;
+    text-align: left;
+    font: inherit;
+    color: var(--fg);
+    background: var(--bg-elevated);
+    border: 1px solid var(--line-soft);
+    border-left: 3px solid var(--tag);
+    border-radius: var(--radius-sm);
+  }
+  .agenda__item--soon { --tag: var(--pin-soon); }
+  .agenda__item--late { --tag: var(--pin-late); }
+  .agenda__item--done { --tag: var(--pin-done); opacity: 0.55; }
+  .agenda__item.is-done .agenda__title { text-decoration: line-through; }
+  .agenda__title { font-size: 13.5px; line-height: 1.35; }
+  .agenda__meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+
+  /* The class week: five columns at a fifth of a phone each broke course
+     names mid-word. Each day keeps a readable width and the week scrolls
+     sideways, snapping to a day; the hour axis stays put. */
+  .sched__cols {
+    grid-auto-columns: minmax(124px, 1fr);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .sched__cols::-webkit-scrollbar { display: none; }
+  .sched__col { scroll-snap-align: start; }
+  .sched__title { overflow-wrap: normal; }
+
+  /* Headlines: tighter cards. */
+  .tip { padding: 12px 14px; gap: 7px; }
+}
+
+/* The to-do row's grip: reordering by touch (TodayWindow.jsx), where the
+   mouse's drag and drop does not exist. Touch screens only. */
+.todo__grip { display: none; }
+@media (hover: none) and (pointer: coarse) {
+  .todo__grip {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 40px;
+    height: 44px;
+    margin: -6px -6px -6px auto;
+    color: var(--text-faint);
+    touch-action: none;
+    cursor: grab;
+  }
+  .todo__grip svg { width: 18px; height: 18px; }
+  .todo__row { cursor: default; }
+  .todo__row.entry--dragging { opacity: 0.85; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.8); }
 }

@@ -1,6 +1,13 @@
 # Case File on a phone — fix plan
 
-Status: plan only (28 Oct 2026). Nothing below has been changed yet.
+Status (28 Oct 2026): **all six phases done and pushed.** Final audit at 375×667, 390×844,
+430×932 and 844×390 landscape: no horizontal overflow, no text under 11px, every tap target
+at least 40px. Desktop screens re-screenshotted and unchanged.
+
+Found and fixed along the way, beyond the plan: a tap opened the top island and every
+island on focus and folded it on the click (Android focuses buttons on tap); the body, not
+the window, was the page's scroller; the touch sizing for pills inflated decorative source
+labels on Reporting; inside a scrolling card, touch-action on the deck stopped applying.
 
 Decided: Today and Notes go in the **top island menu**; the dashboard deck **swipes
 sideways**; **iPhone** (Safari and the home-screen app) is tuned and tested first.

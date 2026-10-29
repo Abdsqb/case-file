@@ -462,6 +462,16 @@ sideways into the rest on hover or focus, lying over whatever is beside them up 
 of their row (`SegmentIsland` in `src/ui/CaseIslands.jsx`). The Settings choices are
 selects instead, like the folder switcher: a glass pill showing the value, opening downward
 into the options on a click.
+**On a phone it is the same app, with a phone layer on top** (`src/mobile.css`, loaded last, so
+the desktop rules are untouched). Text fields are 16px so Safari never zooms in on a tap; the
+top bar and the sheets clear the notch and the home bar; everything that only appeared on hover
+is simply there; every control is at least 40px to a finger; nothing is under 11px. Today's
+to-do and Notes sit in the top island under the screens, and open as sheets you pull down to
+close. The case graph becomes an indented outline that fits the width at full size; the
+dashboard cards swipe sideways; the month adds a readable list by day under its grid; the
+class week scrolls by day; to-do rows reorder by their grip and entries move from a ⋯ menu,
+since a finger cannot drag a row. Measured with a phone audit at 375, 390 and 430 wide and in
+landscape (`docs/MOBILE_PLAN.md`).
 
 
 **One panel turns.** Every panel rests flat; the one holding the case graph rotates several

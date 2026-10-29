@@ -10,7 +10,13 @@
     <meta name="application-name" content="Case" />
     <meta name="apple-mobile-web-app-title" content="Case" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Opened from the iPhone home screen: full screen, no Safari chrome, the
+         status bar drawn over the app's own dark ground. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- viewport-fit=cover lets the page run under the notch and the home
+         indicator; src/mobile.css pads the edges back with env(safe-area-*). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <!-- The three faces (Geist, Geist Mono, Instrument Serif) are bundled with
          the app; see the imports at the top of src/main.jsx. -->

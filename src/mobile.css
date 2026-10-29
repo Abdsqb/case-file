@@ -1,0 +1,148 @@
+/* ==========================================================================
+   mobile.css — the phone and touch layer.
+
+   The app was drawn for a mouse, a keyboard and a wide window, and nothing in
+   styles.css or motion.css knew otherwise. This file is everything that
+   changes for a finger and a narrow screen, kept apart so the desktop rules
+   stay exactly as they were. Loaded last, after motion.css.
+
+   Two kinds of query, for two different facts:
+     (hover: none) and (pointer: coarse) — a finger. Hover-only things must be
+       shown, targets must be big enough to hit, and the pointer effects that
+       mean nothing without a pointer are switched off. An iPad with a trackpad
+       reports hover and keeps the desktop behaviour.
+     (max-width: 640px) — a phone-width screen, whatever is pointing at it.
+   ========================================================================== */
+
+/* --- 1. safe areas --------------------------------------------------------
+   With viewport-fit=cover (index.html) the page runs under the notch, the
+   Dynamic Island and the home indicator when installed to the home screen.
+   env() is 0 everywhere else, so these cost nothing on a desktop. App
+   measures --nav-h from the top bar, so padding the bar moves the page down
+   with it. */
+.topbar {
+  padding-top: calc(14px + env(safe-area-inset-top));
+  padding-left: max(var(--shell-x), env(safe-area-inset-left));
+  padding-right: max(var(--shell-x), env(safe-area-inset-right));
+}
+.topbar__standing {
+  top: calc(18.5px + env(safe-area-inset-top));
+  left: max(var(--shell-x), env(safe-area-inset-left));
+}
+@media (max-width: 560px) {
+  .topbar { padding-top: calc(10px + env(safe-area-inset-top)); }
+  .topbar__standing { top: calc(14.5px + env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); }
+}
+#root { padding-bottom: env(safe-area-inset-bottom); }
+
+/* --- 2. a finger ---------------------------------------------------------- */
+@media (hover: none) and (pointer: coarse) {
+  /* Safari zooms the whole page into any field set under 16px the moment it
+     is tapped, and leaves you to pinch back out. 16px is the line. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  textarea,
+  select,
+  [contenteditable='true'],
+  .cm-content {
+    font-size: 16px !important;
+  }
+
+  /* What only ever appeared under a mouse is simply there. */
+  .entry__actions { opacity: 1; }
+  .notab { opacity: 1; }
+
+  /* Targets. Apple's floor is 44pt. Controls that read as text-sized pills
+     get real height; the ones whose small size IS the design (dots, swatches,
+     the check box, calendar chips, the ⋯) keep it and get an invisible reach
+     around them instead. */
+  .pill { min-height: 36px; padding-inline: 14px; }
+  .pill--micro { min-height: 34px; padding: 6px 12px; font-size: 12px; }
+  .entry__action { min-height: 34px; padding: 7px 12px; }
+  .entry__action svg { width: 15px; height: 15px; }
+  .segmented__btn { min-height: 36px; }
+  .subtasks__toggle { min-height: 32px; display: inline-flex; align-items: center; }
+
+  .accent-swatch,
+  .dash__dot,
+  .readdeck__dot,
+  .entry__check,
+  .enttag,
+  .iconmenu,
+  .casebar__icon,
+  .flow__tool {
+    position: relative;
+  }
+  .accent-swatch::before,
+  .dash__dot::before,
+  .readdeck__dot::before,
+  .entry__check::before,
+  .enttag::before,
+  .iconmenu::before,
+  .casebar__icon::before,
+  .flow__tool::before {
+    content: '';
+    position: absolute;
+    inset: -10px;
+  }
+  .dash__dot::before,
+  .readdeck__dot::before { inset: -17px; }
+  .accent-swatch { width: 34px; height: 34px; }
+
+  /* Taller where a line of text is the target: the reach grows by padding
+     and is handed straight back by a negative margin, so nothing moves. */
+  .entry__title { padding-block: 8px; margin-block: -8px; }
+  .tip__link { display: inline-block; padding: 12px 8px; margin: -12px -8px; }
+  .entry__check::before { inset: -13px; }
+  .chat__seed { min-height: 36px; }
+  .segmented__btn,
+  .pill--micro { min-width: 40px; }
+  .chat__send,
+  .toggle__track { position: relative; }
+  .chat__send::before,
+  .toggle__track::before { content: ''; position: absolute; inset: -10px; }
+
+  /* The panels turn toward the pointer and stand in depth. Without a pointer
+     there is nothing to turn toward, and the 3D stage is pure cost. */
+  .card:has(.flow),
+  .card:has(.flow)[data-tilt='on'] { transform: none !important; }
+  .bento,
+  .dash__slide,
+  .casework__side { perspective: none; }
+
+  /* A lighter frost: two dozen glass panels re-blurring the light behind
+     them is a desktop GPU's job, not a phone's. */
+  :root { --panel-blur: blur(18px) saturate(1.2); }
+}
+
+/* --- 3. a phone, upright or on its side ----------------------------------- */
+@media (max-width: 640px), (hover: none) and (pointer: coarse) and (max-height: 500px) {
+  /* Nothing under 11px. On a phone the 9.5–10.5px mono labels go from small
+     to unreadable — held sideways too, where the width says desktop but the
+     screen is the same few inches. */
+  .datepop__dow, .datepop__dowcell, .datepop__act, .month__dowcell,
+  .enttag, .enttag--more, .duetag,
+  .schedtip__state, .schedtip__row dt, .schedtip__sub,
+  .menu-pop__meta, .signin__label, .standby__hint,
+  .flow__sub, .flow__tag, .flow__meta, .flow__count, .flowfull__hint,
+  .flow__runhead, .flow__run, .dash__uphead,
+  .dash__readkicker, .dash__readagain,
+  .chat__who, .chat__changeop, .chat__dismiss, .chat__changenote, .chat__tools,
+  .filing__count, .filing__kind, .filing__tally, .fc-provider__state {
+    font-size: 11px;
+  }
+}
+
+/* --- 4. a phone-width screen --------------------------------------------- */
+@media (max-width: 640px) {
+  /* The notes tab floats over the middle of the left edge, which on a phone
+     is the middle of the content. Notes opens from the top island here. */
+  .notab:not([aria-expanded='true']) { display: none; }
+
+  /* An entry row has its title, its pills and its actions side by side.
+     At this width that left the title no room at all and it stacked one
+     letter per line. The title gets the full line; the rest wraps under it. */
+  .entry { flex-wrap: wrap; row-gap: 10px; }
+  .entry__main { flex: 1 1 calc(100% - 28px); }
+  .entry__cluster,
+  .entry__actions { margin-left: 16px; flex-wrap: wrap; }
+}

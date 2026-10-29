@@ -4023,6 +4023,7 @@ button.entry__title:hover { color: var(--fg); }
   gap: var(--gap);
   min-width: 0;
   height: clamp(624px, calc(100vh - var(--nav-h, 66px) - 190px), 900px);
+  height: clamp(624px, calc(100dvh - var(--nav-h, 66px) - 190px), 900px);
 
   /* ITS OWN ROOM, and that is the whole reason the board reads as standing.
      ----------------------------------------------------------------------
@@ -4823,6 +4824,7 @@ button.entry__title:hover { color: var(--fg); }
   z-index: 196;
   width: min(580px, calc(100vw - 36px));
   max-height: min(640px, calc(100vh - 120px));
+  max-height: min(640px, calc(100dvh - 120px));
   /* A touch more solid than a panel lying on the page: it floats over other
      panels, and two layers of the same glass read as a smear. */
   background: rgba(var(--panel-rgb), 0.86);
@@ -5447,6 +5449,7 @@ button.entry__title:hover { color: var(--fg); }
      and the space either side is what makes it an object rather than a
      section of the page. */
   height: clamp(520px, calc(100vh - var(--nav-h, 66px) - 120px), 900px);
+  height: clamp(520px, calc(100dvh - var(--nav-h, 66px) - 120px), 900px);
 }
 
 /* --- the brief ------------------------------------------------------------ */
@@ -5576,6 +5579,7 @@ button.entry__title:hover { color: var(--fg); }
   /* Its own height, and a landscape one. The column it sits in is as tall as
      the screen; this is not, and the difference is the air around it. */
   height: clamp(420px, calc(100vh - var(--nav-h, 66px) - 260px), 600px);
+  height: clamp(420px, calc(100dvh - var(--nav-h, 66px) - 260px), 600px);
   /* The room the graph's panel turns in — see the panel-turn rule above. */
   perspective: 2200px;
   perspective-origin: 50% 50%;

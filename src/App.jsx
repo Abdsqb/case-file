@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 
 import './styles.css';
 import './motion.css';
+import './mobile.css';
 import { listProjects } from './lib/api';
 import Dashboard from './views/Dashboard';
 import NotesDrawer from './ui/NotesDrawer.jsx';

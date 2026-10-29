@@ -330,6 +330,10 @@ function EntryRow({
   onDragStart,
   onDragEnd,
   onDropEntry,
+  /* Where this row can be filed instead, as menu items. Dragging is how it is
+     done with a mouse; a finger cannot drag a row, so on a touch screen the
+     same moves are offered from a ⋯ menu (shown only there, mobile.css). */
+  moveTargets = null,
 }) {
   const [editing, setEditing] = useState(false)
   const [over, setOver] = useState(false)
@@ -531,9 +535,9 @@ function EntryRow({
 
       <div className="entry__actions">
         {!isSub ? (
-          <button type="button" className="entry__action" onClick={onAddSub} disabled={disabled}>
+          <button type="button" className="entry__action" onClick={onAddSub} disabled={disabled} aria-label="Add a subtask">
             <Plus size={13} strokeWidth={1.5} aria-hidden="true" />
-            Sub
+            <span className="entry__actlabel">Sub</span>
           </button>
         ) : null}
 
@@ -546,10 +550,11 @@ function EntryRow({
           onClick={() => toggleToday(entry.id)}
           disabled={disabled}
           aria-pressed={onToday}
+          aria-label="Today's to-do"
           title={onToday ? "On today's to-do. Click to take it off" : "Add to today's to-do"}
         >
           <Sun size={13} strokeWidth={1.5} aria-hidden="true" />
-          Today
+          <span className="entry__actlabel">Today</span>
         </button>
 
         <button
@@ -557,16 +562,17 @@ function EntryRow({
           className="entry__action"
           onClick={() => onPatch({ completed: !completed })}
           disabled={disabled}
+          aria-label={completed ? 'Reopen entry' : 'Close entry'}
         >
           {completed ? (
             <>
               <RotateCcw size={13} strokeWidth={1.5} aria-hidden="true" />
-              Reopen
+              <span className="entry__actlabel">Reopen</span>
             </>
           ) : (
             <>
               <Check size={13} strokeWidth={1.5} aria-hidden="true" />
-              Close
+              <span className="entry__actlabel">Close</span>
             </>
           )}
         </button>
@@ -598,6 +604,15 @@ function EntryRow({
         >
           {confirm ? 'Confirm' : <Trash2 size={13} strokeWidth={1.5} aria-hidden="true" />}
         </button>
+
+        {moveTargets && moveTargets.length ? (
+          <IconMenu
+            className="entry__move"
+            items={moveTargets}
+            label={`Move ${entry.title || 'this entry'}`}
+            align="end"
+          />
+        ) : null}
       </div>
     </div>
   )
@@ -1348,6 +1363,33 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     [write]
   )
 
+  /* A subtask lifted back out to be an entry of its own — the touch menu's
+     counterpart to dragging it out onto the list. */
+  const liftTask = useCallback(
+    async (childId) => {
+      const res = await write(() => api.updateTask(childId, { parentTaskId: null }))
+      return res.ok
+    },
+    [write]
+  )
+
+  /* The touch menu's choices for a row: every other top-level entry in view
+     it could be filed under (an entry with subtasks of its own cannot become
+     one, so it is offered none), and for a subtask, lifting it out. */
+  const moveTargetsFor = (id, { isSub = false, parentId = null, hasSubs = false } = {}) => {
+    if (hasSubs) return null
+    const under = rows
+      .filter(({ task }) => task.id !== id && task.id !== parentId)
+      .slice(0, 15)
+      .map(({ task }) => ({
+        key: `under-${task.id}`,
+        label: `Under “${task.title || 'Untitled entry'}”`,
+        onClick: () => nestTask(id, task.id),
+      }))
+    const lift = isSub ? [{ key: 'lift', label: 'Make it its own entry', onClick: () => liftTask(id) }] : []
+    return [...lift, ...(lift.length && under.length ? [{ sep: true, key: 'sep' }] : []), ...under]
+  }
+
   const createSub = async (parentId, title) => {
     const res = await write(() => api.createSubtask(parentId, title))
     if (res.ok) {
@@ -1681,9 +1723,9 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
             <CircleDot size={15} strokeWidth={1.6} aria-hidden="true" />
           </button>
           <span className="casebar__rule" aria-hidden="true" />
-          <Pill active onClick={openNewCase}>
+          <Pill active onClick={openNewCase} className="casebar__new" aria-label="New case">
             <Plus size={13} strokeWidth={1.8} aria-hidden="true" />
-            New case
+            <span className="casebar__newlabel">New case</span>
           </Pill>
         </div>
       </div>
@@ -1887,6 +1929,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
                             onDragStart={() => setDrag({ id: task.id, parentId: null })}
                             onDragEnd={() => setDrag(null)}
                             onDropEntry={() => nestTask(drag && drag.id, task.id)}
+                            moveTargets={moveTargetsFor(task.id, { hasSubs: subs.length > 0 })}
                             onToggleSubs={() =>
                               setCollapsed((prev) =>
                                 prev.includes(task.id)
@@ -1921,6 +1964,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
                                       dragging={!!drag && drag.id === sub.id}
                                       onDragStart={() => setDrag({ id: sub.id, parentId: task.id })}
                                       onDragEnd={() => setDrag(null)}
+                                      moveTargets={moveTargetsFor(sub.id, { isSub: true, parentId: task.id })}
                                       onPatch={(patch) => patchTask(sub.id, patch)}
                                       onDelete={() => removeTask(sub.id)}
                                     />

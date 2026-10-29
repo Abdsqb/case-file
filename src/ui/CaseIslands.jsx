@@ -87,7 +87,13 @@ export function SegmentIsland({ items, value, onChange, onReorder, label, align 
       const bound = (slot.parentElement && slot.parentElement.closest(BOUND)) || slot.parentElement;
       const br = bound.getBoundingClientRect();
       const sr = slot.getBoundingClientRect();
-      const room = align === 'end' ? sr.right - br.left : br.right - sr.left;
+      /* On a phone the bar's own groups leave an island a sliver to open
+         into; it lies over its neighbours anyway, so there it opens to the
+         edge of the screen. */
+      const vw = document.documentElement.clientWidth;
+      const room = vw <= 640
+        ? (align === 'end' ? sr.right - 16 : vw - 16 - sr.left)
+        : (align === 'end' ? sr.right - br.left : br.right - sr.left);
       setM({
         left: active ? active.offsetLeft : 0,
         width: active ? active.offsetWidth : 120,
@@ -130,7 +136,40 @@ export function SegmentIsland({ items, value, onChange, onReorder, label, align 
       e.preventDefault();
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+
+    /* A finger has no wheel: dragged sideways, the strip follows it. A drag
+       that moved is not also a tap on whatever it started on. */
+    let drag = null;
+    const onDown = (e) => {
+      if (e.pointerType === 'mouse') return;
+      drag = { x: e.clientX, moved: false, from: null };
+      setOffset((o) => { drag.from = o; return o; });
+    };
+    const onMove = (e) => {
+      if (!drag || drag.from === null) return;
+      const dx = e.clientX - drag.x;
+      if (!drag.moved && Math.abs(dx) < 6) return;
+      drag.moved = true;
+      setOffset(Math.max(0, Math.min(overflow, drag.from - dx)));
+    };
+    const onUp = () => { if (drag && !drag.moved) drag = null; };
+    const onClickCapture = (e) => {
+      if (drag && drag.moved) { e.preventDefault(); e.stopPropagation(); }
+      drag = null;
+    };
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    el.addEventListener('click', onClickCapture, true);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+      el.removeEventListener('click', onClickCapture, true);
+    };
   }, [open, overflow]);
 
   const width = open ? openW : foldedW;

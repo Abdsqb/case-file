@@ -68,7 +68,14 @@ function startOfDay(ts) {
  * parent sits level with the middle of its own children. That is the one rule
  * that makes a tree readable, and it is why the lines never cross.
  */
-function layout(nodes, links) {
+/* Below this much room (a phone) the tree is drawn as an outline instead:
+   every card on its own row, each level stepped in by INDENT. Side by side,
+   three or four columns of cards had to shrink to half size to fit a phone's
+   width; as an outline they fit at full size, and a long case scrolls. */
+const OUTLINE_BELOW = 480;
+const INDENT = 28;
+
+function layout(nodes, links, outline = false) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const kids = new Map();
   const hasParent = new Set();
@@ -93,6 +100,14 @@ function layout(nodes, links) {
     seen.add(id);
     depth.set(id, d);
     const children = kids.get(id) || [];
+    if (outline) {
+      /* Parent first, then its children beneath it, stepped in. */
+      const y = cursor;
+      cursor += NODE_H + ROW_GAP;
+      pos.set(id, { x: d * INDENT, y });
+      for (const c of children) place(c, d + 1);
+      return y;
+    }
     if (!children.length) {
       const y = cursor;
       cursor += NODE_H + ROW_GAP;
@@ -183,9 +198,12 @@ export default function CaseFlow({
      child — is a step. */
   const spine = useMemo(() => data.links.filter((l) => l.tier !== 'mesh'), [data]);
 
+  /* Set from the drawing's room in measure() below. */
+  const [outline, setOutline] = useState(false);
+
   const { pos, depth, width, height } = useMemo(
-    () => layout(data.nodes, spine),
-    [data.nodes, spine]
+    () => layout(data.nodes, spine, outline),
+    [data.nodes, spine, outline]
   );
 
   /* How many entries hang off the case, for the first card's own subline. */
@@ -273,7 +291,7 @@ export default function CaseFlow({
 
   const hostRef = useRef(null);
   const panelRef = useRef(null);
-  const [fit, setFit] = useState({ s: 1, ox: 0, oy: 0 });
+  const [fit, setFit] = useState({ s: 1, ox: 0, oy: 0, scroll: false });
 
   /* One transform on one element. The cards and the wires are laid out in the
      same coordinates, so fitting them is a single scale rather than a size
@@ -291,6 +309,16 @@ export default function CaseFlow({
     const bw = host.clientWidth;
     const bh = host.clientHeight;
     if (!bw || !bh || !width || !height) return;
+    const narrow = bw < OUTLINE_BELOW;
+    if (narrow !== outline) { setOutline(narrow); return; }   // re-laid-out, then measured again
+    if (outline) {
+      /* Fitted to the width only: a long case is taller than the card, and
+         scrolls inside it rather than shrinking to unreadable. */
+      const s = Math.min(maxScale, bw / width);
+      const tall = height * s > bh;
+      setFit({ s, ox: Math.max(0, (bw - width * s) / 2), oy: tall ? 0 : (bh - height * s) / 2, scroll: tall });
+      return;
+    }
     if (overhang == null) {
       const s = Math.min(maxScale, bw / width, bh / height);
       setFit({ s, ox: (bw - width * s) / 2, oy: (bh - height * s) / 2 });
@@ -311,7 +339,7 @@ export default function CaseFlow({
     /* The first card's edge is PAD in from the drawing's, so the anchor is
        that card, not the drawing's invisible margin. */
     setFit({ s, ox: -PAD * s - inset - overhang, oy: (bh - height * s) / 2 });
-  }, [width, height, overhang, maxScale]);
+  }, [width, height, overhang, maxScale, outline]);
 
   useLayoutEffect(() => { measure(); }, [measure]);
 
@@ -431,6 +459,25 @@ export default function CaseFlow({
       const a = pos.get(l.source);
       const b = pos.get(l.target);
       if (!a || !b) continue;
+      if (outline) {
+        /* Down from under the parent's left edge, then across into the child:
+           the elbow an outline's guide lines make. */
+        const x1 = a.x + PAD + INDENT / 2;
+        const y1 = a.y + NODE_H + PAD;
+        const x2 = b.x + PAD;
+        const y2 = b.y + NODE_H / 2 + PAD;
+        out.push({
+          key: `${l.source}>${l.target}`,
+          source: l.source,
+          target: l.target,
+          tier: l.tier,
+          d: `M${x1} ${y1}V${y2 - 8}Q${x1} ${y2} ${x1 + 8} ${y2}H${x2}`,
+          x1, y1, x2, y2,
+          mx: (x1 + x2) / 2,
+          my: y2,
+        });
+        continue;
+      }
       const x1 = a.x + NODE_W + PAD;
       const y1 = a.y + NODE_H / 2 + PAD;
       const x2 = b.x + PAD;
@@ -450,7 +497,7 @@ export default function CaseFlow({
       });
     }
     return out;
-  }, [spine, pos]);
+  }, [spine, pos, outline]);
 
 
   const empty = !data.nodes.length;
@@ -545,6 +592,8 @@ export default function CaseFlow({
             empty && 'is-empty',
             around && 'is-cycling',
             !around && onExpand && !empty && 'is-expandable',
+            outline && 'is-outline',
+            outline && fit.scroll && 'is-scroll',
           )}
           ref={hostRef}
           data-hot={hot ? '1' : undefined}

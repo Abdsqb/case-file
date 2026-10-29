@@ -103,7 +103,13 @@ export function useIsland(rootRef, { keepOpen } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  /* A tap focuses the button it lands on (Android, and most browsers), and
+     focus opens the island — so the click a moment later would find it open
+     and fold it again. Focus that a press brought is left to the click. */
+  const pressedAt = useRef(-Infinity);
+
   const handlers = {
+    onPointerDownCapture: () => { pressedAt.current = performance.now(); },
     onPointerEnter: (e) => {
       if (e.pointerType !== 'mouse') return;
       clearTimeout(closeTimer.current);
@@ -118,6 +124,7 @@ export function useIsland(rootRef, { keepOpen } = {}) {
       // is not someone arriving at the island.
       if (quiet.current || !rootRef.current?.contains(e.target)) return;
       if (performance.now() - menuClosedAt.current < 400) return;
+      if (performance.now() - pressedAt.current < 600) return;
       clearTimeout(closeTimer.current);
       setOpen(true);
     },

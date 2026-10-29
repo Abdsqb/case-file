@@ -225,3 +225,66 @@
   .notes.is-dragging { transition: none; }
   .notes__close { position: absolute; top: 8px; right: 14px; margin: 0; }
 }
+
+/* --- 6. the case graph as an outline -------------------------------------
+   CaseFlow draws the tree as an indented outline when its room is narrower
+   than a phone's (is-outline), fitted to the width. A case taller than the
+   card scrolls inside it (is-scroll) instead of shrinking. */
+.flow__canvas.is-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+/* The sub-case tag rides the middle of a wire; on an elbow that is the
+   horizontal run into the child, which is too short to carry it. */
+.flow__canvas.is-outline .flow__tag { display: none; }
+
+/* --- 7. Case files ------------------------------------------------------- */
+@media (hover: none) and (pointer: coarse) {
+  /* An open strip of choices takes sideways drags itself (CaseIslands.jsx);
+     the page keeps vertical scrolling. */
+  .tabisland.is-open { touch-action: pan-y; }
+
+  /* A phone keeps :hover on whatever was last touched, so a hover look stays
+     stuck on a row or a button after the finger has gone. The ones that read
+     as a state rather than a highlight are taken back to rest. */
+  .iconmenu:hover:not([aria-expanded='true']) { background: transparent; color: inherit; }
+  .entry:hover:not(:focus-within) {
+    transform: none;
+    background: var(--bg-elevated);
+    border-color: var(--border);
+    box-shadow: none;
+  }
+  .entry__action:not(.entry__action--today):not(.entry__action--danger):hover {
+    background: transparent;
+    border-color: var(--line);
+    color: var(--fg-mid);
+  }
+}
+
+@media (max-width: 640px) {
+  /* The row's actions as icons (each keeps its name for screen readers), so
+     the controls sit in one or two short lines rather than four. */
+  .entry__actlabel { display: none; }
+  .entry__action { min-width: 40px; padding: 7px 10px; }
+  .entry__actions { gap: 8px; }
+
+  /* New case as a + : the bar holds the folder, the open case and it. */
+  .casebar__newlabel { display: none; }
+  .casebar__new { padding-inline: 12px; min-width: 44px; }
+}
+
+/* The ⋯ on an entry that files it elsewhere: the touch stand-in for dragging
+   one row onto another, so it only appears where there is no mouse. Drawn
+   like the row's other action buttons. */
+.entry__move { display: none; }
+@media (hover: none) and (pointer: coarse) {
+  .entry__move {
+    display: inline-flex;
+    justify-content: center;
+    width: 40px;
+    height: 34px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+  }
+}

@@ -2313,8 +2313,10 @@ button.entry__title:hover { color: var(--fg); }
   padding: 0 0 2px;
 }
 /* The underline is the sign it is being edited; the focus ring drawn round
-   every field on top of it only boxed the title in. */
-.entry__title-input:focus-visible { outline: none; }
+   every field, and the accent halo every text input gets, only boxed the
+   title in. input. to outweigh input[type='text']:focus. */
+input.entry__title-input:focus,
+input.entry__title-input:focus-visible { outline: none; box-shadow: none; }
 
 /* Project, due time, flags — the node's subline, in the data face. */
 .entry__meta {

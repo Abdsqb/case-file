@@ -310,6 +310,9 @@ function SubComposer({ disabled, onCreate, onCancel }) {
  * EntryRow — one line of the CRUD surface.
  * ------------------------------------------------------------------ */
 
+const isTouch = () =>
+  typeof window !== 'undefined' && window.matchMedia('(hover: none) and (pointer: coarse)').matches
+
 function EntryRow({
   entry,
   now,
@@ -336,6 +339,9 @@ function EntryRow({
   moveTargets = null,
 }) {
   const [editing, setEditing] = useState(false)
+  /* The date, the priority and the actions stay folded until asked for: a
+     mouse asks by hovering (CSS alone), a finger by tapping the row. */
+  const [expanded, setExpanded] = useState(false)
   const [over, setOver] = useState(false)
   /* dragenter and dragleave fire again for every child the pointer crosses, so
      a plain boolean flickers the highlight off the moment the cursor moves from
@@ -409,6 +415,8 @@ function EntryRow({
     <div
       className={cx(
         'entry',
+        'entry--case',
+        expanded && 'is-expanded',
         completed && 'entry--done',
         !completed && tone === 'overdue' && 'entry--overdue',
         (confirm || dateOpen || editing) && 'is-open',
@@ -433,6 +441,13 @@ function EntryRow({
         if (!accepts) return
         e.preventDefault()
         e.dataTransfer.dropEffect = 'move'
+      }}
+      onClick={(e) => {
+        /* A tap on the row itself, not on a control in it, and not on a menu
+           of its that React bubbles here from a portal. */
+        if (!isTouch() || !e.currentTarget.contains(e.target)) return
+        if (e.target.closest('button, input, select, textarea, a, .entry__more')) return
+        setExpanded((v) => !v)
       }}
       onDragEnter={() => { if (accepts) { overDepth.current += 1; setOver(true) } }}
       onDragLeave={() => {
@@ -477,7 +492,11 @@ function EntryRow({
           <button
             type="button"
             className="entry__title"
-            onClick={() => setEditing(true)}
+            onClick={() => {
+              // On a touch screen the first tap on a folded row opens it.
+              if (isTouch() && !expanded) { setExpanded(true); return }
+              setEditing(true)
+            }}
             aria-label={`${entry.title || 'Untitled entry'} — edit title`}
           >
             {entry.title || 'Untitled entry'}
@@ -503,6 +522,8 @@ function EntryRow({
         </div>
       </div>
 
+      <div className="entry__more">
+      <div className="entry__moreinner">
       <div className="entry__cluster">
         <Pill
           ref={dueRef}
@@ -613,6 +634,8 @@ function EntryRow({
             align="end"
           />
         ) : null}
+      </div>
+      </div>
       </div>
     </div>
   )

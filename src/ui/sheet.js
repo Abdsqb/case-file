@@ -8,13 +8,89 @@
  *
  * The offset is written as --sheet-drag on the sheet itself — never on <html>,
  * where a custom property changing every frame restyles the whole document.
+ *
+ * And while a sheet is open on a phone the page under it holds still, and a
+ * downward swipe anywhere on the sheet, once what it scrolls is at its top,
+ * pulls the sheet down the same way the handle does.
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 const CLOSE_AT = 90;   // px pulled down before letting go closes the sheet
+const FLICK = 0.5;     // px/ms: a quick flick down closes from a shorter pull
+const PHONE = '(max-width: 640px)';
 
-export function useSheetDrag(sheetRef, onClose) {
+/* The nearest thing between the finger and the sheet that scrolls up and
+   down, if there is one. */
+function scrollerOf(node, sheet) {
+  for (let el = node; el && el !== sheet; el = el.parentElement) {
+    if (el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) return el;
+  }
+  return null;
+}
+
+export function useSheetDrag(sheetRef, onClose, open = false) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    const sheet = sheetRef.current;
+    if (!open || !sheet || !window.matchMedia(PHONE).matches) return undefined;
+
+    /* The page under the sheet does not scroll (mobile.css). */
+    const root = document.documentElement;
+    root.classList.add('is-sheet-locked');
+
+    let t = null;
+    const onStart = (e) => {
+      if (e.touches.length !== 1 || e.target.closest('.sheet__grab')) { t = null; return; }
+      const p = e.touches[0];
+      t = { x: p.clientX, y: p.clientY, at: e.timeStamp, dy: 0, mode: null, scroller: scrollerOf(e.target, sheet) };
+    };
+    const onMove = (e) => {
+      if (!t) return;
+      const p = e.touches[0];
+      const dx = p.clientX - t.x;
+      const dy = p.clientY - t.y;
+      if (!t.mode) {
+        if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+        const atTop = !t.scroller || t.scroller.scrollTop <= 0;
+        t.mode = Math.abs(dx) > Math.abs(dy) ? 'across'
+          : dy > 0 && atTop ? 'pull'
+            : t.scroller ? 'scroll'
+              : 'hold';
+        if (t.mode === 'pull') { t.y = p.clientY; sheet.classList.add('is-dragging'); }
+      }
+      if (t.mode === 'pull') {
+        e.preventDefault();
+        t.dy = Math.max(0, p.clientY - t.y);
+        t.v = t.dy / Math.max(1, e.timeStamp - t.at);
+        sheet.style.setProperty('--sheet-drag', `${t.dy}px`);
+      } else if (t.mode === 'hold') {
+        e.preventDefault();   // nothing here scrolls, so neither does the page
+      }
+    };
+    const onEnd = () => {
+      if (t && t.mode === 'pull') {
+        sheet.classList.remove('is-dragging');
+        sheet.style.removeProperty('--sheet-drag');
+        if (t.dy > CLOSE_AT || (t.dy > 30 && t.v > FLICK)) closeRef.current();
+      }
+      t = null;
+    };
+    sheet.addEventListener('touchstart', onStart, { passive: true });
+    sheet.addEventListener('touchmove', onMove, { passive: false });
+    sheet.addEventListener('touchend', onEnd);
+    sheet.addEventListener('touchcancel', onEnd);
+    return () => {
+      root.classList.remove('is-sheet-locked');
+      sheet.removeEventListener('touchstart', onStart);
+      sheet.removeEventListener('touchmove', onMove);
+      sheet.removeEventListener('touchend', onEnd);
+      sheet.removeEventListener('touchcancel', onEnd);
+    };
+  }, [sheetRef, open]);
+
   const drag = useRef(null);
 
   const onPointerDown = useCallback((e) => {

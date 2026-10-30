@@ -69,7 +69,7 @@ function TypedBrief({ work, news }) {
   const typed = (text, count, caret) => (
     <span aria-hidden="true">
       {text.slice(0, count)}
-      {caret ? <span className={cx('typed__caret', done && 'is-done')} /> : null}
+      {caret ? <span className={cx('typed__caret', done && 'is-done')}>{'\u2060'}</span> : null}
       <span className="typed__rest">{text.slice(count)}</span>
     </span>
   )

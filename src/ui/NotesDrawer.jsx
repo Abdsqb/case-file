@@ -229,7 +229,7 @@ export default function NotesDrawer({ projects = [], now = Date.now(), onFiled }
   }, [close]);
 
   const sheetRef = useRef(null);
-  const sheetDrag = useSheetDrag(sheetRef, close);
+  const sheetDrag = useSheetDrag(sheetRef, close, open);
 
   useEffect(() => {
     if (!open) return undefined;

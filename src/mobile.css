@@ -52,7 +52,7 @@
   }
 
   /* What only ever appeared under a mouse is simply there. */
-  .entry__actions { opacity: 1; }
+  .entry > .entry__actions { opacity: 1; }
   .notab { opacity: 1; }
 
   /* Targets. Apple's floor is 44pt. Controls that read as text-sized pills
@@ -194,8 +194,33 @@
      letter per line. The title gets the full line; the rest wraps under it. */
   .entry { flex-wrap: wrap; row-gap: 10px; }
   .entry__main { flex: 1 1 calc(100% - 28px); }
-  .entry__cluster,
-  .entry__actions { margin-left: 16px; flex-wrap: wrap; }
+  .entry > .entry__actions { margin-left: 16px; flex-wrap: wrap; }
+
+  /* A case's entry, folded, is its title and meta line. A tap opens the
+     date, the priority and the actions under them: the row grows to them
+     (a grid track from 0fr to 1fr, the one way to ease to an auto height)
+     while they fade and settle in. */
+  .entry--case { row-gap: 0; }
+  .entry__more {
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 380ms cubic-bezier(0.22, 1, 0.3, 1);
+  }
+  .entry.is-expanded .entry__more,
+  .entry.is-open .entry__more { grid-template-rows: 1fr; }
+  .entry__moreinner {
+    min-height: 0;
+    overflow: hidden;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-left: 16px;
+  }
+  .entry__more .entry__cluster { padding-top: 12px; flex-wrap: wrap; }
+  .entry__more .entry__actions { padding-bottom: 1px; flex-wrap: wrap; }
+  .entry__more .entry__cluster,
+  .entry__more .entry__actions { transform: translateY(-6px); }
 }
 
 /* --- 5. sheets: the to-do window and the notes pad on a phone ------------
@@ -294,6 +319,16 @@
   .notes.is-open { transform: translateY(var(--sheet-drag, 0px)); }
   .notes.is-dragging { transition: none; }
   .notes__close { position: absolute; top: 8px; right: 14px; margin: 0; }
+
+  /* While a sheet is up the page under it stays put (ui/sheet.js sets the
+     class): what scrolls in the sheet stops at its own ends rather than
+     handing the swipe on to the page, and a drag on the dimmed page beside
+     it goes nowhere. */
+  html.is-sheet-locked,
+  html.is-sheet-locked body { overflow: hidden; overscroll-behavior: none; }
+  .card.todo .todo__body,
+  .notes .cm-scroller { overscroll-behavior: contain; }
+  .todoscrim { touch-action: none; }
 }
 
 /* The to-do's own button on a phone (TodayWindow.jsx). Solid, like the other

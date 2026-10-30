@@ -2360,11 +2360,46 @@ button.entry__title:hover { color: var(--fg); }
   transition: opacity 120ms ease;
 }
 
-.entry:hover .entry__actions,
-.entry:focus-within .entry__actions,
-.entry__actions:focus-within,
-.entry.is-open .entry__actions {
+.entry:hover > .entry__actions,
+.entry:focus-within > .entry__actions,
+.entry > .entry__actions:focus-within,
+.entry.is-open > .entry__actions {
   opacity: 1;
+}
+
+/* A case's entries show their title and their line of meta (which already
+   says when it is due, and whether it is on today's list), and keep the date,
+   the priority and the actions folded away until asked for: under a mouse by
+   hovering, or by keyboard focus; on a touch screen by a tap (is-expanded,
+   EntryRow). Folded, they keep their room, so a hover moves nothing. An open
+   menu of theirs (aria-expanded) keeps them out, or the pill a menu hangs
+   from would fade away under it. */
+.entry__more { flex: none; display: flex; }
+.entry__moreinner { display: flex; align-items: center; gap: 12px; }
+.entry__more .entry__cluster,
+.entry__more .entry__actions {
+  opacity: 0;
+  transform: translateX(6px);
+  pointer-events: none;
+  transition:
+    opacity 200ms ease,
+    transform 340ms cubic-bezier(0.22, 1, 0.3, 1);
+}
+.entry__more .entry__actions { transition-delay: 30ms; }
+.entry.is-expanded .entry__more :is(.entry__cluster, .entry__actions),
+.entry.is-open .entry__more :is(.entry__cluster, .entry__actions),
+.entry:has(.entry__more [aria-expanded='true']) .entry__more :is(.entry__cluster, .entry__actions) {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+@media (hover: hover) {
+  .entry:hover .entry__more :is(.entry__cluster, .entry__actions),
+  .entry:focus-within .entry__more :is(.entry__cluster, .entry__actions) {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
 }
 
 .entry__action {
@@ -6373,26 +6408,25 @@ button.entry__title:hover { color: var(--fg); }
 
 /* The typing. The untyped rest is laid out but not painted, so the paragraph
    is its final shape from the first frame; the caret is an inline span with no
-   width of its own, so it adds no break opportunity and never re-wraps a line. */
+   width of its own, so it adds no break opportunity and never re-wraps a line.
+
+   The caret is drawn by the span itself — its left border, around a word
+   joiner that gives it a line's height and no break — and the negative margin
+   hands its width back. It used to be an absolute ::after hung off an empty
+   span, and Safari on an iPhone left that where it first drew it until the
+   typing stopped, then jumped it to the end. A border is part of the line, so
+   it moves with every letter. */
 .typed__rest { visibility: hidden; }
 
-.typed__caret { position: relative; }
-
-.typed__caret::after {
-  content: '';
-  position: absolute;
-  left: 1px;
-  top: 0.18em;
-  bottom: 0.12em;
-  width: 1.5px;
-  border-radius: 1px;
-  background: var(--accent);
+.typed__caret {
+  border-left: 1.5px solid var(--accent);
+  margin-right: -1.5px;
 }
 
 /* Solid while it types. Done: two blinks, then gone — a caret blinking forever
    under the brief would be a perpetual animation, and every frame of one
    re-blurs the glass cards across the page. */
-.typed__caret.is-done::after {
+.typed__caret.is-done {
   animation: typed-done 2s steps(1) forwards;
 }
 

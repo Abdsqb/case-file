@@ -115,7 +115,7 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
     };
   }, []);
 
-  const sheetDrag = useSheetDrag(panelRef, close);
+  const sheetDrag = useSheetDrag(panelRef, close, open);
 
   useEffect(() => {
     if (!open) return undefined;

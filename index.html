@@ -22,6 +22,12 @@
          the app; see the imports at the top of src/main.jsx. -->
 
     <title>Case</title>
+
+    <!-- The ground, before the stylesheet has arrived: without it the first
+         frame on a phone is the browser's white, for as long as the CSS takes
+         over the network. Near enough every accent's own --bg to pass. -->
+    <meta name="color-scheme" content="dark" />
+    <style>html, body { background: #070807; }</style>
   </head>
 
   <body>

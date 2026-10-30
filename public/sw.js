@@ -7,7 +7,8 @@
 // v5: the mark became the orb on a disc — see public/favicon.svg.
 // v6: the mark became a folder tab over the entries, in turquoise.
 // v7: the sign-in screen, for the hosted app.
-const CACHE = 'case-file-v7';
+// v8: a dark first frame, and dark launch screens for the home-screen app.
+const CACHE = 'case-file-v8';
 const SHELL = ['/', '/index.html', '/manifest.json', '/favicon.svg', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', event => {

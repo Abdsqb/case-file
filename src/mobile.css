@@ -424,6 +424,11 @@
   /* New case as a + : the bar holds the folder, the open case and it. */
   .casebar__newlabel { display: none; }
   .casebar__new { padding-inline: 12px; min-width: 44px; }
+  /* The case picker takes what the bar has left, and its name gives way.
+     Two classes: IslandMenu.css, with the folder pill's flex: none, can load
+     after this file. */
+  .casebar .casepicker { flex: 0 1 auto; min-width: 0; max-width: none; }
+
   /* The hairline between Focus and New is room the case's name needs more. */
   .casebar__rule { display: none; }
   .casebar__right { gap: 8px; }

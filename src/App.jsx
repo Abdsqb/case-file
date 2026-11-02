@@ -9,6 +9,7 @@ import NotesDrawer, { OPEN_NOTES } from './ui/NotesDrawer.jsx';
 import Streak from './ui/Streak.jsx';
 import Standby from './ui/Standby.jsx';
 import TodayWindow, { OPEN_TODAY } from './ui/TodayWindow.jsx';
+import { usePhoneWidth } from './ui/island.js';
 import TopNav from './ui/TopNav.jsx';
 
 /* The dashboard is in the first bundle; the other five screens are chunks of
@@ -77,18 +78,6 @@ const NAV_ACTIONS = [
 ];
 // A phone opens the to-do from its own button at the bottom (TodayWindow).
 const PHONE_NAV_ACTIONS = NAV_ACTIONS.filter((a) => a.id !== 'today');
-const PHONE = '(max-width: 640px)';
-
-function usePhoneWidth() {
-  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(PHONE).matches);
-  useEffect(() => {
-    const mql = window.matchMedia(PHONE);
-    const on = () => setPhone(mql.matches);
-    mql.addEventListener('change', on);
-    return () => mql.removeEventListener('change', on);
-  }, []);
-  return phone;
-}
 
 // How long the longest card in a screen takes to finish assembling. The tail is
 // the case render's pin sequence, which finishes at ~1920ms; this keeps headroom

@@ -34,6 +34,21 @@ export const SPRINGS = (() => {
   return ok ? { '--pn-open': open, '--pn-close': close } : {};
 })();
 
+/* Whether this is a phone-width screen, the same line mobile.css draws, for
+   the few things that are a different control there rather than a restyle. */
+const PHONE = '(max-width: 640px)';
+export function usePhoneWidth() {
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(PHONE).matches);
+  useEffect(() => {
+    const mql = window.matchMedia(PHONE);
+    const on = () => setPhone(mql.matches);
+    on();
+    mql.addEventListener('change', on);
+    return () => mql.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
 export const CLOSE_DELAY = 180;  // grace before folding when the pointer leaves
 
 /**

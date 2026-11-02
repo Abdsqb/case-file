@@ -8,7 +8,9 @@
  * CaseTabsIsland the cases in that folder. Folded, it is just the open case
  *                (with its ⋯ menu); pointed at, it springs open sideways into
  *                all of them, in their order, still draggable to reorder.
- *                Pick one and it folds back around it.
+ *                Pick one and it folds back around it. On a phone, where a
+ *                sideways strip shows two cases at a time, it is a vertical
+ *                list instead, built like the folder switcher (CasePicker).
  *
  * Both are a clipping pill whose width (and, for the folder, height) runs on
  * the shared springs, with the full content inside slid so the current item
@@ -20,7 +22,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronsUpDown, Folder } from 'lucide-react';
 import { MenuButton, Segmented } from './primitives.jsx';
-import { SPRINGS, useIsland } from './island.js';
+import { SPRINGS, useIsland, usePhoneWidth } from './island.js';
 
 const ROW = 36;      // one row, and the folded height of both islands
 const TAB_X = 16;    // the tabs island's side padding
@@ -96,9 +98,8 @@ export function SegmentIsland({ items, value, onChange, onReorder, label, align 
       const room = vw <= 640
         ? (align === 'end' ? sr.right - edge.left : edge.right - sr.left)
         : (align === 'end' ? sr.right - br.left : br.right - sr.left);
-      /* Folded, though, it must fit its own bar: on a phone a long case name
-         ("Operating Systems") ran the pill in under the buttons beside it.
-         The name gives way, with an ellipsis (--fold-cap, motion.css); the ⋯
+      /* Folded, though, it must fit its own bar: on a phone a long name ran
+         the pill in under whatever was beside it. The name gives way, with an ellipsis (--fold-cap, motion.css); the ⋯
          beside it keeps its place. */
       if (vw <= 640 && active) {
         const fit = align === 'end' ? sr.right - br.left : br.right - sr.left;
@@ -233,5 +234,38 @@ export function SegmentIsland({ items, value, onChange, onReorder, label, align 
   );
 }
 
-/** The case bar's tabs: a SegmentIsland of the folder's cases. */
-export const CaseTabsIsland = SegmentIsland;
+/* ------------------------------------------------------------------ *
+ * CasePicker
+ * ------------------------------------------------------------------ */
+
+/**
+ * The cases on a phone: the open case in a pill, opening down into every case
+ * in the folder and, under a rule, what the desktop keeps in the open case's ⋯
+ * (the same order the folder switcher beside it has). Move up and Move down
+ * in there stand in for dragging a tab.
+ */
+function CasePicker({ items, value, onChange, label }) {
+  const current = items.find((item) => item.value === value) || items[0];
+  const rows = items.map((item) => ({
+    key: `case-${item.value}`,
+    label: item.label,
+    on: item.value === value,
+    onClick: () => { if (item.value !== value && onChange) onChange(item.value); },
+  }));
+  const actions = current?.menu || [];
+  return (
+    <MenuButton
+      items={actions.length ? [...rows, { sep: true, key: 'sep' }, ...actions] : rows}
+      label={`${label}, ${current?.label || 'none open'}`}
+      className="folder-island-trigger casepicker"
+    >
+      <span className="folder-island-trigger__label">{current?.label || 'Cases'}</span>
+      <ChevronsUpDown size={12} strokeWidth={1.8} aria-hidden="true" />
+    </MenuButton>
+  );
+}
+
+/** The case bar's cases: a SegmentIsland of them, or on a phone a CasePicker. */
+export function CaseTabsIsland(props) {
+  return usePhoneWidth() ? <CasePicker {...props} /> : <SegmentIsland {...props} />;
+}

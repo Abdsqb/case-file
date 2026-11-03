@@ -208,7 +208,8 @@
     transition: grid-template-rows 380ms cubic-bezier(0.22, 1, 0.3, 1);
   }
   .entry.is-expanded .entry__more,
-  .entry.is-open .entry__more { grid-template-rows: 1fr; }
+  .entry.is-open .entry__more,
+  html[data-mouse] .entry:hover .entry__more { grid-template-rows: 1fr; }
   .entry__moreinner {
     min-height: 0;
     overflow: hidden;
@@ -400,14 +401,14 @@
   /* A phone keeps :hover on whatever was last touched, so a hover look stays
      stuck on a row or a button after the finger has gone. The ones that read
      as a state rather than a highlight are taken back to rest. */
-  .iconmenu:hover:not([aria-expanded='true']) { background: transparent; color: inherit; }
-  .entry:hover:not(:focus-within) {
+  html:not([data-mouse]) .iconmenu:hover:not([aria-expanded='true']) { background: transparent; color: inherit; }
+  html:not([data-mouse]) .entry:hover:not(:focus-within) {
     transform: none;
     background: var(--bg-elevated);
     border-color: var(--border);
     box-shadow: none;
   }
-  .entry__action:not(.entry__action--today):not(.entry__action--danger):hover {
+  html:not([data-mouse]) .entry__action:not(.entry__action--today):not(.entry__action--danger):hover {
     background: transparent;
     border-color: var(--line);
     color: var(--fg-mid);

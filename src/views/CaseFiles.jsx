@@ -23,6 +23,7 @@ import { buildGraph } from '../lib/graph.js'
 import api from '../lib/api.js'
 import { applyWalk, siblingWalk } from '../lib/reorder.js'
 import { toggleToday, useToday } from '../lib/today.js'
+import { usingMouse } from '../lib/pointer.js'
 import {
   caseStats,
   globalStats,
@@ -311,7 +312,7 @@ function SubComposer({ disabled, onCreate, onCancel }) {
  * ------------------------------------------------------------------ */
 
 const isTouch = () =>
-  typeof window !== 'undefined' && window.matchMedia('(hover: none) and (pointer: coarse)').matches
+  !usingMouse() && window.matchMedia('(hover: none) and (pointer: coarse)').matches
 
 function EntryRow({
   entry,

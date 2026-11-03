@@ -2398,13 +2398,22 @@ input.entry__title-input:focus-visible { outline: none; box-shadow: none; }
   transform: none;
   pointer-events: auto;
 }
+/* data-mouse (lib/pointer.js) as well as the query: a touch-screen laptop can
+   report no hover at all with a mouse in use. Keyboard focus, not any focus: a
+   clicked button keeps focus, and the row would stay open after the mouse left. */
 @media (hover: hover) {
   .entry:hover .entry__more :is(.entry__cluster, .entry__actions),
-  .entry:focus-within .entry__more :is(.entry__cluster, .entry__actions) {
+  .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .entry__actions) {
     opacity: 1;
     transform: none;
     pointer-events: auto;
   }
+}
+html[data-mouse] .entry:hover .entry__more :is(.entry__cluster, .entry__actions),
+html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .entry__actions) {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
 }
 
 .entry__action {

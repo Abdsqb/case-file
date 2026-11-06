@@ -9,9 +9,9 @@
  *
  * It is driven entirely by the finger that held the button, which TodayWindow
  * hands over in the CORNER_WHEEL event (where the button's middle is, and the
- * pointer's id). Drawn like the big wheel (NavWheel): a frosted ring broken at
- * each section, the lit one in the accent, and a ring round the button with a
- * thicker run of it toward the choice.
+ * pointer's id). Plainer than the big wheel: the screens' icons in grey along
+ * the arc, the one pointed at in white with its name, and a ring round the
+ * button with a thicker run of it toward the choice.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -23,13 +23,11 @@ export const CORNER_WHEEL = 'casefile:corner-wheel';
 
 /* In px, around the button's middle. Angles in degrees, 0 to the right and
    clockwise, as on screen: 180 is left, 270 is up. */
-const R_IN = 92;
 const R_OUT = 176;
 const R_ICON = 134;
 const HUB = 31;
 const FROM = 180;
 const TO = 270;
-const GAP = 1.6;
 const NEAR = 44;          // a finger this close to the button points at nothing
 const LEAVE_MS = 260;
 
@@ -38,10 +36,6 @@ const pt = (r, deg) => {
   return [R_OUT + r * Math.cos(a), R_OUT + r * Math.sin(a)];
 };
 const f = (n) => n.toFixed(2);
-function sector(r1, r2, a0, a1) {
-  const [x1, y1] = pt(r2, a0), [x2, y2] = pt(r2, a1), [x3, y3] = pt(r1, a1), [x4, y4] = pt(r1, a0);
-  return `M${f(x1)} ${f(y1)}A${r2} ${r2} 0 0 1 ${f(x2)} ${f(y2)}L${f(x3)} ${f(y3)}A${r1} ${r1} 0 0 0 ${f(x4)} ${f(y4)}Z`;
-}
 function arc(r, a0, a1) {
   const [x1, y1] = pt(r, a0), [x2, y2] = pt(r, a1);
   return `M${f(x1)} ${f(y1)}A${r} ${r} 0 0 1 ${f(x2)} ${f(y2)}`;
@@ -52,7 +46,6 @@ export default function CornerWheel({ items, current, onPick }) {
   const n = items.length;
   const step = (TO - FROM) / Math.max(1, n - 1);
   const angleOf = (i) => FROM + i * step;
-  const span = (i) => [angleOf(i) - step / 2 + GAP / 2, angleOf(i) + step / 2 - GAP / 2];
 
   const [at, setAt] = useState(null);       // { x, y, pointerId } while it is up
   const [shown, setShown] = useState(false);
@@ -71,7 +64,7 @@ export default function CornerWheel({ items, current, onPick }) {
       clearTimeout(leaving.current);
       setHot(-1);
       setAt(e.detail);
-      requestAnimationFrame(() => requestAnimationFrame(() => setShown(true)));
+      requestAnimationFrame(() => setShown(true));
     };
     window.addEventListener(CORNER_WHEEL, onHold);
     return () => { window.removeEventListener(CORNER_WHEEL, onHold); clearTimeout(leaving.current); };
@@ -109,7 +102,6 @@ export default function CornerWheel({ items, current, onPick }) {
   if (!at) return null;
 
   const size = R_OUT * 2;
-  const band = items.map((_, i) => sector(R_IN, R_OUT, ...span(i))).join('');
   const turn = hot < 0 ? 0 : angleOf(hot);
 
   return (
@@ -119,9 +111,7 @@ export default function CornerWheel({ items, current, onPick }) {
         className="cornerwheel__origin"
         style={{ left: at.x - R_OUT, top: at.y - R_OUT, width: size, height: size }}
       >
-        <div className="cornerwheel__band" style={{ clipPath: `path('${band}')` }} />
         <svg className="cornerwheel__drawing" viewBox={`0 0 ${size} ${size}`}>
-          {hot >= 0 ? <path className="cornerwheel__wedge" d={sector(R_IN, R_OUT, ...span(hot))} /> : null}
           <circle className="cornerwheel__hub" cx={R_OUT} cy={R_OUT} r={HUB} />
           {hot >= 0 ? <path className="cornerwheel__rim" d={arc(HUB, turn - 16, turn + 16)} /> : null}
         </svg>

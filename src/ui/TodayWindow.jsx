@@ -26,7 +26,7 @@ import { Meter } from './primitives.jsx';
 import { useSheetDrag } from './sheet.js';
 import { CORNER_WHEEL } from './CornerWheel.jsx';
 
-const HOLD_MS = 320;   // held this long, the button opens the corner wheel instead
+const HOLD_MS = 200;   // held this long, the button opens the corner wheel instead
 
 /* Raised by the top island's "Today's to-do" row: the way in on a phone,
    which has no Shift+T. */

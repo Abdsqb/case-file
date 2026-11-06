@@ -549,6 +549,11 @@
   height: 36px;
   pointer-events: auto;
 }
+/* A desktop has Space for the menu wheel and no need of the name up here; a
+   phone keeps it, as what to tap. */
+@media (min-width: 641px) {
+  .pillnav { visibility: hidden; }
+}
 
 .pillnav__pill {
   position: absolute;

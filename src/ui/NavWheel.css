@@ -1,0 +1,139 @@
+/* ==========================================================================
+   NavWheel.css — the menu as a wheel (NavWheel.jsx).
+
+   As little as it can be: a hub ringed in white with a faint light off it, a
+   thicker run of that ring toward the choice, the sections as small icons
+   with a name under each, and the one pointed at lit as a see-through wedge
+   in the accent with a fine edge. No disc, no dividers, no track.
+
+   Order: the ground darkens first and the wheel arrives on it; leaving, the
+   wheel goes first and the ground lifts after.
+   ========================================================================== */
+
+.navwheel {
+  position: fixed;
+  inset: 0;
+  z-index: 300;               /* over the sheets and the notes pad; standby stays above */
+  display: grid;
+  place-items: center;
+  touch-action: none;         /* a finger can press and slide to a section */
+  -webkit-user-select: none;
+  user-select: none;
+  outline: none;
+}
+
+.navwheel__ground {
+  position: absolute;
+  inset: 0;
+  background: rgba(1, 2, 2, 0.95);
+  opacity: 0;
+  transition: opacity 180ms ease 140ms;     /* leaving: after the wheel */
+}
+.navwheel.is-shown .navwheel__ground {
+  opacity: 1;
+  transition: opacity 180ms ease;           /* arriving: first */
+}
+
+/* 380 units across at about 506px on a desktop, so the hub is the size it was
+   designed at; on a phone it takes most of the width. */
+.navwheel__disc {
+  position: relative;
+  width: min(94vw, 506px);
+  aspect-ratio: 1;
+  opacity: 0;
+  transform: scale(0.94);
+  transition: opacity 150ms ease, transform 160ms cubic-bezier(0.4, 0, 1, 1);
+}
+.navwheel.is-shown .navwheel__disc {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 220ms ease 140ms,
+    transform 280ms cubic-bezier(0.22, 1, 0.3, 1) 140ms;
+}
+
+.navwheel__drawing {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* The wedge and the rim's thick run turn together, the short way round. */
+.navwheel__mover {
+  transform-box: view-box;
+  transform-origin: 190px 190px;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.3, 1), opacity 140ms ease;
+}
+.navwheel.is-instant .navwheel__mover { transition: none; }
+
+.navwheel__wedge {
+  fill: rgba(var(--accent-rgb), 0.2);
+  stroke: rgba(var(--accent-rgb), 0.75);
+  stroke-width: 0.7;
+  stroke-linejoin: round;
+}
+.navwheel__halo {
+  fill: none;
+  stroke: rgb(var(--accent-rgb));
+  stroke-width: 4;
+  opacity: 0.16;
+}
+.navwheel__hub {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.86);
+  stroke-width: 1.1;
+}
+.navwheel__rim {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.8;
+}
+
+/* The sections: placed in the drawing's units, sized in the page's. */
+.navwheel__items {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.navwheel__items li {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+.navwheel__item {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font: 400 11px/1.2 var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+.navwheel__item svg {
+  width: 18px;
+  height: 18px;
+  color: rgba(255, 255, 255, 0.78);
+  transition: color 140ms ease;
+}
+.navwheel__item.is-hot,
+.navwheel__item.is-hot svg,
+.navwheel__item.is-current { color: #fff; }
+.navwheel__item:focus-visible { outline: none; }
+
+/* A phone: bigger names and icons, for a thumb and for reading at arm's length. */
+@media (max-width: 640px) {
+  .navwheel__item { font-size: 12px; gap: 6px; }
+  .navwheel__item svg { width: 21px; height: 21px; }
+}
+
+.navwheel.is-still .navwheel__ground,
+.navwheel.is-still .navwheel__disc,
+.navwheel.is-still .navwheel__mover { transition: none; }

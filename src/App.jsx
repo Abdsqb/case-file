@@ -9,7 +9,7 @@ import NotesDrawer, { OPEN_NOTES } from './ui/NotesDrawer.jsx';
 import Streak from './ui/Streak.jsx';
 import Standby from './ui/Standby.jsx';
 import TodayWindow, { OPEN_TODAY } from './ui/TodayWindow.jsx';
-import { usePhoneWidth } from './ui/island.js';
+import NavWheel from './ui/NavWheel.jsx';
 import TopNav from './ui/TopNav.jsx';
 
 /* The dashboard is in the first bundle; the other five screens are chunks of
@@ -69,15 +69,13 @@ const NAV = [
   { id: 'settings', label: 'Settings' },
 ];
 
-/* Under the screens in the top island: the two things that open over the
-   page. Shift+T and Shift+N on a keyboard; on a phone, these rows. Defined
-   once, out here, so the island does not re-measure on every render. */
+/* After the screens on the menu wheel: the two things that open over the
+   page. Shift+T and Shift+N on a keyboard; on a phone, these. */
 const NAV_ACTIONS = [
   { id: 'today', label: "Today's to-do", hint: 'Shift+T', run: () => window.dispatchEvent(new Event(OPEN_TODAY)) },
   { id: 'notes', label: 'Notes', hint: 'Shift+N', run: () => window.dispatchEvent(new Event(OPEN_NOTES)) },
 ];
-// A phone opens the to-do from its own button at the bottom (TodayWindow).
-const PHONE_NAV_ACTIONS = NAV_ACTIONS.filter((a) => a.id !== 'today');
+const WHEEL = [...NAV, ...NAV_ACTIONS];
 
 // How long the longest card in a screen takes to finish assembling. The tail is
 // the case render's pin sequence, which finishes at ~1920ms; this keeps headroom
@@ -116,7 +114,9 @@ export default function App() {
   const [projects, setProjects] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
-  const phone = usePhoneWidth();
+  const [wheelOpen, setWheelOpen] = useState(false);
+  const openWheel = useCallback(() => setWheelOpen(true), []);
+  const closeWheel = useCallback(() => setWheelOpen(false), []);
   // The view lives in the hash so sections are linkable and the browser's back
   // button works. Anything unrecognised falls back to the dashboard.
   const [view, setView] = useState(() => readHash());
@@ -281,7 +281,7 @@ export default function App() {
         ) : null}
 
         {/* No bar: one pill naming this screen, which opens into the rest. */}
-        <TopNav items={NAV} current={view} onGo={go} actions={phone ? PHONE_NAV_ACTIONS : NAV_ACTIONS} />
+        <TopNav items={NAV} current={view} open={wheelOpen} onOpen={openWheel} />
       </header>
 
       <main className="shell" id="main">
@@ -308,6 +308,16 @@ export default function App() {
       {/* Last, and above everything: left alone for a minute the app goes soft
           behind a clock. It covers the pad and its tab as well, which is the
           point — standby is about the window, not about a screen. */}
+      {/* The menu: from the top pill, or Space anywhere. */}
+      <NavWheel
+        items={WHEEL}
+        current={view}
+        open={wheelOpen}
+        onOpen={openWheel}
+        onClose={closeWheel}
+        onPick={(item) => (item.run ? item.run() : go(item.id))}
+      />
+
       <Standby />
       </div>
 

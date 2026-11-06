@@ -130,7 +130,7 @@
     --panel-blur: none;
     --panel: rgba(var(--panel-rgb), 0.9);
   }
-  *:not(.signin__panel):not(.todo):not(.notes):not(.standby):not(.navwheel__band) {
+  *:not(.signin__panel):not(.todo):not(.notes):not(.standby):not(.navwheel__band):not(.cornerwheel__band) {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
   }
@@ -345,6 +345,11 @@
 .todofab { display: none; }
 @media (max-width: 640px) {
   .todofab {
+    /* Held, it becomes the corner wheel's hub: no scrolling, no callout. */
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
     position: fixed;
     right: max(18px, env(safe-area-inset-right));
     bottom: calc(18px + env(safe-area-inset-bottom));

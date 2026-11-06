@@ -24,6 +24,9 @@ import { dayDiff } from '../lib/metrics.js';
 import { answerOffer, removeFromToday, reorderToday, useToday } from '../lib/today.js';
 import { Meter } from './primitives.jsx';
 import { useSheetDrag } from './sheet.js';
+import { CORNER_WHEEL } from './CornerWheel.jsx';
+
+const HOLD_MS = 320;   // held this long, the button opens the corner wheel instead
 
 /* Raised by the top island's "Today's to-do" row: the way in on a phone,
    which has no Shift+T. */
@@ -83,6 +86,7 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
   const offered = today.offer ? today.offer.taskIds.filter((id) => index.has(id)) : [];
 
   const panelRef = useRef(null);
+  const hold = useRef(null);
   const returnTo = useRef(null);
 
   const close = useCallback(() => setOpen(false), []);
@@ -381,7 +385,33 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
       <button
         type="button"
         className={cx('todofab', open && 'is-hidden')}
-        onClick={() => setOpen(true)}
+        /* A tap opens the list. Held, it hands the finger to the corner wheel
+           (CornerWheel.jsx): the screens fan out from here, a slide picks one,
+           and lifting opens it. Capture keeps the finger's moves coming here
+           wherever it slides. */
+        onPointerDown={(e) => {
+          if (e.button > 0) return;
+          const b = e.currentTarget;
+          try { b.setPointerCapture(e.pointerId); } catch { /* gone */ }
+          const r = b.getBoundingClientRect();
+          const id = e.pointerId;
+          clearTimeout(hold.current?.t);
+          hold.current = { fired: false, t: 0 };
+          hold.current.t = setTimeout(() => {
+            hold.current.fired = true;
+            navigator.vibrate?.(8);
+            window.dispatchEvent(new CustomEvent(CORNER_WHEEL, {
+              detail: { x: r.left + r.width / 2, y: r.top + r.height / 2, pointerId: id },
+            }));
+          }, HOLD_MS);
+        }}
+        onPointerUp={() => clearTimeout(hold.current?.t)}
+        onPointerCancel={() => clearTimeout(hold.current?.t)}
+        onContextMenu={(e) => e.preventDefault()}
+        onClick={() => {
+          if (hold.current?.fired) { hold.current = null; return; }   // that was a hold
+          setOpen(true);
+        }}
         aria-label={openCount ? `Today's to-do, ${openCount} open` : "Today's to-do"}
         tabIndex={open ? -1 : undefined}
       >

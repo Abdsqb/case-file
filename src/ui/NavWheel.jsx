@@ -24,7 +24,7 @@ import { CalendarDays, ChartColumn, Folder, LayoutGrid, ListTodo, NotebookPen, S
 import { SPRINGS } from './island.js';
 import './NavWheel.css';
 
-const ICONS = {
+export const ICONS = {
   dashboard: LayoutGrid,
   cases: Folder,
   reporting: ChartColumn,

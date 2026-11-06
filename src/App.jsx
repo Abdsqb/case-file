@@ -10,6 +10,7 @@ import Streak from './ui/Streak.jsx';
 import Standby from './ui/Standby.jsx';
 import TodayWindow, { OPEN_TODAY } from './ui/TodayWindow.jsx';
 import NavWheel from './ui/NavWheel.jsx';
+import CornerWheel from './ui/CornerWheel.jsx';
 import { usePhoneWidth } from './ui/island.js';
 import TopNav from './ui/TopNav.jsx';
 
@@ -320,6 +321,9 @@ export default function App() {
         onClose={closeWheel}
         onPick={(item) => (item.run ? item.run() : go(item.id))}
       />
+
+      {/* A phone: the screens, fanned out of the held to-do button. */}
+      <CornerWheel items={NAV} current={view} onPick={(item) => go(item.id)} />
 
       <Standby />
       </div>

@@ -32,12 +32,15 @@ import { BACKDROPS, DEFAULT_BACKDROP, paintStill, readColours } from '../ui/back
 import {
   ACCENTS,
   BLURS,
+  RADII,
   DEFAULT_ACCENT,
   DEFAULT_BLUR,
+  DEFAULT_RADIUS,
   KEY_ACCENT,
   KEY_BACKDROP,
   KEY_BACKDROP_BLUR,
   KEY_PARALLAX,
+  KEY_RADIUS,
   KEY_REDUCED_MOTION,
   KEY_WEEK_START,
   applyAccentPreference,
@@ -47,6 +50,7 @@ import {
   readAccent,
   readBackdrop,
   readBackdropBlur,
+  readRadius,
   readSetting,
   useSetting,
   writeSetting,
@@ -838,6 +842,8 @@ export function Settings({ projects, now }) {
   const backdrop = useSetting(KEY_BACKDROP, DEFAULT_BACKDROP)
   useSetting(KEY_BACKDROP_BLUR, '')
   const blur = readBackdropBlur()
+  useSetting(KEY_RADIUS, '')
+  const radius = readRadius()
 
   const stats = useMemo(() => globalStats(cases, clock), [cases, clock])
   /* Asked once. The answer is a function of .env, which cannot change without
@@ -891,6 +897,20 @@ export function Settings({ projects, now }) {
                 <AccentPicker
                   value={accent}
                   onChange={(next) => writeSetting(KEY_ACCENT, next === DEFAULT_ACCENT ? null : next)}
+                />
+              </SettingRow>
+
+              <SettingRow
+                title="Corner radius"
+                hint="How round the corners of cards and windows are. Square is a hard corner; Rounder is the old look."
+              >
+                <PillSelect
+                  className="island-select"
+                  align="end"
+                  options={RADII}
+                  value={radius}
+                  onChange={(next) => writeSetting(KEY_RADIUS, next === DEFAULT_RADIUS ? null : next)}
+                  label="Corner radius"
                 />
               </SettingRow>
 

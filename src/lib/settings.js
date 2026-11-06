@@ -41,6 +41,7 @@ export const KEY_WEEK_START = 'weekStart'
 export const KEY_ACCENT = 'accent'
 export const KEY_BACKDROP = 'backdrop'
 export const KEY_BACKDROP_BLUR = 'backdropBlur'
+export const KEY_RADIUS = 'radius'
 
 /* How much the light behind the glass is diffused, in CSS px of blur. The
    second is the default: a breath of haze, enough to soften the strands
@@ -58,6 +59,25 @@ export const DEFAULT_BLUR = BLURS[1].value
 export function readBackdropBlur() {
   const raw = Number(readRaw(KEY_BACKDROP_BLUR))
   return BLURS.some((b) => b.value === raw) && readRaw(KEY_BACKDROP_BLUR) !== null ? raw : DEFAULT_BLUR
+}
+
+/* How round a panel's corners are, in px. Cards, the to-do window and the
+   notes pad all take --radius, and the corner strokes follow it. The second
+   is the default, the one styles.css has: square with the edge taken off. */
+export const RADII = [
+  { value: 0, label: 'Square' },
+  { value: 3, label: 'Edge' },
+  { value: 6, label: 'Slight' },
+  { value: 8, label: 'Soft' },
+  { value: 12, label: 'Round' },
+  { value: 16, label: 'Rounder' },
+]
+export const DEFAULT_RADIUS = RADII[1].value
+
+/** The stored radius, or the default when it is missing or not one we offer. */
+export function readRadius() {
+  const raw = readRaw(KEY_RADIUS)
+  return raw !== null && RADII.some((r) => r.value === Number(raw)) ? Number(raw) : DEFAULT_RADIUS
 }
 
 /* The order the swatches sit in. Each id has a block in styles.css under
@@ -256,6 +276,18 @@ export function applyAccentPreference() {
   else root.dataset.accent = accent
 }
 
+/* ------------------------------------------------------------------ *
+ * radius — set as --radius on <html>, over the stylesheet's default
+ * ------------------------------------------------------------------ */
+
+export function applyRadiusPreference() {
+  if (typeof document === 'undefined') return
+  const r = readRadius()
+  const root = document.documentElement
+  if (r === DEFAULT_RADIUS) root.style.removeProperty('--radius')
+  else root.style.setProperty('--radius', r + 'px')
+}
+
 // Applied at import time so the preferences survive a reload even when the
 // user never opens this view, and re-applied whenever anything (including
 // another tab) changes them. Registered before any React subscriber, so the
@@ -263,6 +295,7 @@ export function applyAccentPreference() {
 export function applyPreferences() {
   applyMotionPreference()
   applyAccentPreference()
+  applyRadiusPreference()
 }
 
 if (typeof window !== 'undefined') {

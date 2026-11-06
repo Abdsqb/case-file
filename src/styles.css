@@ -7257,19 +7257,17 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
 }
 
 /* ==========================================================================
-   EXPERIMENT: cards without their glass.
-   The page's cards lose their fill, blur and shadow and keep only their
-   contents and their four corners. Not the to-do window, which floats over
-   the page and needs its ground to be read. One block, so it comes out whole.
+   EXPERIMENT: the dashboard's cards without their glass.
+   On the dashboard only, the cards lose their fill, blur and shadow and keep
+   only their contents and their four corners; every other screen's cards
+   keep their ground. One block, so it comes out whole.
    ========================================================================== */
-.card:not(.todo):not(.card--flat),
 .card.dash__card {
   background: transparent;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;
 }
-.flowcard::before,
 .dash__card--flow.flowcard::before {
   background: transparent;
   -webkit-backdrop-filter: none;

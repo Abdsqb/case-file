@@ -63,10 +63,16 @@
     opacity 160ms ease calc(var(--i, 0) * 12ms),
     color 120ms ease;
 }
-.cornerwheel__item svg { width: 22px; height: 22px; }
+/* The one pointed at grows while it is; its name steps down to clear it. */
+.cornerwheel__item svg {
+  width: 22px;
+  height: 22px;
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.cornerwheel__item.is-hot svg { transform: scale(1.4); }
 .cornerwheel__item span {
   position: absolute;
-  top: calc(100% + 2px);
+  top: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
   font: 500 12px/1 var(--font);

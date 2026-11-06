@@ -23,12 +23,12 @@ export const CORNER_WHEEL = 'casefile:corner-wheel';
 
 /* In px, around the button's middle. Angles in degrees, 0 to the right and
    clockwise, as on screen: 180 is left, 270 is up. */
-const R_OUT = 206;
-const R_ICON = 168;       // well off the corner, and room between the icons
+const R_OUT = 250;
+const R_ICON = 215;       // well off the corner, and room between the icons
 const HUB = 31;
 const FROM = 180;
 const TO = 270;
-const NEAR = 48;          // a finger this close to the button points at nothing
+const NEAR = 56;          // a finger this close to the button points at nothing
 const LEAVE_MS = 260;
 
 const pt = (r, deg) => {

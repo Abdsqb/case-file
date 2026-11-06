@@ -204,6 +204,7 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
     >
       <div className="navwheel__ground" />
       <div className="navwheel__disc" ref={discRef}>
+        <div className="navwheel__band" aria-hidden="true" />
         <svg className="navwheel__drawing" viewBox={`0 0 ${BOX} ${BOX}`} aria-hidden="true">
           <defs>
             <filter id="navwheel-halo" x="-100%" y="-100%" width="300%" height="300%">

@@ -125,7 +125,7 @@
   --pin-late:      var(--red);
   --pin-done:      var(--accent);
 
-  --radius:        16px;      /* panels */
+  --radius:        12px;      /* panels */
   --radius-sm:     10px;      /* inner tiles, inputs */
   --radius-xs:     8px;       /* icon buttons */
   --radius-pill:   999px;

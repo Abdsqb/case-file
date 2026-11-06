@@ -55,12 +55,12 @@
 }
 
 /* The ring the sections sit in has a ground of its own: dark, see-through,
-   and blurring what is behind it, from the wedge's inner edge (100 units) to
-   its outer (178). The box is the outer circle; the mask cuts the middle out
-   at 100/178 of its radius. */
+   and blurring what is behind it, from the wedge's inner edge (70 units) to
+   its outer (125). The box is the outer circle; the mask cuts the middle out
+   at 70/125 of its radius. */
 .navwheel__band {
   position: absolute;
-  inset: calc(12 / 380 * 100%);
+  inset: calc(65 / 380 * 100%);
   border-radius: 50%;
   /* Light enough to see the page through it, softened: at 14px and over
      half black, what was behind blurred away to nothing and the ring read
@@ -73,14 +73,14 @@
      half a section round from the top). --seg and --gap come from
      NavWheel.jsx, in degrees. */
   -webkit-mask:
-    radial-gradient(closest-side, transparent 56.2%, #000 56.4%),
+    radial-gradient(closest-side, transparent 55.9%, #000 56.1%),
     repeating-conic-gradient(
       from calc(var(--seg) / 2 + var(--gap) / 2),
       #000 0deg calc(var(--seg) - var(--gap)),
       transparent calc(var(--seg) - var(--gap)) var(--seg));
   -webkit-mask-composite: source-in;
   mask:
-    radial-gradient(closest-side, transparent 56.2%, #000 56.4%),
+    radial-gradient(closest-side, transparent 55.9%, #000 56.1%),
     repeating-conic-gradient(
       from calc(var(--seg) / 2 + var(--gap) / 2),
       #000 0deg calc(var(--seg) - var(--gap)),

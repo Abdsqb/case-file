@@ -10,8 +10,10 @@
  * closes the wheel. On a touch screen a finger can also press, slide toward
  * a section and let go.
  *
- * It opens from the top pill or on Space, and keys work as well: the arrows
- * go round, Enter opens, 1–7 jump, Escape or Space closes.
+ * Space is press-and-hold: holding it brings the wheel, pointing lights a
+ * section, and letting go opens it. From the top pill it stays open until a
+ * click; there keys work as well: the arrows go round, Enter opens, 1–7 jump,
+ * Escape or a press of Space closes.
  *
  * The ground darkens first and the wheel arrives on it; leaving, the wheel
  * goes first and the ground lifts after (NavWheel.css).
@@ -35,8 +37,8 @@ const ICONS = {
 const BOX = 380;
 const C = BOX / 2;
 const HUB = 30;              // the hub's ring
-const W1 = 100, W2 = 178;    // the lit wedge's inner and outer edge
-const IR = 138;              // where each section's icon and name sit
+const W1 = 70, W2 = 125;     // the lit wedge's inner and outer edge
+const IR = 97;               // where each section's icon and name sit
 const RIM = 16;              // half the thick run of rim, in degrees
 const GAP = 1.6;             // degrees between one section and the next
 const LEAVE_MS = 320;        // the wheel out, then the ground (NavWheel.css)
@@ -75,6 +77,11 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
   const discRef = useRef(null);
   const returnTo = useRef(null);
   const press = useRef(null);
+  /* Space held since it opened the wheel: letting go opens what is lit.
+     Kept in refs, read by a keyup listener that is always there, so even a
+     release a few milliseconds after the press is caught. */
+  const held = useRef(false);
+  const hotRef = useRef(-1);
   const [mounted, setMounted] = useState(false);   // in the page at all
   const [shown, setShown] = useState(false);       // arrived (the transitions run between the two)
   const [hot, setHot] = useState(-1);
@@ -83,6 +90,7 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
 
   /* Point at section i. The wedge and the rim take the short way round. */
   const aim = useCallback((i) => {
+    hotRef.current = i;
     setHot(i);
     setTurn((from) => {
       let to = i * SEG;
@@ -97,6 +105,7 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
       returnTo.current = document.activeElement;
       const here = Math.max(0, items.findIndex((it) => it.id === current));
       setInstant(true);
+      hotRef.current = here;
       setHot(here);
       setTurn(here * SEG);
       setMounted(true);
@@ -126,6 +135,7 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
       if (e.key !== ' ' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
       if (spaceIsTheirs(e.target)) return;
       e.preventDefault();
+      held.current = true;
       onOpen();
     };
     window.addEventListener('keydown', onKey);
@@ -134,14 +144,33 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
 
   const choose = useCallback((i) => {
     onClose();
-    if (i >= 0) onPick(items[i]);
-  }, [items, onClose, onPick]);
+    // Landing on the screen already open is just closing.
+    if (i >= 0 && items[i].id !== current) onPick(items[i]);
+  }, [items, current, onClose, onPick]);
+
+  /* Hold Space, point, let go: the release opens what is lit. */
+  useEffect(() => {
+    const onUp = (e) => {
+      if (e.key !== ' ' || !held.current) return;
+      held.current = false;
+      e.preventDefault();
+      choose(hotRef.current);
+    };
+    window.addEventListener('keyup', onUp, true);
+    return () => window.removeEventListener('keyup', onUp, true);
+  }, [choose]);
 
   // Keys while it is open.
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
-      if (e.key === 'Escape' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onClose(); return; }
+      if (e.key === 'Escape') { held.current = false; e.preventDefault(); e.stopPropagation(); onClose(); return; }
+      if (e.key === ' ') {
+        // Held down: the keyup decides. A fresh press, with the wheel opened from the pill: close.
+        e.preventDefault(); e.stopPropagation();
+        if (!e.repeat && !held.current) onClose();
+        return;
+      }
       const at = hot < 0 ? 0 : hot;
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); aim((at + 1) % N); }
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); aim((at - 1 + N) % N); }

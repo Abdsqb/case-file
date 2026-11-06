@@ -970,7 +970,7 @@ summary:focus-visible,
   position: absolute;
   inset: 0;
   z-index: 3;
-  border: 1.5px solid rgba(255, 255, 255, 0.42);
+  border: 2px solid rgba(255, 255, 255, 0.42);
   border-radius: inherit;
   pointer-events: none;
   -webkit-mask:

@@ -68,8 +68,24 @@
   background: rgba(2, 4, 5, 0.32);
   -webkit-backdrop-filter: blur(6px) saturate(1.1);
   backdrop-filter: blur(6px) saturate(1.1);
-  -webkit-mask: radial-gradient(closest-side, transparent 56.2%, #000 56.4%);
-  mask: radial-gradient(closest-side, transparent 56.2%, #000 56.4%);
+  /* Two masks, both kept where they agree: the ring (radial), and the
+     sections with a hairline gap between each (conic, from the boundary
+     half a section round from the top). --seg and --gap come from
+     NavWheel.jsx, in degrees. */
+  -webkit-mask:
+    radial-gradient(closest-side, transparent 56.2%, #000 56.4%),
+    repeating-conic-gradient(
+      from calc(var(--seg) / 2 + var(--gap) / 2),
+      #000 0deg calc(var(--seg) - var(--gap)),
+      transparent calc(var(--seg) - var(--gap)) var(--seg));
+  -webkit-mask-composite: source-in;
+  mask:
+    radial-gradient(closest-side, transparent 56.2%, #000 56.4%),
+    repeating-conic-gradient(
+      from calc(var(--seg) / 2 + var(--gap) / 2),
+      #000 0deg calc(var(--seg) - var(--gap)),
+      transparent calc(var(--seg) - var(--gap)) var(--seg));
+  mask-composite: intersect;
 }
 
 .navwheel__drawing {

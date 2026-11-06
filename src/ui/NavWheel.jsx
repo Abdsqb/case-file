@@ -38,6 +38,7 @@ const HUB = 30;              // the hub's ring
 const W1 = 100, W2 = 178;    // the lit wedge's inner and outer edge
 const IR = 138;              // where each section's icon and name sit
 const RIM = 16;              // half the thick run of rim, in degrees
+const GAP = 1.6;             // degrees between one section and the next
 const LEAVE_MS = 320;        // the wheel out, then the ground (NavWheel.css)
 
 const pt = (r, deg) => {
@@ -204,7 +205,7 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
     >
       <div className="navwheel__ground" />
       <div className="navwheel__disc" ref={discRef}>
-        <div className="navwheel__band" aria-hidden="true" />
+        <div className="navwheel__band" aria-hidden="true" style={{ '--seg': `${SEG}deg`, '--gap': `${GAP}deg` }} />
         <svg className="navwheel__drawing" viewBox={`0 0 ${BOX} ${BOX}`} aria-hidden="true">
           <defs>
             <filter id="navwheel-halo" x="-100%" y="-100%" width="300%" height="300%">
@@ -212,7 +213,7 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
             </filter>
           </defs>
           <g className="navwheel__mover" style={spin}>
-            <path className="navwheel__wedge" d={sector(W1, W2, -90 - SEG / 2, -90 + SEG / 2)} />
+            <path className="navwheel__wedge" d={sector(W1, W2, -90 - SEG / 2 + GAP / 2, -90 + SEG / 2 - GAP / 2)} />
           </g>
           <circle className="navwheel__halo" cx={C} cy={C} r={HUB + 3} filter="url(#navwheel-halo)" />
           <circle className="navwheel__hub" cx={C} cy={C} r={HUB} />

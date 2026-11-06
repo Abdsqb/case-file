@@ -99,15 +99,15 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
       setHot(here);
       setTurn(here * SEG);
       setMounted(true);
-      let id2 = 0;
-      const id1 = requestAnimationFrame(() => {
-        id2 = requestAnimationFrame(() => {
-          setInstant(false);
-          setShown(true);
-          rootRef.current?.focus({ preventScroll: true });
-        });
+      /* One frame in the page at rest, so the transitions have a start;
+         then shown. */
+      const id = requestAnimationFrame(() => {
+        rootRef.current?.getBoundingClientRect();
+        setInstant(false);
+        setShown(true);
+        rootRef.current?.focus({ preventScroll: true });
       });
-      return () => { cancelAnimationFrame(id1); cancelAnimationFrame(id2); };
+      return () => cancelAnimationFrame(id);
     }
     setShown(false);
     const t = setTimeout(() => setMounted(false), still() ? 0 : LEAVE_MS);

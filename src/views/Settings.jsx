@@ -41,6 +41,7 @@ import {
   KEY_BACKDROP_BLUR,
   KEY_PARALLAX,
   KEY_RADIUS,
+  KEY_CARD_GLASS,
   KEY_REDUCED_MOTION,
   KEY_WEEK_START,
   applyAccentPreference,
@@ -844,6 +845,7 @@ export function Settings({ projects, now }) {
   const blur = readBackdropBlur()
   useSetting(KEY_RADIUS, '')
   const radius = readRadius()
+  const cardGlass = useSetting(KEY_CARD_GLASS, true)
 
   const stats = useMemo(() => globalStats(cases, clock), [cases, clock])
   /* Asked once. The answer is a function of .env, which cannot change without
@@ -911,6 +913,17 @@ export function Settings({ projects, now }) {
                   value={radius}
                   onChange={(next) => writeSetting(KEY_RADIUS, next === DEFAULT_RADIUS ? null : next)}
                   label="Corner radius"
+                />
+              </SettingRow>
+
+              <SettingRow
+                title="Card backgrounds"
+                hint="The frosted glass behind each card. Off, a card is its contents and its four corners. The dashboard's cards have none either way."
+              >
+                <Toggle
+                  checked={cardGlass}
+                  onChange={(next) => writeSetting(KEY_CARD_GLASS, next ? null : false)}
+                  label={<SwitchState name="Card backgrounds" on={cardGlass} />}
                 />
               </SettingRow>
 

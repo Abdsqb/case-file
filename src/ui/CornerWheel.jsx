@@ -23,12 +23,12 @@ export const CORNER_WHEEL = 'casefile:corner-wheel';
 
 /* In px, around the button's middle. Angles in degrees, 0 to the right and
    clockwise, as on screen: 180 is left, 270 is up. */
-const R_OUT = 176;
-const R_ICON = 134;
+const R_OUT = 206;
+const R_ICON = 168;       // well off the corner, and room between the icons
 const HUB = 31;
 const FROM = 180;
 const TO = 270;
-const NEAR = 44;          // a finger this close to the button points at nothing
+const NEAR = 48;          // a finger this close to the button points at nothing
 const LEAVE_MS = 260;
 
 const pt = (r, deg) => {
@@ -118,11 +118,13 @@ export default function CornerWheel({ items, current, onPick }) {
         {items.map((it, i) => {
           const [x, y] = pt(R_ICON, angleOf(i));
           const Icon = ICONS[it.id];
+          // Where it comes out from: most of the way back to the button.
+          const from = { '--dx': `${f((R_OUT - x) * 0.7)}px`, '--dy': `${f((R_OUT - y) * 0.7)}px` };
           return (
             <div
               key={it.id}
               className={cx('cornerwheel__item', i === hot && 'is-hot', it.id === current && 'is-current')}
-              style={{ left: x, top: y, '--i': i }}
+              style={{ left: x, top: y, '--i': i, ...from }}
             >
               {Icon ? <Icon strokeWidth={1.6} /> : null}
               <span>{it.label}</span>

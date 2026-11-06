@@ -19,6 +19,7 @@
  *   casefile.accent          'violet' (default) | 'white' | 'red' | 'green' | 'turquoise' | 'ember'
  *   casefile.backdrop        'silk' (default) | any other id in ui/backdrops.js
  *   casefile.backdropBlur    '0' | '1.5' (default) | '3' | '6' | '12' — px of blur over it
+ *   casefile.cardGlass       'on' (default) | 'off' — the glass behind each card
  *
  * Other views read these with the exported `useSetting(key, fallback)` hook.
  * Every read is wrapped in try/catch: a corrupt value, a disabled storage
@@ -42,6 +43,7 @@ export const KEY_ACCENT = 'accent'
 export const KEY_BACKDROP = 'backdrop'
 export const KEY_BACKDROP_BLUR = 'backdropBlur'
 export const KEY_RADIUS = 'radius'
+export const KEY_CARD_GLASS = 'cardGlass'
 
 /* How much the light behind the glass is diffused, in CSS px of blur. The
    second is the default: a breath of haze, enough to soften the strands
@@ -288,6 +290,18 @@ export function applyRadiusPreference() {
   else root.style.setProperty('--radius', r + 'px')
 }
 
+/* ------------------------------------------------------------------ *
+ * card glass — off, <html> carries data-cards="bare" (styles.css)
+ * ------------------------------------------------------------------ */
+
+export function applyCardGlassPreference() {
+  if (typeof document === 'undefined') return
+  const on = coerce(readRaw(KEY_CARD_GLASS), true)
+  const root = document.documentElement
+  if (on) root.removeAttribute('data-cards')
+  else root.dataset.cards = 'bare'
+}
+
 // Applied at import time so the preferences survive a reload even when the
 // user never opens this view, and re-applied whenever anything (including
 // another tab) changes them. Registered before any React subscriber, so the
@@ -296,6 +310,7 @@ export function applyPreferences() {
   applyMotionPreference()
   applyAccentPreference()
   applyRadiusPreference()
+  applyCardGlassPreference()
 }
 
 if (typeof window !== 'undefined') {

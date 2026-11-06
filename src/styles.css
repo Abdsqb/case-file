@@ -7274,3 +7274,18 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
   backdrop-filter: none;
   box-shadow: none;
 }
+
+/* Settings → Card backgrounds, off: every card as the dashboard's are. Not
+   the to-do window, which floats over the page and needs its ground. */
+[data-cards='bare'] .card:not(.todo):not(.card--flat) {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+[data-cards='bare'] .flowcard::before {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}

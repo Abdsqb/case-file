@@ -27,6 +27,7 @@ import { useSheetDrag } from './sheet.js';
 import { CORNER_WHEEL } from './CornerWheel.jsx';
 
 const HOLD_MS = 200;   // held this long, the button opens the corner wheel instead
+const SLIDE_PX = 10;   // or slid this far off it, at once
 
 /* Raised by the top island's "Today's to-do" row: the way in on a phone,
    which has no Shift+T. */
@@ -396,14 +397,24 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
           const r = b.getBoundingClientRect();
           const id = e.pointerId;
           clearTimeout(hold.current?.t);
-          hold.current = { fired: false, t: 0 };
-          hold.current.t = setTimeout(() => {
-            hold.current.fired = true;
+          const h = { fired: false, t: 0, x: e.clientX, y: e.clientY, id };
+          h.fire = () => {
+            if (h.fired) return;
+            h.fired = true;
+            clearTimeout(h.t);
             navigator.vibrate?.(8);
             window.dispatchEvent(new CustomEvent(CORNER_WHEEL, {
               detail: { x: r.left + r.width / 2, y: r.top + r.height / 2, pointerId: id },
             }));
-          }, HOLD_MS);
+          };
+          h.t = setTimeout(h.fire, HOLD_MS);
+          hold.current = h;
+        }}
+        /* Sliding off the button opens the wheel at once, without the hold. */
+        onPointerMove={(e) => {
+          const h = hold.current;
+          if (!h || h.fired || e.pointerId !== h.id) return;
+          if (Math.hypot(e.clientX - h.x, e.clientY - h.y) > SLIDE_PX) h.fire();
         }}
         onPointerUp={() => clearTimeout(hold.current?.t)}
         onPointerCancel={() => clearTimeout(hold.current?.t)}

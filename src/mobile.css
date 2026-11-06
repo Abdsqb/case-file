@@ -125,12 +125,15 @@
      What lies over a page that has stopped keeps its frost — one blur, over
      a still image: the sign-in panel, the two sheets and standby's clock.
      Without it they were clear glass, the page's text read straight through
-     the list on top of it. */
-  :root {
+     the list on top of it.
+
+     Not while a mouse is in use (data-mouse, lib/pointer.js): a laptop with
+     a touch screen reports itself as one, and has the GPU for the glass. */
+  :root:not([data-mouse]) {
     --panel-blur: none;
     --panel: rgba(var(--panel-rgb), 0.9);
   }
-  *:not(.signin__panel):not(.todo):not(.notes):not(.standby):not(.navwheel__band) {
+  html:not([data-mouse]) *:not(.signin__panel):not(.todo):not(.notes):not(.standby):not(.navwheel__band) {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
   }

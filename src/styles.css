@@ -4884,9 +4884,12 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
   background: #000;             /* the page goes entirely while the to-do is up */
   opacity: 0;
   pointer-events: none;
-  transition: opacity 260ms ease;
+  /* Closing, the black holds until the window has gone (it leaves in about
+     420ms), then lifts: fading with it showed the page through the window
+     on its way out. */
+  transition: opacity 180ms ease 380ms;
 }
-.todoscrim.is-open { opacity: 1; pointer-events: auto; }
+.todoscrim.is-open { opacity: 1; pointer-events: auto; transition: opacity 220ms ease; }
 
 /* `.card.todo`, not `.todo`: motion.css gives every .card a short hover
    transition and loads after this file, so at equal weight it won and the

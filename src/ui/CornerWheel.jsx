@@ -14,7 +14,7 @@
  * button with a thicker run of it toward the choice.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ICONS } from './NavWheel.jsx';
 import { SPRINGS } from './island.js';
 import './CornerWheel.css';
@@ -63,12 +63,25 @@ export default function CornerWheel({ items, current, onPick }) {
     const onHold = (e) => {
       clearTimeout(leaving.current);
       setHot(-1);
+      setShown(false);
       setAt(e.detail);
-      requestAnimationFrame(() => setShown(true));
     };
     window.addEventListener(CORNER_WHEEL, onHold);
     return () => { window.removeEventListener(CORNER_WHEEL, onHold); clearTimeout(leaving.current); };
   }, []);
+
+  /* Unfold only once the folded state is really there. Flipping to shown on
+     the next frame from the event alone sometimes landed in the same render
+     as the mount, so there was no folded state to move from and it popped
+     up. Here the folded wheel is in the page and laid out (the read forces
+     its styles) before the class that unfolds it goes on. */
+  const rootRef = useRef(null);
+  useLayoutEffect(() => {
+    if (!at) return undefined;
+    rootRef.current?.getBoundingClientRect();
+    const id = requestAnimationFrame(() => setShown(true));
+    return () => cancelAnimationFrame(id);
+  }, [at]);
 
   // Follow the finger that held it; lifting it decides.
   useEffect(() => {
@@ -105,7 +118,7 @@ export default function CornerWheel({ items, current, onPick }) {
   const turn = hot < 0 ? 0 : angleOf(hot);
 
   return (
-    <div className={cx('cornerwheel', shown && 'is-shown')} style={SPRINGS} aria-hidden="true">
+    <div ref={rootRef} className={cx('cornerwheel', shown && 'is-shown')} style={SPRINGS} aria-hidden="true">
       <div className="cornerwheel__ground" />
       <div
         className="cornerwheel__origin"

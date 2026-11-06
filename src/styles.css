@@ -960,6 +960,32 @@ summary:focus-visible,
   border-color: transparent;
 }
 
+/* The corners. Every card with an outline carries a brighter stroke at its
+   four corners: one layer the size of the card, rounded as it is, and masked
+   down to a short run at each corner, so the corner follows the card's own
+   curve whatever its radius. A flat card has no outline and gets none. The
+   flow card draws its outline on ::before (below), so this sits over that. */
+.card:not(.card--flat)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 1.5px solid rgba(255, 255, 255, 0.42);
+  border-radius: inherit;
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) left top / var(--corner) var(--corner) no-repeat,
+    linear-gradient(#000 0 0) right top / var(--corner) var(--corner) no-repeat,
+    linear-gradient(#000 0 0) left bottom / var(--corner) var(--corner) no-repeat,
+    linear-gradient(#000 0 0) right bottom / var(--corner) var(--corner) no-repeat;
+  mask:
+    linear-gradient(#000 0 0) left top / var(--corner) var(--corner) no-repeat,
+    linear-gradient(#000 0 0) right top / var(--corner) var(--corner) no-repeat,
+    linear-gradient(#000 0 0) left bottom / var(--corner) var(--corner) no-repeat,
+    linear-gradient(#000 0 0) right bottom / var(--corner) var(--corner) no-repeat;
+}
+.card { --corner: 14px; }
+
 .card__head {
   flex: none;
   display: flex;

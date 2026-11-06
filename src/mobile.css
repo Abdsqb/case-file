@@ -297,6 +297,15 @@
   }
   .card.todo.is-dragging { transition: none; }
   .card.todo > .card__foot { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  /* A sheet runs off the bottom edge: corners at the top only. */
+  .card.todo::after {
+    -webkit-mask:
+      linear-gradient(#000 0 0) left top / var(--corner) var(--corner) no-repeat,
+      linear-gradient(#000 0 0) right top / var(--corner) var(--corner) no-repeat;
+    mask:
+      linear-gradient(#000 0 0) left top / var(--corner) var(--corner) no-repeat,
+      linear-gradient(#000 0 0) right top / var(--corner) var(--corner) no-repeat;
+  }
 
   /* Its title bar: the name, the state and the close button on one line, the
      measurements under them rather than printed across the name. */

@@ -25,7 +25,7 @@
 .navwheel__ground {
   position: absolute;
   inset: 0;
-  background: transparent;     /* the page stays as it is under the wheel */
+  background: rgba(1, 2, 2, 0.22);   /* the page steps back a little; less than the ring's own ground */
   opacity: 0;
   transition: opacity 180ms ease 140ms;     /* leaving: after the wheel */
 }
@@ -62,9 +62,12 @@
   position: absolute;
   inset: calc(12 / 380 * 100%);
   border-radius: 50%;
-  background: rgba(2, 4, 5, 0.55);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
+  /* Light enough to see the page through it, softened: at 14px and over
+     half black, what was behind blurred away to nothing and the ring read
+     as plain tint. */
+  background: rgba(2, 4, 5, 0.32);
+  -webkit-backdrop-filter: blur(6px) saturate(1.1);
+  backdrop-filter: blur(6px) saturate(1.1);
   -webkit-mask: radial-gradient(closest-side, transparent 56.2%, #000 56.4%);
   mask: radial-gradient(closest-side, transparent 56.2%, #000 56.4%);
 }

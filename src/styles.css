@@ -7275,9 +7275,11 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
   box-shadow: none;
 }
 
-/* Settings → Card backgrounds, off: every card as the dashboard's are. Not
-   the to-do window, which floats over the page and needs its ground. */
-[data-cards='bare'] .card:not(.todo):not(.card--flat) {
+/* Settings → Card backgrounds, off: every card as the dashboard's are, the
+   to-do window too. That one floats over the page, so with no ground of its
+   own the page behind it steps much further back to keep the list legible. */
+[data-cards='bare'] .todoscrim { background: rgba(1, 2, 2, 0.88); }
+[data-cards='bare'] .card:not(.card--flat) {
   background: transparent;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;

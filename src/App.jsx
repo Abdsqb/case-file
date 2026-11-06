@@ -79,6 +79,10 @@ const NAV_ACTIONS = [
   { id: 'notes', label: 'Notes', hint: 'Shift+N', run: () => window.dispatchEvent(new Event(OPEN_NOTES)) },
 ];
 const PHONE_WHEEL = [...NAV, ...NAV_ACTIONS];
+/* The phone's corner wheel, out of the held to-do button: the screens, and
+   the notes pad (the to-do is the button itself). With no name at the top
+   to tap, this is the way to all of them on a phone. */
+const CORNER = [...NAV, ...NAV_ACTIONS.filter((a) => a.id === 'notes')];
 
 // How long the longest card in a screen takes to finish assembling. The tail is
 // the case render's pin sequence, which finishes at ~1920ms; this keeps headroom
@@ -322,8 +326,8 @@ export default function App() {
         onPick={(item) => (item.run ? item.run() : go(item.id))}
       />
 
-      {/* A phone: the screens, fanned out of the held to-do button. */}
-      <CornerWheel items={NAV} current={view} onPick={(item) => go(item.id)} />
+      {/* A phone: the screens and the notes pad, fanned out of the held to-do button. */}
+      <CornerWheel items={CORNER} current={view} onPick={(item) => (item.run ? item.run() : go(item.id))} />
 
       <Standby />
       </div>

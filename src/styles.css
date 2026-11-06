@@ -4881,7 +4881,7 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
   position: fixed;
   inset: 0;
   z-index: 195;
-  background: rgba(0, 0, 0, 0.3);
+  background: #000;             /* the page goes entirely while the to-do is up */
   opacity: 0;
   pointer-events: none;
   transition: opacity 260ms ease;
@@ -7276,9 +7276,8 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
 }
 
 /* Settings → Card backgrounds, off: every card as the dashboard's are, the
-   to-do window too. That one floats over the page, so with no ground of its
-   own the page behind it steps much further back to keep the list legible. */
-[data-cards='bare'] .todoscrim { background: rgba(1, 2, 2, 0.96); }   /* at .88 the page still read through the list */
+   to-do window too. That one floats over the page, which blacks out behind
+   it (.todoscrim), so the list reads with or without a ground of its own. */
 [data-cards='bare'] .card:not(.card--flat) {
   background: transparent;
   -webkit-backdrop-filter: none;

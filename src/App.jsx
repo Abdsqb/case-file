@@ -10,6 +10,7 @@ import Streak from './ui/Streak.jsx';
 import Standby from './ui/Standby.jsx';
 import TodayWindow, { OPEN_TODAY } from './ui/TodayWindow.jsx';
 import NavWheel from './ui/NavWheel.jsx';
+import { usePhoneWidth } from './ui/island.js';
 import TopNav from './ui/TopNav.jsx';
 
 /* The dashboard is in the first bundle; the other five screens are chunks of
@@ -69,13 +70,14 @@ const NAV = [
   { id: 'settings', label: 'Settings' },
 ];
 
-/* After the screens on the menu wheel: the two things that open over the
-   page. Shift+T and Shift+N on a keyboard; on a phone, these. */
+/* The two things that open over the page. A keyboard has Shift+T and
+   Shift+N for them, so on a desktop the wheel holds the screens alone; a
+   phone has no Shift key, and there they come after the screens. */
 const NAV_ACTIONS = [
   { id: 'today', label: "Today's to-do", hint: 'Shift+T', run: () => window.dispatchEvent(new Event(OPEN_TODAY)) },
   { id: 'notes', label: 'Notes', hint: 'Shift+N', run: () => window.dispatchEvent(new Event(OPEN_NOTES)) },
 ];
-const WHEEL = [...NAV, ...NAV_ACTIONS];
+const PHONE_WHEEL = [...NAV, ...NAV_ACTIONS];
 
 // How long the longest card in a screen takes to finish assembling. The tail is
 // the case render's pin sequence, which finishes at ~1920ms; this keeps headroom
@@ -114,6 +116,7 @@ export default function App() {
   const [projects, setProjects] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  const phone = usePhoneWidth();
   const [wheelOpen, setWheelOpen] = useState(false);
   const openWheel = useCallback(() => setWheelOpen(true), []);
   const closeWheel = useCallback(() => setWheelOpen(false), []);
@@ -310,7 +313,7 @@ export default function App() {
           point — standby is about the window, not about a screen. */}
       {/* The menu: from the top pill, or Space anywhere. */}
       <NavWheel
-        items={WHEEL}
+        items={phone ? PHONE_WHEEL : NAV}
         current={view}
         open={wheelOpen}
         onOpen={openWheel}

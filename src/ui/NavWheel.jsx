@@ -21,6 +21,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CalendarDays, ChartColumn, Folder, LayoutGrid, ListTodo, NotebookPen, SlidersHorizontal } from 'lucide-react';
+import { SPRINGS } from './island.js';
 import './NavWheel.css';
 
 const ICONS = {
@@ -228,6 +229,7 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
       aria-modal="true"
       aria-label="Menu"
       tabIndex={-1}
+      style={SPRINGS}
       onPointerMove={onPointerMove}
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
@@ -254,6 +256,9 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
           {items.map((it, i) => {
             const [x, y] = pt(IR, -90 + i * SEG);
             const Icon = ICONS[it.id];
+            // Where it comes out from: 24px back toward the middle.
+            const a = ((-90 + i * SEG) * Math.PI) / 180;
+            const from = { '--i': i, '--dx': `${f(-Math.cos(a) * 24)}px`, '--dy': `${f(-Math.sin(a) * 24)}px` };
             return (
               <li key={it.id} style={{ left: `${(x / BOX) * 100}%`, top: `${(y / BOX) * 100}%` }}>
                 <button
@@ -262,6 +267,7 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
                   className={cx('navwheel__item', i === hot && 'is-hot', it.id === current && 'is-current')}
                   aria-current={it.id === current ? 'page' : undefined}
                   title={it.hint || undefined}
+                  style={from}
                   onFocus={() => { if (i !== hot) aim(i); }}
                   // A pointer opens on letting go (above); this is Enter and Space on a focused row.
                   onClick={(e) => { if (e.detail === 0) choose(i); }}

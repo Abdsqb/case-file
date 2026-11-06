@@ -145,7 +145,6 @@
      blur made what was behind it unreadable. Without the blur it has to be
      near opaque instead, or the text behind shows through the text on it. */
   .topbar__standing,
-  .pillnav__pill,
   .island,
   .island-pop,
   .folder-island-trigger,

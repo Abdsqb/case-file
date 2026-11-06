@@ -557,14 +557,10 @@
   transform: translateX(-50%);
   overflow: hidden;
   border-radius: 18px;
-  /* The same dark glass as the panels: a translucent tint of the ground with
-     everything behind it blurred, no sheen and no brightening, so it reads as
-     one more pane of the app's glass. */
-  background: rgba(var(--panel-rgb), 0.5);
-  backdrop-filter: var(--panel-blur);
-  -webkit-backdrop-filter: var(--panel-blur);
-  border: 1px solid rgba(255, 255, 255, 0.04);  /* half the panels' hairline: an edge, barely */
-  box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.6);
+  /* Just the name: no glass, no edge, no shadow. It opens the menu wheel
+     (NavWheel), which is where the shape is. */
+  background: transparent;
+  border: 0;
   /* Closing: height leads, width follows. */
   transition:
     height 420ms var(--pn-close),
@@ -645,20 +641,7 @@
   color: #fff;
 }
 
-/* The active state is the full ink and a lit dot under it, as it always was:
-   never an accent fill, which would be the loudest thing on screen. */
-.pillnav__item.is-current::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: 5px;
-  width: 4px;
-  height: 4px;
-  margin-left: -2px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 8px 0 var(--accent-glow);
-}
+/* The active state is the full ink, nothing more: the name alone. */
 
 /* Today's to-do and Notes, below the screens: a hairline, then two rows in a
    quieter ink, because they open something over the page rather than

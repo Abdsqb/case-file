@@ -10,6 +10,8 @@
  * Nothing here is a copy. A row is a pointer to a real entry (or subtask), so
  * ticking it off closes the entry in its case and reopening it here reopens it
  * there. Dragging a row, or Alt+Up/Down on it, changes only today's order.
+ * On a phone a row is held a moment to lift it (or taken by its grip at
+ * once), and swiped left to show its delete.
  *
  * Or a row is a task of the day's own, typed into the field at the top: it
  * belongs to no case, lives on today's list alone, and taking it off deletes
@@ -21,7 +23,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Check, GripVertical, ListTodo, Plus, X } from 'lucide-react';
+import { Check, GripVertical, ListTodo, Plus, X } from 'lucide-react';
 
 import api from '../lib/api.js';
 import { dayDiff } from '../lib/metrics.js';
@@ -34,6 +36,8 @@ import { CORNER_WHEEL } from './CornerWheel.jsx';
 
 const HOLD_MS = 200;   // held this long, the button opens the corner wheel instead
 const SLIDE_PX = 10;   // or slid this far off it, at once
+const PRESS_MS = 260;  // a row held this long lifts, to be dragged (a phone)
+const REVEAL = 76;     // px a row swiped left opens to, showing its delete
 
 /* Raised by the top island's "Today's to-do" row: the way in on a phone,
    which has no Shift+T. */
@@ -192,46 +196,113 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
     }
   };
 
-  /* Reordering by touch. The browser's drag and drop is mouse-only, so on a
-     touch screen each row has a grip (mobile.css shows it there only): held
-     and dragged, the row moves through the list as the finger passes the
-     middle of its neighbours, and the order is written once, on release. The
-     grip takes the gesture itself (touch-action: none), so dragging anywhere
-     else on a row still scrolls the sheet. */
-  /* The finger is followed on the window, not by capturing it on the grip:
-     moving a row through the list moves its element in the page, and a moved
-     element loses its pointer capture, so the release never arrived. */
+  /* A finger on a row (a phone; the browser's drag and drop is mouse-only):
+       held still a moment, or taken by its grip, the row lifts and follows
+         the finger through the list, landing where it is let go;
+       slid sideways to the left, it opens to show its delete, and stays open
+         if it went more than halfway;
+       moved up or down first, it is a scroll, or the sheet being pulled.
+     Touch events, not pointer events: once a row has lifted, its moves must
+     stop the sheet scrolling, and only a touchmove listener that is not
+     passive can. While a row is lifted or sliding the sheet is told to keep
+     still (data-busy, ui/sheet.js), or a drag downward would pull it shut. */
   const listRef = useRef(null);
   const dragRef = useRef(null);
   dragRef.current = drag;
-  const gripDown = (e, id) => {
-    if (e.pointerType === 'mouse') return;
-    e.preventDefault();
-    const pointer = e.pointerId;
-    setDrag({ id, ids: today.order, from: today.order, touch: true });
-    const onMove = (ev) => {
-      if (ev.pointerId !== pointer || !listRef.current) return;
-      const rows = [...listRef.current.children];
-      let to = rows.length - 1;
-      for (let i = 0; i < rows.length; i += 1) {
-        const r = rows[i].getBoundingClientRect();
-        if (ev.clientY < r.top + r.height / 2) { to = i; break; }
+  const [swiped, setSwiped] = useState(null);     // the row swiped open, by key
+  const swipedRef = useRef(null);
+  swipedRef.current = swiped;
+  const orderRef = useRef(today.order);
+  orderRef.current = today.order;
+
+  useEffect(() => {
+    const list = listRef.current;
+    const sheet = panelRef.current;
+    if (!open || !list || !sheet) return undefined;
+    let g = null;
+    const slideOf = (item) => item.querySelector('.todo__row');
+    const onStart = (e) => {
+      g = null;
+      if (e.touches.length !== 1) return;
+      const item = e.target.closest?.('.todo__item');
+      if (!item || e.target.closest('.todo__del')) return;
+      const p = e.touches[0];
+      g = { key: item.dataset.key, item, x: p.clientX, y: p.clientY, mode: null, dx: 0,
+        base: swipedRef.current === item.dataset.key ? -REVEAL : 0, t: 0 };
+      const lift = () => {
+        if (!g || g.mode) return;
+        g.mode = 'drag';
+        sheet.dataset.busy = '1';
+        navigator.vibrate?.(8);
+        setSwiped(null);
+        setDrag({ id: g.key, ids: orderRef.current, from: orderRef.current, touch: true });
+      };
+      if (e.target.closest('.todo__grip')) lift();
+      else g.t = setTimeout(lift, PRESS_MS);
+    };
+    const onMove = (e) => {
+      if (!g) return;
+      const p = e.touches[0];
+      const dx = p.clientX - g.x;
+      const dy = p.clientY - g.y;
+      if (!g.mode) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        clearTimeout(g.t);
+        if (Math.abs(dx) <= Math.abs(dy)) { g = null; return; }   // a scroll, or the sheet's pull
+        g.mode = 'swipe';
+        sheet.dataset.busy = '1';
+        g.item.classList.add('is-sliding');
+        slideOf(g.item).style.transition = 'none';
       }
-      setDrag((d) => (d && d.ids.indexOf(d.id) !== to ? { ...d, ids: move(d.ids, d.id, to) } : d));
+      e.preventDefault();
+      if (g.mode === 'drag') {
+        const rows = [...list.children];
+        let to = rows.length - 1;
+        for (let i = 0; i < rows.length; i += 1) {
+          const r = rows[i].getBoundingClientRect();
+          if (p.clientY < r.top + r.height / 2) { to = i; break; }
+        }
+        setDrag((d) => (d && d.ids.indexOf(d.id) !== to ? { ...d, ids: move(d.ids, d.id, to) } : d));
+      } else {
+        g.dx = Math.max(-REVEAL * 1.4, Math.min(0, g.base + dx));
+        slideOf(g.item).style.transform = `translateX(${g.dx}px)`;
+      }
     };
-    const onUp = (ev) => {
-      if (ev.pointerId !== pointer) return;
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-      const d = dragRef.current;
-      setDrag(null);
-      if (d && d.touch && d.ids.join() !== d.from.join()) reorderToday(d.ids);
+    const onEnd = () => {
+      if (!g) return;
+      clearTimeout(g.t);
+      delete sheet.dataset.busy;
+      if (g.mode === 'drag') {
+        const d = dragRef.current;
+        setDrag(null);
+        if (d && d.ids.join() !== d.from.join()) reorderToday(d.ids);
+      } else if (g.mode === 'swipe') {
+        const el = slideOf(g.item);
+        g.item.classList.remove('is-sliding');
+        el.style.transition = '';
+        el.style.transform = '';
+        setSwiped(g.dx < -REVEAL / 2 ? g.key : null);
+      } else if (swipedRef.current && swipedRef.current !== g.key) {
+        setSwiped(null);   // a touch on another row closes the open one
+      }
+      g = null;
     };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
-  };
+    list.addEventListener('touchstart', onStart, { passive: true });
+    list.addEventListener('touchmove', onMove, { passive: false });
+    list.addEventListener('touchend', onEnd);
+    list.addEventListener('touchcancel', onEnd);
+    return () => {
+      if (g) clearTimeout(g.t);
+      delete sheet.dataset.busy;
+      list.removeEventListener('touchstart', onStart);
+      list.removeEventListener('touchmove', onMove);
+      list.removeEventListener('touchend', onEnd);
+      list.removeEventListener('touchcancel', onEnd);
+    };
+  }, [open, items.length > 0]);
+
+  // Closing the window closes any row left swiped open.
+  useEffect(() => { if (!open) setSwiped(null); }, [open]);
 
   const step = (key, by) => {
     const at = today.order.indexOf(key);
@@ -319,12 +390,24 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
 
           {items.length ? (
             <div className="todo__list" ref={listRef}>
-              {items.map((item, i) => {
+              {items.map((item) => {
                 const id = item.key;
                 const done = isDone(item);
+                const remove = () => (item.kind === 'own' ? removeOwnTask(item.id) : removeFromToday(item.id));
+                const removeLabel = item.kind === 'own' ? `Delete ${item.title}` : `Take ${item.title} off today`;
                 return (
+                  <div key={id} className={cx('todo__item', swiped === id && 'is-swiped')} data-key={id}>
+                  {/* A phone's delete, behind the row: a swipe left shows it. */}
+                  <button
+                    type="button"
+                    className="todo__del"
+                    onClick={() => { setSwiped(null); remove(); }}
+                    aria-label={removeLabel}
+                    tabIndex={swiped === id ? 0 : -1}
+                  >
+                    <X strokeWidth={1.8} aria-hidden="true" />
+                  </button>
                   <div
-                    key={id}
                     className={cx('entry todo__row', done && 'entry--done', drag && drag.id === id && 'entry--dragging')}
                     draggable
                     onDragStart={(e) => {
@@ -377,45 +460,23 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
                       )}
                     </div>
 
-                    <span
-                      className="todo__grip"
-                      aria-hidden="true"
-                      onPointerDown={(e) => gripDown(e, id)}
-                    >
+                    <span className="todo__grip" aria-hidden="true">
                       <GripVertical strokeWidth={1.6} />
                     </span>
 
+                    {/* A mouse's delete; a phone swipes for it instead (mobile.css). */}
                     <div className="entry__actions">
                       <button
                         type="button"
                         className="entry__action todo__icon"
-                        onClick={() => step(id, -1)}
-                        disabled={i === 0}
-                        aria-label={`Move ${item.title} up`}
-                        title="Move up (Alt+Up)"
-                      >
-                        <ArrowUp strokeWidth={1.6} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="entry__action todo__icon"
-                        onClick={() => step(id, 1)}
-                        disabled={i === items.length - 1}
-                        aria-label={`Move ${item.title} down`}
-                        title="Move down (Alt+Down)"
-                      >
-                        <ArrowDown strokeWidth={1.6} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="entry__action todo__icon"
-                        onClick={() => (item.kind === 'own' ? removeOwnTask(item.id) : removeFromToday(item.id))}
-                        aria-label={item.kind === 'own' ? `Delete ${item.title}` : `Take ${item.title} off today`}
+                        onClick={remove}
+                        aria-label={removeLabel}
                         title={item.kind === 'own' ? 'Delete' : 'Take off today'}
                       >
                         <X strokeWidth={1.6} aria-hidden="true" />
                       </button>
                     </div>
+                  </div>
                   </div>
                 );
               })}

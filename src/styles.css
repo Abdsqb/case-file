@@ -4967,6 +4967,13 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
 
 .todo__list { display: flex; flex-direction: column; }
 
+/* Each row sits in an item that also holds a phone's swipe-to-delete
+   (mobile.css; hidden under a mouse). The item takes the gap between rows. */
+.todo__item { position: relative; margin-bottom: 6px; }
+.todo__item:last-child { margin-bottom: 0; }
+.todo__item > .todo__row { margin-bottom: 0; }
+.todo__del { display: none; }
+
 .todo__row { cursor: grab; }
 .todo__row:active { cursor: grabbing; }
 .todo__title { cursor: inherit; }

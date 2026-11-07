@@ -49,6 +49,9 @@ export function useSheetDrag(sheetRef, onClose, open = false) {
     };
     const onMove = (e) => {
       if (!t) return;
+      /* Something inside has the finger (a to-do row lifted or sliding):
+         the sheet keeps still for the rest of this touch. */
+      if (sheet.dataset.busy && t.mode !== 'pull') { t = null; return; }
       const p = e.touches[0];
       const dx = p.clientX - t.x;
       const dy = p.clientY - t.y;

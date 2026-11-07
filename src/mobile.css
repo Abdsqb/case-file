@@ -623,8 +623,9 @@
   .tip { padding: 12px 14px; gap: 7px; }
 }
 
-/* The to-do row's grip: reordering by touch (TodayWindow.jsx), where the
-   mouse's drag and drop does not exist. Touch screens only. */
+/* The to-do by touch (TodayWindow.jsx), where the mouse's drag and drop does
+   not exist: a row held a moment (or taken by its grip) lifts and is dragged;
+   a row swiped left shows a delete behind it. Touch screens only. */
 .todo__grip { display: none; }
 @media (hover: none) and (pointer: coarse) {
   .todo__grip {
@@ -639,6 +640,48 @@
     cursor: grab;
   }
   .todo__grip svg { width: 18px; height: 18px; }
-  .todo__row { cursor: default; }
-  .todo__row.entry--dragging { opacity: 0.85; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.8); }
+
+  /* The row slides over its delete, so it is solid; a long press must not
+     select its text or bring up the phone's own menu. */
+  .todo__row {
+    position: relative;
+    z-index: 1;
+    cursor: default;
+    background: rgb(var(--raised-rgb));
+    touch-action: pan-y;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.3, 1), box-shadow 160ms ease, opacity 160ms ease;
+  }
+  .todo__item.is-swiped .todo__row { transform: translateX(-76px); }
+  .todo__row.entry--dragging {
+    opacity: 0.92;
+    transform: scale(1.02);
+    box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.85);
+  }
+
+  .todo__del {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 76px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--red);
+    color: #fff;
+    /* Only there while a row slides or stands open; at rest it would show at
+       the row's rounded corners. Closing, it stays until the row is back. */
+    opacity: 0;
+    transition: opacity 0s linear 260ms;
+  }
+  .todo__item.is-sliding .todo__del,
+  .todo__item.is-swiped .todo__del { opacity: 1; transition: none; }
+  .todo__del svg { width: 20px; height: 20px; }
+
+  /* The swipe is the delete here: no X on the row itself. */
+  .todo__row .entry__actions { display: none; }
 }

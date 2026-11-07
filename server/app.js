@@ -335,29 +335,49 @@ const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 /* The list for a day, in order, and — until the morning question has been
    answered — what is left over from the last day that had a list: the
    entries on it that are still open, still exist, and are not already on
-   today's. Joined against tasks, so an entry deleted by any route (the clerk
-   included) simply drops out rather than leaving a dangling row. */
+   today's, and the day's own tasks (today_loose) left unticked. Joined
+   against tasks, so an entry deleted by any route (the clerk included)
+   simply drops out rather than leaving a dangling row.
+
+   `order` is the whole list as keys, entries as e<id> and the day's own
+   tasks as l<id>, in the one order they share; `taskIds` is the entries
+   alone, for whatever only asks whether an entry is on today's list. */
 async function readToday(day) {
-  const [items, decidedRows, prevRows] = await batch([
-    [`SELECT ti.task_id AS id FROM today_items ti JOIN tasks t ON t.id = ti.task_id
+  const [items, loose, decidedRows, prevRows] = await batch([
+    [`SELECT ti.task_id AS id, ti.sort_order AS s FROM today_items ti JOIN tasks t ON t.id = ti.task_id
        WHERE ti.day = ? ORDER BY ti.sort_order ASC`, [day]],
+    ['SELECT id, title, completed, sort_order AS s FROM today_loose WHERE day = ? ORDER BY sort_order ASC, id ASC', [day]],
     ['SELECT decided FROM today_days WHERE day = ?', [day]],
-    ['SELECT MAX(day) AS day FROM today_items WHERE day < ?', [day]],
+    [`SELECT MAX(day) AS day FROM (
+        SELECT day FROM today_items WHERE day < ? UNION ALL SELECT day FROM today_loose WHERE day < ?
+      )`, [day, day]],
   ], 'read');
   const taskIds = items.map((r) => r.id);
+  const order = [
+    ...items.map((r) => ({ k: `e${r.id}`, s: r.s })),
+    ...loose.map((r) => ({ k: `l${r.id}`, s: r.s })),
+  ].sort((a, b) => a.s - b.s).map((x) => x.k);
 
   let offer = null;
   const decided = decidedRows[0];
   const prev = prevRows[0];
   if ((!decided || !decided.decided) && prev && prev.day) {
     const have = new Set(taskIds);
-    const left = (await all(`
-      SELECT ti.task_id AS id FROM today_items ti JOIN tasks t ON t.id = ti.task_id
-       WHERE ti.day = ? AND t.completed = 0 ORDER BY ti.sort_order ASC
-    `, [prev.day])).map((r) => r.id).filter((id) => !have.has(id));
-    if (left.length) offer = { day: prev.day, taskIds: left };
+    const [leftRows, looseLeft] = await batch([
+      [`SELECT ti.task_id AS id FROM today_items ti JOIN tasks t ON t.id = ti.task_id
+         WHERE ti.day = ? AND t.completed = 0 ORDER BY ti.sort_order ASC`, [prev.day]],
+      ['SELECT id, title FROM today_loose WHERE day = ? AND completed = 0 ORDER BY sort_order ASC, id ASC', [prev.day]],
+    ], 'read');
+    const left = leftRows.map((r) => r.id).filter((id) => !have.has(id));
+    if (left.length || looseLeft.length) offer = { day: prev.day, taskIds: left, loose: looseLeft };
   }
-  return { day, taskIds, offer };
+  return {
+    day,
+    taskIds,
+    order,
+    loose: loose.map((r) => ({ id: r.id, title: r.title, completed: !!r.completed })),
+    offer,
+  };
 }
 
 app.get('/api/today/:day', wrap(async (req, res) => {
@@ -369,37 +389,91 @@ app.get('/api/today/:day', wrap(async (req, res) => {
 /* Replaces the day's list wholesale with the order given: adding, removing
    and reordering are all this one write, so the server never has to merge
    two views of the order. `decided: true` records that the morning question
-   was answered. Ids that are not entries are dropped rather than refused. */
+   was answered.
+
+   `order` is the whole list as keys (e<id> an entry, l<id> one of the day's
+   own tasks). A day's own task left out of it is deleted: it belongs to
+   nothing else. One from an earlier day that is put in it, still open, is
+   moved to this day: that is bringing it over. An older client sends only
+   `taskIds` (entries); then the day's own tasks are left as they are. Ids
+   that are not real are dropped rather than refused. */
 app.put('/api/today/:day', wrap(async (req, res) => {
   const { day } = req.params;
   if (!DAY_KEY.test(day)) return res.status(400).json({ error: 'day must be YYYY-MM-DD' });
   const body = req.body ?? {};
-  if (!Array.isArray(body.taskIds)) return res.status(400).json({ error: 'taskIds must be an array' });
+  const hasOrder = Array.isArray(body.order);
+  if (!hasOrder && !Array.isArray(body.taskIds)) return res.status(400).json({ error: 'order must be an array' });
 
-  const wanted = [];
+  const keys = [];
   const seen = new Set();
-  for (const raw of body.taskIds.slice(0, 500)) {
-    const id = Number(raw);
-    if (!Number.isInteger(id) || seen.has(id)) continue;
-    seen.add(id);
-    wanted.push(id);
+  for (const raw of (hasOrder ? body.order : body.taskIds.map((id) => `e${id}`)).slice(0, 500)) {
+    const m = /^([el])(\d+)$/.exec(String(raw));
+    if (!m || seen.has(m[0])) continue;
+    seen.add(m[0]);
+    keys.push({ kind: m[1], id: Number(m[2]) });
   }
-  const existing = wanted.length
-    ? new Set((await all(`SELECT id FROM tasks WHERE id IN (${wanted.map(() => '?').join(',')})`, wanted)).map((r) => r.id))
-    : new Set();
-  const ids = wanted.filter((id) => existing.has(id));
+  const entryIds = keys.filter((k) => k.kind === 'e').map((k) => k.id);
+  const looseIds = keys.filter((k) => k.kind === 'l').map((k) => k.id);
+  const [realEntries, realLoose] = await batch([
+    entryIds.length ? [`SELECT id FROM tasks WHERE id IN (${entryIds.map(() => '?').join(',')})`, entryIds] : ['SELECT 1 WHERE 0', []],
+    looseIds.length
+      ? [`SELECT id FROM today_loose WHERE id IN (${looseIds.map(() => '?').join(',')}) AND (day = ? OR completed = 0)`, [...looseIds, day]]
+      : ['SELECT 1 WHERE 0', []],
+  ], 'read');
+  const okEntry = new Set(realEntries.map((r) => r.id));
+  const okLoose = new Set(realLoose.map((r) => r.id));
+  const list = keys.filter((k) => (k.kind === 'e' ? okEntry : okLoose).has(k.id));
+  const keptLoose = list.filter((k) => k.kind === 'l').map((k) => k.id);
 
   /* One batch: the old list goes and the new one lands together, or not at
      all, in a single round trip. */
   await batch([
     ['DELETE FROM today_items WHERE day = ?', [day]],
-    ...ids.map((id, i) => ['INSERT INTO today_items (day, task_id, sort_order) VALUES (?, ?, ?)', [day, id, i]]),
+    ...(hasOrder
+      ? [keptLoose.length
+        ? [`DELETE FROM today_loose WHERE day = ? AND id NOT IN (${keptLoose.map(() => '?').join(',')})`, [day, ...keptLoose]]
+        : ['DELETE FROM today_loose WHERE day = ?', [day]]]
+      : []),
+    ...list.map((k, i) => (k.kind === 'e'
+      ? ['INSERT INTO today_items (day, task_id, sort_order) VALUES (?, ?, ?)', [day, k.id, i]]
+      : ['UPDATE today_loose SET day = ?, sort_order = ? WHERE id = ?', [day, i, k.id]])),
     ...(body.decided ? [[`
       INSERT INTO today_days (day, decided) VALUES (?, 1)
       ON CONFLICT(day) DO UPDATE SET decided = 1
     `, [day]]] : []),
   ]);
   res.json(await readToday(day));
+}));
+
+/* A task of the day's own, typed into the to-do: it goes on the end. */
+app.post('/api/today/:day/loose', wrap(async (req, res) => {
+  const { day } = req.params;
+  if (!DAY_KEY.test(day)) return res.status(400).json({ error: 'day must be YYYY-MM-DD' });
+  const title = String(req.body?.title ?? '').trim().slice(0, 300);
+  if (!title) return res.status(400).json({ error: 'title is required' });
+  const [last] = await all(`
+    SELECT MAX(s) AS s FROM (
+      SELECT sort_order AS s FROM today_items WHERE day = ? UNION ALL SELECT sort_order AS s FROM today_loose WHERE day = ?
+    )`, [day, day]);
+  const next = last && last.s !== null && last.s !== undefined ? Number(last.s) + 1 : 0;
+  await run('INSERT INTO today_loose (day, title, completed, sort_order, created_at) VALUES (?, ?, 0, ?, ?)',
+    [day, title, next, Date.now()]);
+  res.status(201).json(await readToday(day));
+}));
+
+/* Ticking one of the day's own tasks off, or back on, or renaming it. */
+app.patch('/api/today/loose/:id', wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+  const body = req.body ?? {};
+  const sets = [];
+  const args = [];
+  if (typeof body.completed === 'boolean') { sets.push('completed = ?'); args.push(body.completed ? 1 : 0); }
+  if (typeof body.title === 'string' && body.title.trim()) { sets.push('title = ?'); args.push(body.title.trim().slice(0, 300)); }
+  if (!sets.length) return res.status(400).json({ error: 'nothing to change' });
+  const r = await run(`UPDATE today_loose SET ${sets.join(', ')} WHERE id = ?`, [...args, id]);
+  if (!r || !r.changes) return res.status(404).json({ error: 'no such task' });
+  res.json({ ok: true });
 }));
 
 // ---------- the scratchpad ----------

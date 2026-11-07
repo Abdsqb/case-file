@@ -258,6 +258,24 @@ const MIGRATIONS = [
       )
     `);
   },
+
+  /* 4: tasks for a day that belong to no case, typed straight into today's
+     to-do. Each is a row of its own for its day, ordered in among the day's
+     entries (sort_order shares today_items' numbering); bringing one over to
+     the next day moves it there. */
+  async () => {
+    await client.executeMultiple(`
+      CREATE TABLE IF NOT EXISTS today_loose (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        day TEXT NOT NULL,
+        title TEXT NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_today_loose_day ON today_loose(day);
+    `);
+  },
 ];
 
 async function schemaVersion() {

@@ -11,17 +11,23 @@
  * ticking it off closes the entry in its case and reopening it here reopens it
  * there. Dragging a row, or Alt+Up/Down on it, changes only today's order.
  *
+ * Or a row is a task of the day's own, typed into the field at the top: it
+ * belongs to no case, lives on today's list alone, and taking it off deletes
+ * it. Left unticked, it is offered the next morning with the entries.
+ *
  * A new day starts with an empty list. The first time the window opens on a
  * day after one that had a list, it offers what was left unfinished: bring it
  * over, or start fresh. Either answer is remembered for the day.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Check, GripVertical, ListTodo, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, GripVertical, ListTodo, Plus, X } from 'lucide-react';
 
 import api from '../lib/api.js';
 import { dayDiff } from '../lib/metrics.js';
-import { answerOffer, removeFromToday, reorderToday, useToday } from '../lib/today.js';
+import {
+  addOwnTask, answerOffer, removeFromToday, removeOwnTask, reorderToday, setOwnTaskDone, useToday,
+} from '../lib/today.js';
 import { Meter } from './primitives.jsx';
 import { useSheetDrag } from './sheet.js';
 import { CORNER_WHEEL } from './CornerWheel.jsx';
@@ -71,20 +77,44 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
   const today = useToday();
   const index = useMemo(() => indexEntries(projects), [projects]);
 
-  /* Ticks land on screen at once and stay until the refetch shows the same
-     thing; a failed write drops them, so the row goes back to what is true. */
+  /* Ticks on an entry land on screen at once and stay until the refetch
+     shows the same thing; a failed write drops them, so the row goes back to
+     what is true. A day's own task is ticked in the store itself. */
   const [pending, setPending] = useState({});
-  const isDone = (item) => (item.task.id in pending ? pending[item.task.id] : !!item.task.completed);
+  const isDone = (row) => (row.kind === 'own'
+    ? !!row.own.completed
+    : (row.id in pending ? pending[row.id] : !!row.entry.task.completed));
 
   /* While a row is being dragged the list shows the order it would land in;
-     the store is written once, on drop. */
+     the store is written once, on drop. The order is keys: e<id> an entry,
+     l<id> a day's own task. */
   const [drag, setDrag] = useState(null);
-  const order = drag ? drag.ids : today.taskIds;
-  const items = order.map((id) => index.get(id)).filter(Boolean);
+  const order = drag ? drag.ids : today.order;
+  const items = order.map((key) => {
+    const id = Number(key.slice(1));
+    if (key[0] === 'e') {
+      const entry = index.get(id);
+      return entry ? { key, kind: 'entry', id, title: entry.task.title || 'Untitled entry', entry } : null;
+    }
+    const own = today.loose[id];
+    return own ? { key, kind: 'own', id, title: own.title, own } : null;
+  }).filter(Boolean);
   const doneCount = items.filter(isDone).length;
   const completion = items.length ? doneCount / items.length : 0;
 
-  const offered = today.offer ? today.offer.taskIds.filter((id) => index.has(id)) : [];
+  const offeredCount = today.offer
+    ? (today.offer.taskIds || []).filter((id) => index.has(id)).length + (today.offer.loose || []).length
+    : 0;
+
+  /* The field for a task of the day's own. */
+  const [draft, setDraft] = useState('');
+  const addOwn = (e) => {
+    e.preventDefault();
+    const text = draft.trim();
+    if (!text) return;
+    setDraft('');
+    addOwnTask(text);
+  };
 
   const panelRef = useRef(null);
   const hold = useRef(null);
@@ -148,7 +178,8 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
   }, [open]);
 
   const toggleDone = async (item) => {
-    const id = item.task.id;
+    if (item.kind === 'own') { setOwnTaskDone(item.id, !isDone(item)); return; }
+    const id = item.id;
     const next = !isDone(item);
     setPending((p) => ({ ...p, [id]: next }));
     try {
@@ -177,7 +208,7 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
     if (e.pointerType === 'mouse') return;
     e.preventDefault();
     const pointer = e.pointerId;
-    setDrag({ id, ids: today.taskIds, from: today.taskIds, touch: true });
+    setDrag({ id, ids: today.order, from: today.order, touch: true });
     const onMove = (ev) => {
       if (ev.pointerId !== pointer || !listRef.current) return;
       const rows = [...listRef.current.children];
@@ -202,12 +233,12 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
     window.addEventListener('pointercancel', onUp);
   };
 
-  const step = (id, by) => {
-    const at = today.taskIds.indexOf(id);
+  const step = (key, by) => {
+    const at = today.order.indexOf(key);
     if (at < 0) return;
     const to = at + by;
-    if (to < 0 || to >= today.taskIds.length) return;
-    reorderToday(move(today.taskIds, id, to));
+    if (to < 0 || to >= today.order.length) return;
+    reorderToday(move(today.order, key, to));
   };
 
   const dayLabel = useMemo(
@@ -245,7 +276,7 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
           <span className="flow__count">
             {dayLabel}
             <span className="flow__sep">/</span>
-            {items.length} {items.length === 1 ? 'entry' : 'entries'}
+            {items.length} {items.length === 1 ? 'task' : 'tasks'}
             <span className="flow__sep">/</span>
             {doneCount} done
           </span>
@@ -256,10 +287,26 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
         </header>
 
         <div className="todo__body">
-          {offered.length ? (
+          <form className="todo__add" onSubmit={addOwn}>
+            <input
+              id="todo-add"
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Add a task for today"
+              aria-label="Add a task for today"
+              autoComplete="off"
+              maxLength={300}
+            />
+            <button type="submit" className="entry__action todo__icon" disabled={!draft.trim()} aria-label="Add the task">
+              <Plus strokeWidth={1.6} aria-hidden="true" />
+            </button>
+          </form>
+
+          {offeredCount ? (
             <div className="todo__offer">
               <span className="todo__offer-text">
-                {offered.length} {offered.length === 1 ? 'entry' : 'entries'} left unfinished from your last list.
+                {offeredCount} {offeredCount === 1 ? 'task' : 'tasks'} left unfinished from your last list.
               </span>
               <button type="button" className="entry__action" onClick={() => answerOffer(true)}>
                 Bring over
@@ -273,7 +320,7 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
           {items.length ? (
             <div className="todo__list" ref={listRef}>
               {items.map((item, i) => {
-                const id = item.task.id;
+                const id = item.key;
                 const done = isDone(item);
                 return (
                   <div
@@ -283,7 +330,7 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
                     onDragStart={(e) => {
                       e.dataTransfer.effectAllowed = 'move';
                       try { e.dataTransfer.setData('text/plain', String(id)); } catch { /* ignore */ }
-                      setDrag({ id, ids: today.taskIds, from: today.taskIds });
+                      setDrag({ id, ids: today.order, from: today.order });
                     }}
                     onDragOver={(e) => {
                       if (!drag) return;
@@ -309,19 +356,25 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
                       type="button"
                       className="entry__check"
                       aria-pressed={done}
-                      aria-label={done ? `Reopen ${item.task.title}` : `Complete ${item.task.title}`}
+                      aria-label={done ? `Reopen ${item.title}` : `Complete ${item.title}`}
                       onClick={() => toggleDone(item)}
                     >
                       <Check strokeWidth={2.4} aria-hidden="true" />
                     </button>
 
                     <div className="entry__main">
-                      <span className="entry__title todo__title">{item.task.title || 'Untitled entry'}</span>
-                      <div className="entry__meta">
-                        <span>{dueLine(item.task.dueDate, now, done)}</span>
-                        <span className="entry__case">{item.caseName}</span>
-                        {item.parent ? <span className="entry__case truncate">in {item.parent}</span> : null}
-                      </div>
+                      <span className="entry__title todo__title">{item.title}</span>
+                      {item.kind === 'entry' ? (
+                        <div className="entry__meta">
+                          <span>{dueLine(item.entry.task.dueDate, now, done)}</span>
+                          <span className="entry__case">{item.entry.caseName}</span>
+                          {item.entry.parent ? <span className="entry__case truncate">in {item.entry.parent}</span> : null}
+                        </div>
+                      ) : (
+                        <div className="entry__meta">
+                          <span>{done ? 'done' : 'today only'}</span>
+                        </div>
+                      )}
                     </div>
 
                     <span
@@ -338,7 +391,7 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
                         className="entry__action todo__icon"
                         onClick={() => step(id, -1)}
                         disabled={i === 0}
-                        aria-label={`Move ${item.task.title} up`}
+                        aria-label={`Move ${item.title} up`}
                         title="Move up (Alt+Up)"
                       >
                         <ArrowUp strokeWidth={1.6} aria-hidden="true" />
@@ -348,7 +401,7 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
                         className="entry__action todo__icon"
                         onClick={() => step(id, 1)}
                         disabled={i === items.length - 1}
-                        aria-label={`Move ${item.task.title} down`}
+                        aria-label={`Move ${item.title} down`}
                         title="Move down (Alt+Down)"
                       >
                         <ArrowDown strokeWidth={1.6} aria-hidden="true" />
@@ -356,9 +409,9 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
                       <button
                         type="button"
                         className="entry__action todo__icon"
-                        onClick={() => removeFromToday(id)}
-                        aria-label={`Take ${item.task.title} off today`}
-                        title="Take off today"
+                        onClick={() => (item.kind === 'own' ? removeOwnTask(item.id) : removeFromToday(item.id))}
+                        aria-label={item.kind === 'own' ? `Delete ${item.title}` : `Take ${item.title} off today`}
+                        title={item.kind === 'own' ? 'Delete' : 'Take off today'}
                       >
                         <X strokeWidth={1.6} aria-hidden="true" />
                       </button>
@@ -369,7 +422,7 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
             </div>
           ) : (
             <p className="todo__empty">
-              Nothing set for today. Press <span className="mono">Today</span> on any entry in a case to put it here.
+              Nothing set for today. Add a task above, or press <span className="mono">Today</span> on any entry in a case.
             </p>
           )}
         </div>

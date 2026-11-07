@@ -262,10 +262,22 @@ export function getToday(day) {
   return request('GET', `/today/${enc(day)}`);
 }
 
-/** Replaces the day's list with these ids, in this order. `decided` records
- *  that the morning question was answered. → the same shape as getToday. */
-export function saveToday(day, taskIds, decided = false) {
-  return request('PUT', `/today/${enc(day)}`, { taskIds, decided: !!decided });
+/** Replaces the day's list with these keys (e<id> an entry, l<id> one of the
+ *  day's own tasks), in this order. A day's own task left out is deleted.
+ *  `decided` records that the morning question was answered. → the same
+ *  shape as getToday. */
+export function saveToday(day, order, decided = false) {
+  return request('PUT', `/today/${enc(day)}`, { order, decided: !!decided });
+}
+
+/** A task of the day's own, on the end of its list. → the same shape as getToday. */
+export function addTodayTask(day, title) {
+  return request('POST', `/today/${enc(day)}/loose`, { title });
+}
+
+/** Ticks one of the day's own tasks, or renames it. */
+export function updateTodayTask(id, patch) {
+  return request('PATCH', `/today/loose/${enc(id)}`, patch);
 }
 
 /* ---------------------------------- wire ---------------------------------- */
@@ -295,6 +307,8 @@ const api = {
   saveNotes,
   getToday,
   saveToday,
+  addTodayTask,
+  updateTodayTask,
   listHeadlines,
 };
 

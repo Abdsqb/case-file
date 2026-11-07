@@ -29,7 +29,8 @@ const HUB = 31;
 const FROM = 180;
 const TO = 270;
 const NEAR = 56;          // a finger this close to the button points at nothing
-const LEAVE_MS = 260;
+const LEAVE_MS = 300;
+const PICK_AFTER_MS = 200; // the wheel folds away before the new screen starts
 
 const pt = (r, deg) => {
   const a = (deg * Math.PI) / 180;
@@ -99,7 +100,9 @@ export default function CornerWheel({ items, current, onPick }) {
       if (!mine(e)) return;
       const i = which(e.clientX, e.clientY);
       close();
-      if (i >= 0 && items[i].id !== current) onPick(items[i]);
+      /* The screen change is heavy enough to swallow the fold if it starts on
+         the same frame, so it waits for the wheel to have gone. */
+      if (i >= 0 && items[i].id !== current) setTimeout(() => onPick(items[i]), PICK_AFTER_MS);
     };
     const onCancel = (e) => { if (mine(e)) close(); };
     window.addEventListener('pointermove', onMove);

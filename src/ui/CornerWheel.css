@@ -17,7 +17,7 @@
   inset: 0;
   background: rgba(1, 2, 2, 0.85);
   opacity: 0;
-  transition: opacity 160ms ease 60ms;
+  transition: opacity 200ms ease 80ms;
 }
 .cornerwheel.is-shown .cornerwheel__ground { opacity: 1; transition: opacity 100ms ease; }
 
@@ -30,7 +30,8 @@
   transform-origin: 50% 50%;
   transform: scale(0.6);
   opacity: 0;
-  transition: transform 160ms cubic-bezier(0.4, 0, 1, 1), opacity 120ms ease;
+  /* Closing: back into the button, on an ease that starts gently. */
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1), opacity 180ms ease 40ms;
 }
 .cornerwheel.is-shown .cornerwheel__drawing {
   transform: none;
@@ -53,7 +54,7 @@
   transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) scale(0.6);
   opacity: 0;
   color: rgba(255, 255, 255, 0.42);   /* grey until pointed at */
-  transition: transform 160ms ease, opacity 120ms ease, color 120ms ease;
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), opacity 160ms ease, color 120ms ease;
 }
 .cornerwheel.is-shown .cornerwheel__item {
   transform: translate(-50%, -50%);

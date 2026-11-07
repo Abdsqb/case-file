@@ -918,7 +918,7 @@ export function Settings({ projects, now }) {
 
               <SettingRow
                 title="Card backgrounds"
-                hint="The frosted glass behind each card and the to-do window. Off, each is its contents and its four corners. The dashboard's cards have none either way."
+                hint="The frosted glass behind each card and the to-do window. Off, each is its contents and its four corners. On a phone the dashboard's cards have none either way."
               >
                 <Toggle
                   checked={cardGlass}

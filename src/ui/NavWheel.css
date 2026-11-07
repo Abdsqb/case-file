@@ -43,7 +43,7 @@
   opacity: 0;
   transition: opacity 160ms ease 60ms;
 }
-/* Space must feel instant: it starts on the first frame. */
+/* Alt must feel instant: it starts on the first frame. */
 .navwheel.is-shown .navwheel__disc {
   opacity: 1;
   transition: opacity 120ms ease;

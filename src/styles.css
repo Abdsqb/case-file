@@ -7261,22 +7261,24 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
 }
 
 /* ==========================================================================
-   EXPERIMENT: the dashboard's cards without their glass.
-   On the dashboard only, the cards lose their fill, blur and shadow and keep
-   only their contents and their four corners; every other screen's cards
-   keep their ground. One block, so it comes out whole.
+   EXPERIMENT: the dashboard's cards without their glass, on a phone.
+   There the dashboard's cards lose their fill, blur and shadow and keep only
+   their contents and their four corners; a desktop's keep their glass, as
+   every other screen's do. One block, so it comes out whole.
    ========================================================================== */
-.card.dash__card {
-  background: transparent;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  box-shadow: none;
-}
-.dash__card--flow.flowcard::before {
-  background: transparent;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  box-shadow: none;
+@media (max-width: 640px) {
+  .card.dash__card {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+  .dash__card--flow.flowcard::before {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
 }
 
 /* Settings → Card backgrounds, off: every card as the dashboard's are, the

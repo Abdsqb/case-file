@@ -2,7 +2,7 @@
  * TopNav.jsx — the navigation's pill.
  *
  * A single glass pill naming the screen you are on. A click or tap on it, or
- * Enter on it, opens the menu wheel (NavWheel.jsx); Space opens the wheel from
+ * Enter on it, opens the menu wheel (NavWheel.jsx); holding Alt opens it from
  * anywhere. It no longer opens on hover: a wheel that covers the screen must
  * not burst open as the pointer crosses the top of it.
  *

@@ -10,10 +10,12 @@
  * closes the wheel. On a touch screen a finger can also press, slide toward
  * a section and let go.
  *
- * Space is press-and-hold: holding it brings the wheel, pointing lights a
- * section, and letting go opens it. From the top pill it stays open until a
- * click; there keys work as well: the arrows go round, Enter opens, 1–7 jump,
- * Escape or a press of Space closes.
+ * Alt is press-and-hold: holding it brings the wheel, pointing lights a
+ * section, and letting go opens it. Another key pressed while Alt is held
+ * (Alt+Tab, Alt+Left) is a shortcut of its own: the wheel steps aside without
+ * choosing. Opened from the top pill it stays open until a click; keys work
+ * there as well: the arrows go round, Enter opens, 1–7 jump, Escape or a
+ * press of Alt closes.
  *
  * The ground darkens first and the wheel arrives on it; leaving, the wheel
  * goes first and the ground lifts after (NavWheel.css).
@@ -62,12 +64,11 @@ const still = () =>
   document.documentElement.dataset.motion === 'reduced'
   || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* Space opens the wheel, but not from inside a field, from a control (where
-   Space presses it), or from inside another dialog. */
-const spaceIsTheirs = (t) =>
-  !!t && (t.isContentEditable
-    || /^(INPUT|TEXTAREA|SELECT|BUTTON|A|SUMMARY)$/.test(t.tagName)
-    || !!t.closest?.('[role="dialog"], [role="menu"]'));
+/* The key held for the wheel. Alt types nothing, so it works from anywhere,
+   inside a field too; Space had to stand aside wherever it typed or pressed. */
+const KEY = 'Alt';
+/* While it is held, these steer the wheel; anything else is a shortcut. */
+const STEERS = /^(Arrow(Up|Down|Left|Right)|Enter|[1-9])$/;
 
 const cx = (...c) => c.filter(Boolean).join(' ');
 
@@ -78,7 +79,7 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
   const discRef = useRef(null);
   const returnTo = useRef(null);
   const press = useRef(null);
-  /* Space held since it opened the wheel: letting go opens what is lit.
+  /* Alt held since it opened the wheel: letting go opens what is lit.
      Kept in refs, read by a keyup listener that is always there, so even a
      release a few milliseconds after the press is caught. */
   const held = useRef(false);
@@ -129,12 +130,11 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Space, from anywhere that is not someone else's, opens it.
+  // Alt on its own opens it (with Ctrl, Meta or Shift it is someone else's chord).
   useEffect(() => {
     if (open) return undefined;
     const onKey = (e) => {
-      if (e.key !== ' ' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-      if (spaceIsTheirs(e.target)) return;
+      if (e.key !== KEY || e.repeat || e.ctrlKey || e.metaKey || e.shiftKey) return;
       e.preventDefault();
       held.current = true;
       onOpen();
@@ -149,27 +149,44 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
     if (i >= 0 && items[i].id !== current) onPick(items[i]);
   }, [items, current, onClose, onPick]);
 
-  /* Hold Space, point, let go: the release opens what is lit. */
+  /* Hold Alt, point, let go: the release opens what is lit. Leaving the
+     window with it held (Alt+Tab) lets the wheel go without choosing. */
   useEffect(() => {
     const onUp = (e) => {
-      if (e.key !== ' ' || !held.current) return;
+      if (e.key !== KEY) return;
+      e.preventDefault();               // a lone Alt must not wake the browser's menu
+      if (!held.current) return;
       held.current = false;
-      e.preventDefault();
       choose(hotRef.current);
     };
+    const onBlur = () => {
+      if (!held.current) return;
+      held.current = false;
+      onClose();
+    };
     window.addEventListener('keyup', onUp, true);
-    return () => window.removeEventListener('keyup', onUp, true);
-  }, [choose]);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keyup', onUp, true);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [choose, onClose]);
 
   // Keys while it is open.
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
       if (e.key === 'Escape') { held.current = false; e.preventDefault(); e.stopPropagation(); onClose(); return; }
-      if (e.key === ' ') {
+      if (e.key === KEY) {
         // Held down: the keyup decides. A fresh press, with the wheel opened from the pill: close.
         e.preventDefault(); e.stopPropagation();
         if (!e.repeat && !held.current) onClose();
+        return;
+      }
+      if (held.current && !STEERS.test(e.key)) {
+        // Alt plus another key is that key's shortcut: step aside, let it through.
+        held.current = false;
+        onClose();
         return;
       }
       const at = hot < 0 ? 0 : hot;

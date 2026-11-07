@@ -316,7 +316,7 @@ export default function App() {
       {/* Last, and above everything: left alone for a minute the app goes soft
           behind a clock. It covers the pad and its tab as well, which is the
           point — standby is about the window, not about a screen. */}
-      {/* The menu: from the top pill, or Space anywhere. */}
+      {/* The menu: from the top pill, or Alt held anywhere. */}
       <NavWheel
         items={phone ? PHONE_WHEEL : NAV}
         current={view}

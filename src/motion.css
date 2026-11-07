@@ -549,7 +549,7 @@
   height: 36px;
   pointer-events: auto;
 }
-/* No name up here: a desktop has Space for the menu wheel, a phone holds the
+/* No name up here: a desktop holds Alt for the menu wheel, a phone holds the
    to-do button for the corner wheel. It keeps its place in the bar. */
 .pillnav { visibility: hidden; }
 

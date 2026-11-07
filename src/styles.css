@@ -4975,6 +4975,14 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
 .todo__del { display: none; }
 
 .todo__row { cursor: grab; }
+/* Clicked into (the tick), a row does not stay lit after the pointer leaves;
+   hovered, or reached by the keyboard, it still is. */
+.todo__row:focus-within:not(:hover):not(:has(:focus-visible)) {
+  transform: none;
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  box-shadow: none;
+}
 .todo__row:active { cursor: grabbing; }
 .todo__title { cursor: inherit; }
 

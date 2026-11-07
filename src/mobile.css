@@ -645,10 +645,22 @@
   /* Lifted: it comes up out of the list (a touch bigger, a deep shadow) and
      rides above the rows it passes; set down, it sinks back. */
   .todo__item.is-lifted { z-index: 5; }
-  .todo__item.is-lifted .todo__row {
+  .card.todo .todo__item.is-lifted .todo__row {
     transform: scale(1.04);
     box-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.95);
   }
+
+  /* A row looks the same touched as not: no tap flash, no lit "focused"
+     state, and not the lighter ground the sticky-hover reset gives a touched
+     row (!important over that rule's weight). */
+  .card.todo .todo__row,
+  .card.todo .todo__row:hover,
+  .card.todo .todo__row:focus-within {
+    background: rgb(var(--raised-rgb)) !important;
+    box-shadow: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .card.todo .todo__row :is(button, span) { -webkit-tap-highlight-color: transparent; }
 
   .todo__del {
     position: absolute;

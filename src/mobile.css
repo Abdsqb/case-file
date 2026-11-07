@@ -299,15 +299,10 @@
   }
   .card.todo.is-dragging { transition: none; }
   .card.todo > .card__foot { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
-  /* A sheet runs off the bottom edge: corners at the top only. */
-  .card.todo::after {
-    -webkit-mask:
-      linear-gradient(#000 0 0) left top / var(--corner) var(--corner) no-repeat,
-      linear-gradient(#000 0 0) right top / var(--corner) var(--corner) no-repeat;
-    mask:
-      linear-gradient(#000 0 0) left top / var(--corner) var(--corner) no-repeat,
-      linear-gradient(#000 0 0) right top / var(--corner) var(--corner) no-repeat;
-  }
+  /* No borders on the phone's to-do: no corners on the sheet, no outline
+     round each entry. It lies on black, and the rows read as a list. */
+  .card.todo::after { content: none; }
+  .card.todo .todo__row { border-color: transparent !important; }   /* over the touch rule that restores a touched row's edge */
 
   /* Its title bar: the name, the state and the close button on one line, the
      measurements under them rather than printed across the name. */

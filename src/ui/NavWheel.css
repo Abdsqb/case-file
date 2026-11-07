@@ -111,7 +111,7 @@
 .navwheel__mover {
   transform-box: view-box;
   transform-origin: 190px 190px;
-  transition: transform 320ms cubic-bezier(0.22, 1, 0.3, 1), opacity 140ms ease;
+  transition: transform 190ms cubic-bezier(0.25, 0.9, 0.35, 1), opacity 140ms ease;   /* keeps up with the pointer; still a glide */
 }
 .navwheel.is-instant .navwheel__mover { transition: none; }
 

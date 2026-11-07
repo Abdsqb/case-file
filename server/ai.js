@@ -199,12 +199,15 @@ export function status() {
 
 /** Thrown for everything a caller might want to show the reader verbatim. */
 export class AiError extends Error {
-  constructor(message, { status = 502, provider = null, retryable = false } = {}) {
+  constructor(message, { status = 502, provider = null, retryable = false, failover = false } = {}) {
     super(message);
     this.name = 'AiError';
     this.status = status;
     this.provider = provider;
     this.retryable = retryable;
+    // This provider cannot answer at all (its key refused, its model gone);
+    // another one, with its own key, can be asked the same thing.
+    this.failover = failover;
   }
 }
 
@@ -307,8 +310,11 @@ async function attempt(provider, { capability, messages, tools, schema, temperat
          about it, because the answer is always the same and it is one line. */
       const gone = res.status === 404
         || /does not exist|not found|decommissioned|no longer|deprecated/i.test(detail);
+      const refused = res.status === 401 || res.status === 403;
       let hint = '';
-      if (gone && provider.modelEnv) {
+      if (refused) {
+        hint = ` — the key was refused. Replace ${provider.env} in .env, and in the hosting settings if it runs there.`;
+      } else if (gone && provider.modelEnv) {
         hint = ` — that model is gone. Set ${provider.modelEnv} in .env to one this key can use.`;
       } else if (res.status === 429) {
         /* Two different walls wear the same status code, and the thing to do
@@ -324,6 +330,7 @@ async function attempt(provider, { capability, messages, tools, schema, temperat
         status: res.status === 429 ? 429 : 502,
         provider: provider.id,
         retryable,
+        failover: refused || gone,
       });
       if (retryable && attempt < RETRIES) {
         /* Honour Retry-After when the provider sends one — guessing shorter
@@ -363,10 +370,11 @@ async function attempt(provider, { capability, messages, tools, schema, temperat
  * have served without noticing. Falling over turns "the clerk is rate limited,
  * try later" into something the reader never sees.
  *
- * Only a wall gets a second provider: a rate limit, or a provider that is
- * down. A 400 is a bad request and asking someone else the same bad question
- * wastes a second quota to get the same answer. And when CLERK_PROVIDER is
- * pinned there is only ever one candidate, by design.
+ * Only a wall gets a second provider: a rate limit, a provider that is down,
+ * or one that cannot answer at all (its key refused, its model retired). A
+ * 400 is a bad request and asking someone else the same bad question wastes
+ * a second quota to get the same answer. And when CLERK_PROVIDER is pinned
+ * there is only ever one candidate, by design.
  */
 export async function complete({
   capability = 'fast',
@@ -392,10 +400,10 @@ export async function complete({
       return await attempt(candidates[i], opts);
     } catch (err) {
       if (!first) first = err;
-      const wall = err.status === 429 || err.status === 503 || err.status === 504;
+      const wall = err.status === 429 || err.status === 503 || err.status === 504 || err.failover;
       const more = i < candidates.length - 1;
       if (!wall || !more) throw first;
-      console.warn(`Clerk: ${candidates[i].label} is out of road (${err.status}) — trying ${candidates[i + 1].label}`);
+      console.warn(`Clerk: ${candidates[i].label} is out of road (${err.failover ? 'cannot answer' : err.status}) — trying ${candidates[i + 1].label}`);
     }
   }
 

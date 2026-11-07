@@ -82,7 +82,8 @@ const PHONE_WHEEL = [...NAV, ...NAV_ACTIONS];
 /* The phone's corner wheel, out of the held to-do button: the screens, and
    the notes pad (the to-do is the button itself). With no name at the top
    to tap, this is the way to all of them on a phone. */
-const CORNER = [...NAV, ...NAV_ACTIONS.filter((a) => a.id === 'notes')];
+// Reversed: Notes out to the left, Dashboard at the top.
+const CORNER = [...NAV, ...NAV_ACTIONS.filter((a) => a.id === 'notes')].reverse();
 
 // How long the longest card in a screen takes to finish assembling. The tail is
 // the case render's pin sequence, which finishes at ~1920ms; this keeps headroom

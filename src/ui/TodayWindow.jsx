@@ -10,8 +10,8 @@
  * Nothing here is a copy. A row is a pointer to a real entry (or subtask), so
  * ticking it off closes the entry in its case and reopening it here reopens it
  * there. Dragging a row, or Alt+Up/Down on it, changes only today's order.
- * On a phone a row is held a moment to lift it (or taken by its grip at
- * once), and swiped left to show its delete.
+ * On a phone a row is held a moment to lift it, and swiped left to show its
+ * delete.
  *
  * Or a row is a task of the day's own, typed into the field at the top: it
  * belongs to no case, lives on today's list alone, and taking it off deletes
@@ -22,8 +22,8 @@
  * over, or start fresh. Either answer is remembered for the day.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, GripVertical, ListTodo, Plus, X } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Check, ListTodo, Plus, X } from 'lucide-react';
 
 import api from '../lib/api.js';
 import { dayDiff } from '../lib/metrics.js';
@@ -37,6 +37,7 @@ import { CORNER_WHEEL } from './CornerWheel.jsx';
 const HOLD_MS = 200;   // held this long, the button opens the corner wheel instead
 const SLIDE_PX = 10;   // or slid this far off it, at once
 const PRESS_MS = 260;  // a row held this long lifts, to be dragged (a phone)
+const SETTLE_MS = 200; // a lifted row's glide into its place on letting go
 const REVEAL = 76;     // px a row swiped left opens to, showing its delete
 
 /* Raised by the top island's "Today's to-do" row: the way in on a phone,
@@ -197,11 +198,17 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
   };
 
   /* A finger on a row (a phone; the browser's drag and drop is mouse-only):
-       held still a moment, or taken by its grip, the row lifts and follows
-         the finger through the list, landing where it is let go;
+       held still a moment, the row lifts out of the list and follows the
+         finger; the rows it passes slide aside to make its space, and let go
+         it glides into that space;
        slid sideways to the left, it opens to show its delete, and stays open
          if it went more than halfway;
        moved up or down first, it is a scroll, or the sheet being pulled.
+     The list is not re-rendered while a row is lifted: the row and the ones
+     it passes move by transform alone, measured once at the lift, which is
+     what keeps it smooth. The new order is written once it has settled, and
+     the transforms come off in the same frame the list re-renders in that
+     order (the layout effect below), so nothing jumps.
      Touch events, not pointer events: once a row has lifted, its moves must
      stop the sheet scrolling, and only a touchmove listener that is not
      passive can. While a row is lifted or sliding the sheet is told to keep
@@ -214,6 +221,30 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
   swipedRef.current = swiped;
   const orderRef = useRef(today.order);
   orderRef.current = today.order;
+  const settled = useRef(null);                   // elements to clear once the new order is on screen
+
+  const clearLift = (els) => {
+    for (const el of els) {
+      el.style.transition = 'none';
+      el.style.transform = '';
+      el.classList.remove('is-lifted');
+      const row = el.querySelector('.todo__row');
+      if (row) { row.style.transition = 'none'; row.style.transform = ''; }
+    }
+    // The next frame, the stylesheet's transitions are theirs again.
+    requestAnimationFrame(() => {
+      for (const el of els) {
+        el.style.transition = '';
+        const row = el.querySelector('.todo__row');
+        if (row) row.style.transition = '';
+      }
+    });
+  };
+  useLayoutEffect(() => {
+    if (!settled.current) return;
+    clearLift(settled.current);
+    settled.current = null;
+  }, [today.order]);
 
   useEffect(() => {
     const list = listRef.current;
@@ -221,25 +252,36 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
     if (!open || !list || !sheet) return undefined;
     let g = null;
     const slideOf = (item) => item.querySelector('.todo__row');
+    const ease = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+
+    const lift = () => {
+      if (!g || g.mode) return;
+      const els = [...list.children];
+      const from = els.indexOf(g.item);
+      if (from < 0) return;
+      g.mode = 'drag';
+      sheet.dataset.busy = '1';
+      navigator.vibrate?.(8);
+      setSwiped(null);
+      const rects = els.map((el) => el.getBoundingClientRect());
+      const step = from < els.length - 1 ? rects[from + 1].top - rects[from].top : rects[from].height + 6;
+      Object.assign(g, { els, from, to: from, rects, step });
+      for (const el of els) el.style.transition = el === g.item ? 'none' : `transform 200ms ${ease}`;
+      g.item.classList.add('is-lifted');
+    };
+
     const onStart = (e) => {
       g = null;
       if (e.touches.length !== 1) return;
       const item = e.target.closest?.('.todo__item');
       if (!item || e.target.closest('.todo__del')) return;
+      if (settled.current) return;              // the last drop is still settling
       const p = e.touches[0];
       g = { key: item.dataset.key, item, x: p.clientX, y: p.clientY, mode: null, dx: 0,
         base: swipedRef.current === item.dataset.key ? -REVEAL : 0, t: 0 };
-      const lift = () => {
-        if (!g || g.mode) return;
-        g.mode = 'drag';
-        sheet.dataset.busy = '1';
-        navigator.vibrate?.(8);
-        setSwiped(null);
-        setDrag({ id: g.key, ids: orderRef.current, from: orderRef.current, touch: true });
-      };
-      if (e.target.closest('.todo__grip')) lift();
-      else g.t = setTimeout(lift, PRESS_MS);
+      g.t = setTimeout(lift, PRESS_MS);
     };
+
     const onMove = (e) => {
       if (!g) return;
       const p = e.touches[0];
@@ -256,36 +298,59 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
       }
       e.preventDefault();
       if (g.mode === 'drag') {
-        const rows = [...list.children];
-        let to = rows.length - 1;
-        for (let i = 0; i < rows.length; i += 1) {
-          const r = rows[i].getBoundingClientRect();
-          if (p.clientY < r.top + r.height / 2) { to = i; break; }
+        // The lifted row is where the finger is; the list stays still under it.
+        const lo = g.rects[0].top - g.rects[g.from].top;
+        const hi = g.rects[g.rects.length - 1].bottom - g.rects[g.from].bottom;
+        const y = Math.max(lo - 12, Math.min(hi + 12, dy));
+        g.item.style.transform = `translateY(${y}px)`;
+        const mid = g.rects[g.from].top + g.rects[g.from].height / 2 + y;
+        let to = g.from;
+        g.rects.forEach((r, i) => {
+          const c = r.top + r.height / 2;
+          if (i < g.from && mid < c) to = Math.min(to, i);
+          if (i > g.from && mid > c) to = Math.max(to, i);
+        });
+        if (to !== g.to) {
+          g.to = to;
+          g.els.forEach((el, i) => {
+            if (i === g.from) return;
+            const shift = (g.from < to && i > g.from && i <= to) ? -g.step
+              : (to < g.from && i >= to && i < g.from) ? g.step : 0;
+            el.style.transform = shift ? `translateY(${shift}px)` : '';
+          });
         }
-        setDrag((d) => (d && d.ids.indexOf(d.id) !== to ? { ...d, ids: move(d.ids, d.id, to) } : d));
       } else {
         g.dx = Math.max(-REVEAL * 1.4, Math.min(0, g.base + dx));
         slideOf(g.item).style.transform = `translateX(${g.dx}px)`;
       }
     };
+
     const onEnd = () => {
       if (!g) return;
       clearTimeout(g.t);
       delete sheet.dataset.busy;
-      if (g.mode === 'drag') {
-        const d = dragRef.current;
-        setDrag(null);
-        if (d && d.ids.join() !== d.from.join()) reorderToday(d.ids);
-      } else if (g.mode === 'swipe') {
-        const el = slideOf(g.item);
-        g.item.classList.remove('is-sliding');
+      const done = g;
+      g = null;
+      if (done.mode === 'drag') {
+        // Glide into the space, set down, then write the order.
+        const { els, from, to, step, item } = done;
+        item.style.transition = `transform ${SETTLE_MS}ms ${ease}`;
+        item.style.transform = `translateY(${(to - from) * step}px)`;
+        item.classList.remove('is-lifted');
+        settled.current = els;
+        setTimeout(() => {
+          if (to === from) { clearLift(els); settled.current = null; return; }
+          reorderToday(move(orderRef.current, done.key, to));   // the layout effect clears, with the new order
+        }, SETTLE_MS);
+      } else if (done.mode === 'swipe') {
+        const el = slideOf(done.item);
+        done.item.classList.remove('is-sliding');
         el.style.transition = '';
         el.style.transform = '';
-        setSwiped(g.dx < -REVEAL / 2 ? g.key : null);
-      } else if (swipedRef.current && swipedRef.current !== g.key) {
+        setSwiped(done.dx < -REVEAL / 2 ? done.key : null);
+      } else if (swipedRef.current && swipedRef.current !== done.key) {
         setSwiped(null);   // a touch on another row closes the open one
       }
-      g = null;
     };
     list.addEventListener('touchstart', onStart, { passive: true });
     list.addEventListener('touchmove', onMove, { passive: false });
@@ -459,10 +524,6 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
                         </div>
                       )}
                     </div>
-
-                    <span className="todo__grip" aria-hidden="true">
-                      <GripVertical strokeWidth={1.6} />
-                    </span>
 
                     {/* A mouse's delete; a phone swipes for it instead (mobile.css). */}
                     <div className="entry__actions">

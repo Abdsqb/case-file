@@ -624,23 +624,9 @@
 }
 
 /* The to-do by touch (TodayWindow.jsx), where the mouse's drag and drop does
-   not exist: a row held a moment (or taken by its grip) lifts and is dragged;
-   a row swiped left shows a delete behind it. Touch screens only. */
-.todo__grip { display: none; }
+   not exist: a row held a moment lifts out of the list and is dragged; a row
+   swiped left shows a delete behind it. Touch screens only. */
 @media (hover: none) and (pointer: coarse) {
-  .todo__grip {
-    display: inline-grid;
-    place-items: center;
-    flex: none;
-    width: 40px;
-    height: 44px;
-    margin: -6px -6px -6px auto;
-    color: var(--text-faint);
-    touch-action: none;
-    cursor: grab;
-  }
-  .todo__grip svg { width: 18px; height: 18px; }
-
   /* The row slides over its delete, so it is solid; a long press must not
      select its text or bring up the phone's own menu. */
   .todo__row {
@@ -655,10 +641,13 @@
     transition: transform 260ms cubic-bezier(0.22, 1, 0.3, 1), box-shadow 160ms ease, opacity 160ms ease;
   }
   .todo__item.is-swiped .todo__row { transform: translateX(-76px); }
-  .todo__row.entry--dragging {
-    opacity: 0.92;
-    transform: scale(1.02);
-    box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.85);
+
+  /* Lifted: it comes up out of the list (a touch bigger, a deep shadow) and
+     rides above the rows it passes; set down, it sinks back. */
+  .todo__item.is-lifted { z-index: 5; }
+  .todo__item.is-lifted .todo__row {
+    transform: scale(1.04);
+    box-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.95);
   }
 
   .todo__del {

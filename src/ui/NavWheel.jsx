@@ -21,7 +21,7 @@
  * goes first and the ground lifts after (NavWheel.css).
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CalendarDays, ChartColumn, Folder, LayoutGrid, ListTodo, NotebookPen, SlidersHorizontal } from 'lucide-react';
 import { SPRINGS } from './island.js';
 import './NavWheel.css';
@@ -111,15 +111,7 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
       setHot(here);
       setTurn(here * SEG);
       setMounted(true);
-      /* One frame in the page at rest, so the transitions have a start;
-         then shown. */
-      const id = requestAnimationFrame(() => {
-        rootRef.current?.getBoundingClientRect();
-        setInstant(false);
-        setShown(true);
-        rootRef.current?.focus({ preventScroll: true });
-      });
-      return () => cancelAnimationFrame(id);
+      return undefined;     // shown once it is laid out folded (below)
     }
     setShown(false);
     const t = setTimeout(() => setMounted(false), still() ? 0 : LEAVE_MS);
@@ -129,6 +121,22 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
     // items/current/SEG are read once, as it opens
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  /* Unfold only once the folded wheel is really there. Flipping to shown on
+     a frame scheduled from the opening effect sometimes landed in the same
+     render as the mount, with no folded state to move from, and it popped.
+     Here the folded wheel is in the page and laid out (the read forces its
+     styles) before the class that unfolds it goes on, a frame later. */
+  useLayoutEffect(() => {
+    if (!mounted || !open) return undefined;
+    rootRef.current?.getBoundingClientRect();
+    const id = requestAnimationFrame(() => {
+      setInstant(false);
+      setShown(true);
+      rootRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [mounted, open]);
 
   // Alt on its own opens it (with Ctrl, Meta or Shift it is someone else's chord).
   useEffect(() => {

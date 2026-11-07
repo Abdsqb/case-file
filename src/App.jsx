@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import './styles.css';
 import './motion.css';
@@ -141,6 +141,17 @@ export default function App() {
     setView(next);
     if (readHash() !== next) window.location.hash = next;
   }, []);
+
+  /* Every screen opens at its top. The window is the page's scroller and
+     nothing reset it, so coming to the dashboard from a long screen kept the
+     old offset, and the shorter page opened at its bottom; the browser's own
+     restoring of a position on reload did the same to the first screen. */
+  useLayoutEffect(() => {
+    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+  }, []);
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
 
   // One live clock for the whole app. Never a module-scope Date.now() — every
   // overdue decision on every screen reads this, so a frozen clock would make

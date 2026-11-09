@@ -39,6 +39,8 @@ const SLIDE_PX = 10;   // or slid this far off it, at once
 const PRESS_MS = 260;  // a row held this long lifts, to be dragged (a phone)
 const SETTLE_MS = 200; // a lifted row's glide into its place on letting go
 const REVEAL = 76;     // px a row swiped left opens to, showing its delete
+const FLICK = 0.45;    // px/ms: a flick this fast opens (left) or closes (right), however short
+const ARM_AT = 0.5;    // swiped past this share of its width, a row deletes on letting go
 
 /* Raised by the top island's "Today's to-do" row: the way in on a phone,
    which has no Shift+T. */
@@ -223,6 +225,29 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
   orderRef.current = today.order;
   const settled = useRef(null);                   // elements to clear once the new order is on screen
 
+  /* Deleting a row by touch is seen happen: it slides off to the left, then
+     the gap it leaves closes, and only then is it taken off the list. */
+  const dropRow = useCallback((key) => {
+    const item = listRef.current?.querySelector(`.todo__item[data-key="${key}"]`);
+    const id = Number(key.slice(1));
+    const remove = () => (key[0] === 'l' ? removeOwnTask(id) : removeFromToday(id));
+    setSwiped(null);
+    if (!item) { remove(); return; }
+    const row = item.querySelector('.todo__row');
+    item.classList.add('is-going');
+    row.style.transition = 'transform 200ms cubic-bezier(0.4, 0, 1, 1)';
+    row.style.transform = 'translateX(-110%)';
+    item.style.height = `${item.offsetHeight}px`;
+    item.style.overflow = 'hidden';
+    requestAnimationFrame(() => {
+      item.style.transition = 'height 220ms ease 150ms, margin-bottom 220ms ease 150ms, opacity 180ms ease 150ms';
+      item.style.height = '0px';
+      item.style.marginBottom = '0px';
+      item.style.opacity = '0';
+    });
+    setTimeout(remove, 390);
+  }, []);
+
   const clearLift = (els) => {
     for (const el of els) {
       el.style.transition = 'none';
@@ -278,7 +303,8 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
       if (settled.current) return;              // the last drop is still settling
       const p = e.touches[0];
       g = { key: item.dataset.key, item, x: p.clientX, y: p.clientY, mode: null, dx: 0,
-        base: swipedRef.current === item.dataset.key ? -REVEAL : 0, t: 0 };
+        base: swipedRef.current === item.dataset.key ? -REVEAL : 0, t: 0,
+        lastX: p.clientX, lastT: e.timeStamp, vx: 0, armed: false };
       g.t = setTimeout(lift, PRESS_MS);
     };
 
@@ -288,10 +314,14 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
       const dx = p.clientX - g.x;
       const dy = p.clientY - g.y;
       if (!g.mode) {
-        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
         clearTimeout(g.t);
-        if (Math.abs(dx) <= Math.abs(dy)) { g = null; return; }   // a scroll, or the sheet's pull
+        /* Sideways wins unless it is plainly up or down: a thumb's swipe is
+           rarely level. A closed row only opens leftward. */
+        const sideways = Math.abs(dx) >= Math.abs(dy) * 0.8;
+        if (!sideways || (g.base === 0 && dx > 0)) { g = null; return; }   // a scroll, or the sheet's pull
         g.mode = 'swipe';
+        g.w = g.item.offsetWidth;
         sheet.dataset.busy = '1';
         g.item.classList.add('is-sliding');
         slideOf(g.item).style.transition = 'none';
@@ -320,8 +350,23 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
           });
         }
       } else {
-        g.dx = Math.max(-REVEAL * 1.4, Math.min(0, g.base + dx));
-        slideOf(g.item).style.transform = `translateX(${g.dx}px)`;
+        // Follows the finger; a little resistance past the delete's width.
+        let x = Math.min(0, g.base + dx);
+        if (x < -REVEAL) x = -REVEAL + (x + REVEAL) * 0.85;
+        x = Math.max(-g.w, x);
+        g.dx = x;
+        const dt = e.timeStamp - g.lastT;
+        if (dt > 0) g.vx = 0.7 * ((p.clientX - g.lastX) / dt) + 0.3 * g.vx;
+        g.lastX = p.clientX;
+        g.lastT = e.timeStamp;
+        slideOf(g.item).style.transform = `translateX(${x}px)`;
+        g.item.style.setProperty('--p', Math.min(1, -x / REVEAL).toFixed(3));
+        const armed = -x > g.w * ARM_AT;
+        if (armed !== g.armed) {
+          g.armed = armed;
+          g.item.classList.toggle('is-armed', armed);
+          if (armed) navigator.vibrate?.(10);
+        }
       }
     };
 
@@ -343,11 +388,15 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
           reorderToday(move(orderRef.current, done.key, to));   // the layout effect clears, with the new order
         }, SETTLE_MS);
       } else if (done.mode === 'swipe') {
+        if (done.armed) { dropRow(done.key); return; }   // swiped most of the way: gone
         const el = slideOf(done.item);
-        done.item.classList.remove('is-sliding');
+        done.item.classList.remove('is-sliding', 'is-armed');
+        done.item.style.removeProperty('--p');
         el.style.transition = '';
         el.style.transform = '';
-        setSwiped(done.dx < -REVEAL / 2 ? done.key : null);
+        // A flick decides by its direction; a slow drag by how far it went.
+        const open = done.vx < -FLICK ? true : done.vx > FLICK ? false : done.dx < -REVEAL / 2;
+        setSwiped(open ? done.key : null);
       } else if (swipedRef.current && swipedRef.current !== done.key) {
         setSwiped(null);   // a touch on another row closes the open one
       }
@@ -364,7 +413,7 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
       list.removeEventListener('touchend', onEnd);
       list.removeEventListener('touchcancel', onEnd);
     };
-  }, [open, items.length > 0]);
+  }, [open, items.length > 0, dropRow]);
 
   // Closing the window closes any row left swiped open.
   useEffect(() => { if (!open) setSwiped(null); }, [open]);
@@ -466,11 +515,11 @@ export default function TodayWindow({ projects = [], now = Date.now(), onChanged
                   <button
                     type="button"
                     className="todo__del"
-                    onClick={() => { setSwiped(null); remove(); }}
+                    onClick={() => dropRow(id)}
                     aria-label={removeLabel}
                     tabIndex={swiped === id ? 0 : -1}
                   >
-                    <X strokeWidth={1.8} aria-hidden="true" />
+                    <span className="todo__delicon"><X strokeWidth={2} aria-hidden="true" /></span>
                   </button>
                   <div
                     className={cx('entry todo__row', done && 'entry--done', drag && drag.id === id && 'entry--dragging')}

@@ -29,6 +29,17 @@ export const ICONS = {
   notes: NotebookPen,
 };
 
+/* Each case's colour, as a Linear team has one: hashed from its id, so it is
+   the same everywhere it is drawn (the sidebar, Up next, …) and on every
+   device. */
+const CASE_COLORS = ['#6C78E6', '#4EA7FC', '#4CB782', '#F2C94C', '#F2994A', '#EB5757', '#BB87FC', '#26B5CE'];
+export function caseColor(id) {
+  const s = String(id ?? '');
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return CASE_COLORS[Math.abs(h) % CASE_COLORS.length];
+}
+
 /* The phone's tab bar: the four screens a thumb wants most. The rest are a
    hold of the to-do button away (the corner wheel), or in the drawer. */
 export const PHONE_TABS = ['dashboard', 'cases', 'calendar', 'plan'];

@@ -832,3 +832,208 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
   border: 1px solid var(--border-strong);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
 }
+
+/* ==========================================================================
+   SCREENS
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   9. DASHBOARD
+   The brief down the left — the greeting, the clerk's read of the day and
+   Up next as a Linear list — and the deck beside it, its cards named in a
+   row of view tabs above it.
+   -------------------------------------------------------------------------- */
+
+.dash {
+  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  gap: 28px;
+  height: auto;
+  align-items: start;
+}
+
+.dash__brief {
+  gap: 16px;
+  padding-top: 2px;
+  --tab-lane: 0px;
+}
+.dash__greet {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+.dash__line { max-width: 44ch; font-size: 13.5px; line-height: 1.55; color: var(--text-muted); }
+
+/* The clerk's read: a quiet block of its own, the accent tick at its edge. */
+.dash__read {
+  margin: 0;
+  padding: 12px 14px 12px 16px;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.dash__read::before { left: -1px; top: 14px; height: 16px; background: var(--accent); }
+.dash__readtext { max-width: none; font-size: 13.5px; line-height: 1.6; color: var(--text-2); }
+.dash__readkicker {
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+/* In the corner, shown on hover: it took a line of its own at the foot of
+   the block even while hidden. */
+.dash__readagain {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.dash__read .dash__readtext:first-of-type { padding-right: 64px; }
+@media (hover: none) { .dash__readagain { opacity: 1; } }
+
+/* Up next, as a Linear list: a header row, then one issue a row. */
+.dash__up {
+  gap: 0;
+  margin-top: 2px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.dash__uphead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-family: var(--font);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.dash__upcount { font-size: 12px; font-weight: 500; color: var(--text-faint); }
+.dash__row {
+  grid-template-columns: 14px 64px minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 38px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 0;
+  font-family: var(--font);
+  font-size: 12.5px;
+  transition: background-color 100ms ease;
+}
+.dash__row + .dash__row { border-top: 1px solid var(--line-soft); }
+.dash__row:hover,
+.dash__row:focus-visible { background: var(--hover); outline: none; }
+/* The status as Linear's ring: grey, amber when soon, red when late. */
+.dash__row > .status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px solid var(--text-faint);
+  box-shadow: none;
+  animation: none;
+}
+.dash__row > .status-dot--live { border-color: var(--amber); }
+.dash__row > .status-dot--overdue { border-color: var(--red); background: rgba(235, 87, 87, 0.15); }
+.dash__when { font-size: 12px; color: var(--text-faint); }
+.dash__row:has(.status-dot--overdue) .dash__when { color: var(--red); }
+.dash__what { font-size: 13px; font-weight: 500; color: var(--text); }
+.dash__case {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 170px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.dash__casedot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--dot, var(--accent)); }
+.dash__none { padding: 12px; font-family: var(--font); font-size: 12.5px; color: var(--text-muted); }
+
+/* The deck: its tabs above, the card under them. */
+.dash__deck {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  justify-content: stretch;
+  align-items: start;
+  gap: 12px;
+}
+.dash__deck:focus-visible .dash__stack { outline: none; }
+.dash__deck:focus-visible .dash__tabs { box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.4); }
+.dash__tabs {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  display: flex;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.dash__tabs::-webkit-scrollbar { display: none; }
+.dash__tab {
+  flex: none;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+.dash__tab:hover { color: var(--text); }
+.dash__tab.is-on { color: var(--text); background: rgba(255, 255, 255, 0.09); }
+.dash__tab:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--accent-edge); }
+.dash__stack {
+  grid-column: 1;
+  grid-row: 2;
+  height: clamp(440px, calc(100dvh - 190px), 700px);
+}
+.dash__dots { display: none; }
+.dash__card,
+.dash__card--flow.flowcard::before { background: var(--card-bg); }
+
+/* Not room for the two side by side: the brief above, the deck under it. */
+@media (max-width: 960px) {
+  .dash { grid-template-columns: minmax(0, 1fr); }
+  .dash__brief { max-width: 640px; }
+}
+
+@media (max-width: 640px) {
+  .dash { gap: 20px; }
+  .dash__greet { font-size: 24px; }
+  .dash__read { padding-left: 16px; }
+  .dash__row {
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+    grid-template-areas: 'dot what what' 'dot when case';
+    row-gap: 4px;
+    padding: 10px 12px;
+  }
+  .dash__row > .status-dot { grid-area: dot; align-self: start; margin-top: 3px; }
+  .dash__row > .dash__what { grid-area: what; white-space: normal; font-size: 14px; }
+  .dash__row > .dash__when { grid-area: when; }
+  .dash__row > .dash__case { grid-area: case; justify-self: end; }
+  .dash__stack { height: clamp(440px, 70dvh, 620px); }
+}

@@ -16,6 +16,7 @@ import { MiniBars, TimelineDots, WeekTable } from '../ui/charts.jsx'
 import CaseFlow from '../ui/CaseFlow.jsx'
 import ClerkChat from '../ui/ClerkChat.jsx'
 import useDeck from '../ui/useDeck.js'
+import { caseColor } from '../ui/nav.js'
 import useTypewriter from '../ui/useTypewriter.js'
 import * as clerk from '../lib/clerk.js'
 import { buildGraph } from '../lib/graph.js'
@@ -387,7 +388,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
      this screen is for, and everything else on it is a measurement of the
      same work from another angle. */
   const slides = [
-    { key: 'structure', label: 'Case structure', node: (
+    { key: 'structure', label: 'Case structure', tab: 'Structure', node: (
         <Card className="dash__card dash__card--flow flowcard" aria-label="Case structure">
           {/* No card head and no body padding: the flow IS the panel — its own
               title bar, its own tools, its own log along the bottom. A card
@@ -416,7 +417,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
        reach by a single scroll, which is the right distance for the thing you
        open when you have a question rather than a number to read. The six
        measurement cards keep their order behind it. */
-    { key: 'clerk', label: 'Ask the clerk', node: (
+    { key: 'clerk', label: 'Ask the clerk', tab: 'Clerk', node: (
         <Card className="dash__card dash__card--chat" aria-label="Ask the clerk">
           <CardHead
             title="The clerk"
@@ -430,7 +431,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
           </div>
         </Card>
       ) },
-    { key: 'workload', label: 'Total workload', node: (
+    { key: 'workload', label: 'Total workload', tab: 'Workload', node: (
         <Card className="dash__card" aria-label="Total workload">
           <CardHead
             title="Total workload"
@@ -469,7 +470,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
           </div>
         </Card>
       ) },
-    { key: 'tips', label: 'Recommendations', node: (
+    { key: 'tips', label: 'Recommendations', tab: 'Tips', node: (
         <Card className="dash__card" aria-label="Recommendations">
           <CardHead
             title="Recommendations"
@@ -510,7 +511,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
           </div>
         </Card>
       ) },
-    { key: 'tracking', label: 'Tracking', node: (
+    { key: 'tracking', label: 'Tracking', tab: 'Tracking', node: (
         <Card className="dash__card" aria-label="Tracking">
           <CardHead
             title="Tracking"
@@ -536,7 +537,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
           </div>
         </Card>
       ) },
-    { key: 'report', label: 'Detailed report', node: (
+    { key: 'report', label: 'Detailed report', tab: 'Report', node: (
         <Card className="dash__card" aria-label="Detailed report">
           <CardHead
             title="Detailed report"
@@ -575,7 +576,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
           </div>
         </Card>
       ) },
-    { key: 'rate', label: 'Completion rate', node: (
+    { key: 'rate', label: 'Completion rate', tab: 'Rate', node: (
         <Card className="dash__card" aria-label="Completion rate">
           <CardHead
             title="Completion rate"
@@ -652,7 +653,10 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
         ) : null}
 
         <div className="dash__up">
-          <span className="dash__uphead">up next</span>
+          <span className="dash__uphead">
+            Up next
+            {upNext.length ? <span className="dash__upcount">{upNext.length}</span> : null}
+          </span>
           {upNext.length ? (
             upNext.map((e) => (
               <button
@@ -672,7 +676,10 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
                 />
                 <span className="dash__when">{e.when}</span>
                 <span className="dash__what truncate">{e.title}</span>
-                <span className="dash__case truncate">{e.projectName}</span>
+                <span className="dash__case truncate">
+                  <span className="dash__casedot" style={{ '--dot': caseColor(e.projectId) }} aria-hidden="true" />
+                  {e.projectName}
+                </span>
               </button>
             ))
           ) : (
@@ -705,17 +712,20 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
           ))}
         </div>
 
-        <nav className="dash__dots" aria-label="Choose a card">
+        {/* The cards by name, as Linear's view tabs: the one on screen lit,
+            the wheel or a swipe still pages between them. */}
+        <nav className="dash__tabs" aria-label="Choose a card">
           {slides.map((sl, i) => (
             <button
               key={sl.key}
               type="button"
-              className={cx('dash__dot', i === index && 'is-on')}
+              className={cx('dash__tab', i === index && 'is-on')}
               aria-current={i === index ? 'true' : undefined}
-              aria-label={sl.label}
               title={sl.label}
               onClick={() => goTo(i)}
-            />
+            >
+              {sl.tab || sl.label}
+            </button>
           ))}
         </nav>
       </section>

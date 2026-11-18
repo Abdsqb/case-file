@@ -14,21 +14,11 @@
 
 import { useEffect, useMemo } from 'react';
 import { X } from 'lucide-react';
-import { ICONS, NAV } from './nav.js';
+import { caseColor, ICONS, NAV } from './nav.js';
 import { OPEN_TODAY } from './TodayWindow.jsx';
 import { OPEN_NOTES } from './NotesDrawer.jsx';
 
 const cx = (...c) => c.filter(Boolean).join(' ');
-
-/* Each case gets a colour of its own, as a Linear team does: hashed from its
-   id, so it is the same colour every time and on every device. */
-const DOTS = ['#6C78E6', '#4EA7FC', '#4CB782', '#F2C94C', '#F2994A', '#EB5757', '#BB87FC', '#26B5CE'];
-function dotOf(id) {
-  const s = String(id);
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return DOTS[Math.abs(h) % DOTS.length];
-}
 
 /* Entries in a case (and its sub-cases) not yet done. */
 function openCount(project, byParent) {
@@ -132,7 +122,7 @@ export default function Sidebar({ current, onGo, onOpenCase, activeCaseId, proje
                   onClick={() => { onOpenCase(c.id); onClose?.(); }}
                   title={c.name}
                 >
-                  <span className="sb__dot" style={{ '--dot': dotOf(c.id) }} aria-hidden="true" />
+                  <span className="sb__dot" style={{ '--dot': caseColor(c.id) }} aria-hidden="true" />
                   <span className="sb__label">{c.name}</span>
                   {c.open ? <span className="sb__count">{c.open}</span> : null}
                 </button>

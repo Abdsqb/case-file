@@ -8155,27 +8155,6 @@ input.sp-in:focus { outline: none; border-bottom-color: var(--accent); box-shado
   .sp-ed-course > .sp-x { grid-area: x; }
 }
 
-/* ==========================================================================
-   EXPERIMENT: the dashboard's cards without their glass, on a phone.
-   There the dashboard's cards lose their fill, blur and shadow and keep only
-   their contents and their four corners; a desktop's keep their glass, as
-   every other screen's do. One block, so it comes out whole.
-   ========================================================================== */
-@media (max-width: 640px) {
-  .card.dash__card {
-    background: transparent;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    box-shadow: none;
-  }
-  .dash__card--flow.flowcard::before {
-    background: transparent;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    box-shadow: none;
-  }
-}
-
 /* Settings → Card backgrounds, off: every card as the dashboard's are, the
    to-do window too. That one floats over the page, which blacks out behind
    it (.todoscrim), so the list reads with or without a ground of its own. */

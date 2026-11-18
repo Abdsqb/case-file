@@ -289,6 +289,21 @@ const MIGRATIONS = [
       )
     `);
   },
+  /* 6: Plan's boards. Each is a name and its cards as one JSON document —
+     chains of cards running left to right, branches hanging off a card —
+     read and written whole, like the study plan. */
+  async () => {
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS plan_boards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        data TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+  },
 ];
 
 async function schemaVersion() {

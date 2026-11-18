@@ -22,11 +22,13 @@ const loadCaseFiles = () => import('./views/CaseFiles');
 const loadReporting = () => import('./views/Reporting');
 const loadCalendar = () => import('./views/Calendar');
 const loadSettings = () => import('./views/Settings');
+const loadPlan = () => import('./views/Plan');
 const CaseFiles = lazy(loadCaseFiles);
 const Reporting = lazy(loadReporting);
 const Calendar = lazy(loadCalendar);
 const Settings = lazy(loadSettings);
-const PRELOAD = [loadCaseFiles, loadReporting, loadCalendar, loadSettings];
+const Plan = lazy(loadPlan);
+const PRELOAD = [loadCaseFiles, loadReporting, loadCalendar, loadPlan, loadSettings];
 
 const CLOCK_MS = 30000;         // drives overdue arithmetic only; nothing renders seconds
 
@@ -68,6 +70,7 @@ const NAV = [
   { id: 'cases', label: 'Case files' },
   { id: 'reporting', label: 'Reporting' },
   { id: 'calendar', label: 'Calendar' },
+  { id: 'plan', label: 'Plan' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -273,6 +276,9 @@ export default function App() {
     // course's quizzes, exams, readings and deadlines onto its classes.
     // onSelectCase is what lets an entry on the month open its case file.
     body = <Calendar now={now} projects={projects} onSelectCase={openCase} />;
+  } else if (view === 'plan') {
+    // Boards of steps, left to right on a canvas (views/Plan.jsx).
+    body = <Plan />;
   } else if (view === 'reporting') {
     // onRefresh lets Reporting refetch after it reorders a case.
     body = <Reporting projects={projects} now={now} onSelectCase={openCase} onRefresh={refresh} />;

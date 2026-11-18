@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CalendarDays, ChartColumn, Folder, LayoutGrid, ListTodo, NotebookPen, SlidersHorizontal } from 'lucide-react';
+import { CalendarDays, ChartColumn, Folder, LayoutGrid, ListTodo, NotebookPen, Route, SlidersHorizontal } from 'lucide-react';
 import { SPRINGS } from './island.js';
 import './NavWheel.css';
 
@@ -31,6 +31,7 @@ export const ICONS = {
   cases: Folder,
   reporting: ChartColumn,
   calendar: CalendarDays,
+  plan: Route,
   settings: SlidersHorizontal,
   today: ListTodo,
   notes: NotebookPen,

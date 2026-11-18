@@ -8163,3 +8163,174 @@ input.sp-in:focus { outline: none; border-bottom-color: var(--accent); box-shado
   backdrop-filter: none;
   box-shadow: none;
 }
+
+/* ==========================================================================
+   PLAN (views/Plan.jsx) — boards of steps on a canvas
+   ========================================================================== */
+
+.planboard { position: relative; padding: 0; overflow: hidden; }
+
+/* The canvas: a dot grid that pans and zooms with what is on it. */
+.planboard__port {
+  position: relative;
+  height: clamp(460px, calc(100dvh - 210px), 1400px);
+  /* clip, not hidden: a hidden box can still be scrolled by focus, which
+     slid the whole canvas (and its zoom buttons) sideways. */
+  overflow: clip;
+  touch-action: none;
+  cursor: grab;
+  border-radius: inherit;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.07) 1px, transparent 0);
+}
+.planboard__port:active { cursor: grabbing; }
+.planboard__stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+
+.plan-grid { position: relative; display: grid; align-items: start; }
+.plan-links { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.plan-links__line { fill: none; stroke: var(--text-faint); stroke-width: 1.5; }
+.plan-links__line.is-faint { stroke-dasharray: 3 5; opacity: 0.6; }
+.plan-links__head { fill: none; stroke: var(--text-faint); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* A step. */
+.plan-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 112px;
+  cursor: default;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.85);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.plan-card:hover { border-color: var(--border-strong); }
+.plan-card.is-writing { border-color: var(--accent-edge); box-shadow: 0 0 0 3px var(--accent-faint), 0 12px 30px -18px rgba(0, 0, 0, 0.85); }
+
+.plan-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px 6px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.plan-card__n { flex: none; font-family: var(--font-mono); font-size: 10.5px; color: var(--accent); }
+.plan-card__n.is-branch { color: var(--text-faint); }
+.plan-card__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 0;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+}
+.plan-card__title::placeholder { color: var(--text-faint); }
+input.plan-card__title:focus { outline: none; box-shadow: none; }
+
+.plan-card__body {
+  flex: 1 1 auto;
+  min-height: 56px;
+  padding: 10px 12px 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  cursor: text;
+  overflow-wrap: anywhere;
+}
+.plan-card__body:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--accent-edge); }
+.plan-card__hint { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+.plan-card__md > * { margin: 0; }
+.plan-card__md > * + * { margin-top: 6px; }
+.plan-card__md ul, .plan-card__md ol { padding-left: 1.2em; }
+
+/* The live editor, as the notes pad has it, at a card's size. */
+.plan-card .md .cm-editor { background: none; color: var(--fg); }
+.plan-card .md .cm-editor.cm-focused { outline: none; }
+.plan-card .md .cm-scroller { font-family: var(--font); font-size: 12.5px; line-height: 1.55; max-height: 360px; overflow: auto; }
+.plan-card .md .cm-content { padding: 0; caret-color: var(--fg); }
+.plan-card .md .cm-line { padding: 0; }
+.plan-card .md ::selection,
+.plan-card .md .cm-content ::selection { background: var(--iris-hi); }
+
+/* The "+" at the end of each line of steps, and the one between steps. */
+.plan-add {
+  height: 54px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-faint);
+  text-align: left;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.plan-add.is-empty { height: 112px; text-align: center; }
+.plan-add:hover,
+.plan-add:focus-visible { outline: none; color: var(--accent); border-color: var(--accent-edge); }
+
+.plan-insert {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.plan-grid:hover .plan-insert { opacity: 0.6; }
+.plan-insert:hover,
+.plan-insert:focus-visible { outline: none; opacity: 1; color: var(--accent); border-color: var(--accent-edge); }
+
+/* Zoom, in the corner of the canvas. */
+.plan-zoom {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 4;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.plan-zoom button {
+  min-width: 30px;
+  height: 28px;
+  padding: 0 9px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+.plan-zoom button:hover { color: var(--text); background: var(--line-soft); }
+.plan-zoom__k { font-family: var(--font-mono); }
+
+.plan-error { position: absolute; left: 16px; bottom: 16px; z-index: 4; margin: 0; font-size: 12px; color: var(--hot); }
+.plan-saving.is-error { color: var(--hot); }
+
+/* A phone has no hover to find the in-between "+" with. */
+@media (max-width: 640px) {
+  .plan-insert { opacity: 0.6; }
+  .planboard__port { height: calc(100dvh - 190px); }
+}

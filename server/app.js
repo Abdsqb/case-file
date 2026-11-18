@@ -565,6 +565,71 @@ app.delete('/api/study-plan', wrap(async (req, res) => {
   res.status(204).end();
 }));
 
+/* Plan's boards: each a name and its cards, one JSON document a board,
+   saved whole after each change. `chains` is the only thing every board has:
+   a list, the first of which is the main line. */
+const boardJson = (row) => {
+  let data = { chains: [] };
+  try { data = JSON.parse(row.data); } catch { /* a damaged board reads as empty */ }
+  return { id: row.id, name: row.name, position: row.position, data, updatedAt: row.updated_at };
+};
+const cleanBoardName = (v) => String(v ?? '').trim().slice(0, 80);
+const boardData = (data) => {
+  if (!data || typeof data !== 'object' || !Array.isArray(data.chains)) return null;
+  const text = JSON.stringify(data);
+  return text.length > 1_000_000 ? undefined : text;
+};
+
+app.get('/api/boards', wrap(async (req, res) => {
+  const rows = await all('SELECT * FROM plan_boards ORDER BY position, id');
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(rows.map(boardJson));
+}));
+
+app.post('/api/boards', wrap(async (req, res) => {
+  const name = cleanBoardName(req.body?.name) || 'Untitled';
+  const text = req.body?.data === undefined ? JSON.stringify({ chains: [] }) : boardData(req.body.data);
+  if (text === null) return res.status(400).json({ error: 'a board needs a list of chains.' });
+  if (text === undefined) return res.status(413).json({ error: 'that board is too large.' });
+  const now = Date.now();
+  const { n } = await get('SELECT COALESCE(MAX(position), -1) + 1 AS n FROM plan_boards');
+  const result = await run(
+    'INSERT INTO plan_boards (name, position, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    [name, n, text, now, now],
+  );
+  res.status(201).json(boardJson(await get('SELECT * FROM plan_boards WHERE id = ?', [result.lastInsertRowid])));
+}));
+
+/* The boards' order, as the full list of ids, first to last. Before /:id. */
+app.put('/api/boards/order', wrap(async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isFinite) : null;
+  if (!ids) return res.status(400).json({ error: 'expected { ids: [...] }.' });
+  if (ids.length) await batch(ids.map((id, i) => ['UPDATE plan_boards SET position = ? WHERE id = ?', [i, id]]));
+  res.status(204).end();
+}));
+
+app.put('/api/boards/:id', wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const row = await get('SELECT * FROM plan_boards WHERE id = ?', [id]);
+  if (!row) return res.status(404).json({ error: 'no such board.' });
+  let name = row.name;
+  let text = row.data;
+  if (req.body?.name !== undefined) name = cleanBoardName(req.body.name) || row.name;
+  if (req.body?.data !== undefined) {
+    text = boardData(req.body.data);
+    if (text === null) return res.status(400).json({ error: 'a board needs a list of chains.' });
+    if (text === undefined) return res.status(413).json({ error: 'that board is too large.' });
+  }
+  const now = Date.now();
+  await run('UPDATE plan_boards SET name = ?, data = ?, updated_at = ? WHERE id = ?', [name, text, now, id]);
+  res.json({ updatedAt: now, name });
+}));
+
+app.delete('/api/boards/:id', wrap(async (req, res) => {
+  await run('DELETE FROM plan_boards WHERE id = ?', [Number(req.params.id)]);
+  res.status(204).end();
+}));
+
 // ---------- the wire (global headlines) ----------
 
 app.get('/api/headlines', async (req, res) => {

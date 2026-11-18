@@ -269,6 +269,29 @@ export function clearStudyPlan() {
   return request('DELETE', '/study-plan');
 }
 
+/* Plan's boards → [{ id, name, position, data: { chains }, updatedAt }] */
+export function getBoards() {
+  return request('GET', '/boards');
+}
+
+export function createBoard(name, data) {
+  return request('POST', '/boards', { name, data });
+}
+
+/** Either or both of { name, data }. */
+export function saveBoard(id, patch) {
+  return request('PUT', `/boards/${id}`, patch);
+}
+
+export function deleteBoard(id) {
+  return request('DELETE', `/boards/${id}`);
+}
+
+/** The boards' order: every id, first to last. */
+export function orderBoards(ids) {
+  return request('PUT', '/boards/order', { ids });
+}
+
 /* --------------------------------- today ---------------------------------- */
 
 /** The to-do list for a local day (YYYY-MM-DD).

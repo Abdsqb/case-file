@@ -1480,7 +1480,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
      shape of the last few weeks, and last the one that is written rather than
      counted. */
   const readings = [
-    { key: 'completion', label: 'Completion', node: (
+    { key: 'completion', label: 'Completion', tab: 'Completion', node: (
         <Card aria-label="Completion">
           <CardHead
             className="card__head"
@@ -1513,7 +1513,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
         </Card>
       ) },
 
-    { key: 'open', label: 'Open', node: (
+    { key: 'open', label: 'Open', tab: 'Open', node: (
         <Card aria-label="Open">
           <CardHead
             className="card__head"
@@ -1532,7 +1532,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
         </Card>
       ) },
 
-    { key: 'overdue', label: 'Overdue', node: (
+    { key: 'overdue', label: 'Overdue', tab: 'Overdue', node: (
         <Card aria-label="Overdue">
           <CardHead
             className="card__head"
@@ -1556,7 +1556,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
         </Card>
       ) },
 
-    { key: 'subtasks', label: 'Subtasks', node: (
+    { key: 'subtasks', label: 'Subtasks', tab: 'Subtasks', node: (
         <Card aria-label="Subtasks">
           <CardHead
             className="card__head"
@@ -1585,7 +1585,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
         </Card>
       ) },
 
-    { key: 'logged', label: 'Open entries', node: (
+    { key: 'logged', label: 'Open entries', tab: 'Entries', node: (
         <Card aria-label="Open entries">
           <CardHead
             className="card__head"
@@ -1608,7 +1608,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
         </Card>
       ) },
 
-    { key: 'matrix', label: 'Entries / week', node: (
+    { key: 'matrix', label: 'Entries / week', tab: 'Weekly', node: (
         <Card aria-label="Entries per week">
           <CardHead
             className="card__head"
@@ -1640,7 +1640,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
         </Card>
       ) },
 
-    { key: 'analysis', label: 'Analysis', node: (
+    { key: 'analysis', label: 'Analysis', tab: 'Analysis', node: (
         <Card aria-label="Analysis">
           <CardHead className="card__head" title="Analysis" subtitle="Read from this case" />
           <div className="card__body">
@@ -2103,17 +2103,19 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
                 ))}
               </div>
 
-              <nav className="readdeck__dots" aria-label="Choose a reading">
+              {/* The readings by name, as view tabs, above the one on screen. */}
+              <nav className="readdeck__tabs" aria-label="Choose a reading">
                 {readings.map((r, i) => (
                   <button
                     key={r.key}
                     type="button"
-                    className={cx('readdeck__dot', i === reading.index && 'is-on')}
+                    className={cx('readdeck__tab', i === reading.index && 'is-on')}
                     aria-current={i === reading.index ? 'true' : undefined}
-                    aria-label={r.label}
                     title={r.label}
                     onClick={() => reading.goTo(i)}
-                  />
+                  >
+                    {r.tab || r.label}
+                  </button>
                 ))}
               </nav>
             </section>

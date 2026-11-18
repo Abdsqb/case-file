@@ -1037,3 +1037,164 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
   .dash__row > .dash__case { grid-area: case; justify-self: end; }
   .dash__stack { height: clamp(440px, 70dvh, 620px); }
 }
+
+/* --------------------------------------------------------------------------
+   10. CASE FILES (and every list of entries: Today's to-do is the same rows)
+   Entries are Linear issues: rows, not boxes — a hairline between them, a
+   wash under the one you are on, and a ring that fills when it is done.
+   -------------------------------------------------------------------------- */
+
+.entry {
+  gap: 10px;
+  margin: 0;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: 0;
+  transition: background-color 100ms ease, opacity 160ms ease;
+}
+.entry:last-child { border-bottom: 0; }
+.entry:hover,
+.entry:focus-within {
+  transform: none;
+  background: var(--hover);
+  border-color: var(--line-soft);
+  box-shadow: none;
+}
+.entry--done { opacity: 0.55; background: transparent; }
+.entry--done .entry__title { color: var(--text-muted); text-decoration-color: var(--text-faint); }
+.entry--drop { box-shadow: inset 0 2px 0 var(--accent); }
+
+.entry__title { font-size: 13px; font-weight: 500; color: var(--text); }
+.entry__meta { font-family: var(--font); font-size: 12px; letter-spacing: 0; gap: 8px; color: var(--text-faint); }
+.entry__case,
+.entry__due { font-size: 12px; }
+.entry__due { color: var(--text-muted); }
+.entry__due--soon { color: var(--amber); }
+.entry__due--overdue,
+.entry__meta--hot { color: var(--red); }
+
+/* The status mark: a dot in its colour, not a blinking square. */
+.entry__status { width: 6px; height: 6px; border-radius: 50%; }
+.entry__status--overdue { animation: none; }
+.entry__status--soon { background: var(--amber); }
+.entry__status--urgent,
+.entry__status--overdue { background: var(--red); }
+
+/* The tick, as Linear's status ring. */
+.entry__check {
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--text-faint);
+  border-radius: 50%;
+  background: transparent;
+}
+.entry__check:hover { border-color: var(--text-muted); }
+.entry__check.is-on,
+.entry__check[aria-pressed='true'],
+.entry__check[aria-checked='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.entry__check svg { width: 9px; height: 9px; stroke-width: 3; }
+
+/* Subtasks hang under their entry on a thin guide. */
+.subtasks { margin: 0 0 4px 17px; padding-left: 12px; border-left: 1px solid var(--border); }
+.subtasks .entry { padding-top: 6px; padding-bottom: 6px; }
+.subtasks .entry__title { font-size: 12.5px; font-weight: 450; }
+.subtasks__toggle { font-size: 12px; color: var(--text-faint); }
+
+/* The composer: Linear's inline "new issue" row. */
+.composer {
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 6px 6px 6px 10px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.composer:focus-within { border-color: var(--border-strong); }
+.composer__input,
+.composer .field__input,
+.composer input {
+  min-height: 28px;
+  padding: 4px 0;
+  font-size: 13px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.composer__input:focus,
+.composer .field__input:focus,
+.composer input:focus { border: 0; box-shadow: none; }
+.composer--sub { background: transparent; border-style: dashed; }
+
+/* The switchers in the case bar and the view toolbars (islands): Linear's
+   buttons — square-cornered, solid, no float. Their sizes are measured by
+   script, so only the look changes. */
+.island {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+.foldisland.is-open .island,
+.tabisland.is-open,
+.tabisland.is-open.island {
+  border-radius: 8px;
+  background-color: rgb(var(--overlay-rgb));
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* The readings: named tabs above the card, as on the dashboard. */
+.readdeck { gap: 10px; }
+.readdeck__tabs {
+  order: -1;
+  flex: none;
+  display: flex;
+  gap: 2px;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.readdeck__tabs::-webkit-scrollbar { display: none; }
+.readdeck__tab {
+  flex: none;
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+.readdeck__tab:hover { color: var(--text); }
+.readdeck__tab.is-on { color: var(--text); background: rgba(255, 255, 255, 0.09); }
+.readdeck__tab:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--accent-edge); }
+.readdeck:focus-visible .readdeck__stack { outline: none; }
+.readdeck__dots { display: none; }
+
+/* The composer's field has no box of its own inside the composer's. */
+.composer .field input:not([type]),
+.composer .field input[type='text'],
+.composer .field__input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding-left: 0;
+}
+/* The reading sits just under its tabs, not in the middle of the frame. */
+.readdeck__slide { align-items: flex-start; perspective: none; }

@@ -276,6 +276,19 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_today_loose_day ON today_loose(day);
     `);
   },
+
+  /* 5: the study plan (Calendar → Study plan), as one JSON document. One
+     row, like the timetable: it holds grades, so it lives here behind the
+     password rather than in the bundle, which anyone can download. */
+  async () => {
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS study_plan (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        plan TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+  },
 ];
 
 async function schemaVersion() {

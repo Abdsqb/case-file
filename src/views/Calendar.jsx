@@ -21,6 +21,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 import { Card, CardHead, EmptyState, Meter, Metric, Pill } from '../ui/primitives.jsx'
 import { SegmentIsland } from '../ui/CaseIslands.jsx'
+import StudyPlan from './StudyPlan.jsx'
 import { addDays, fmtTime, minutesOf, parseCalendar, sameDay, startOfDay, weekStartOf } from '../lib/ics.js'
 import { statusTone } from '../lib/metrics.js'
 import { TIMETABLE_CHANGED, getTimetable } from '../lib/api.js'
@@ -912,6 +913,7 @@ export default function Calendar({ now, projects, onSelectCase }) {
           items={[
             { value: 'entries', label: 'Entries' },
             { value: 'classes', label: 'Classes' },
+            { value: 'plan', label: 'Study plan' },
           ]}
           value={mode}
           onChange={setMode}
@@ -927,7 +929,7 @@ export default function Calendar({ now, projects, onSelectCase }) {
         ) : null}
       </div>
       <div className="viewhead__right">
-        {mode === 'entries' ? (
+        {mode === 'plan' ? null : mode === 'entries' ? (
           <span className="micro muted">
             {datedCount} dated {datedCount === 1 ? 'entry' : 'entries'}
           </span>
@@ -988,6 +990,17 @@ export default function Calendar({ now, projects, onSelectCase }) {
       </div>
     </Card>
   )
+
+  /* The study plan is its own screen under the same switch: none of the
+     month's or the timetable's furniture applies to it. */
+  if (mode === 'plan') {
+    return (
+      <>
+        {head}
+        <StudyPlan now={now} />
+      </>
+    )
+  }
 
   if (!term) {
     return (

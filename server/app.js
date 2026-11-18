@@ -533,6 +533,37 @@ app.delete('/api/timetable', wrap(async (req, res) => {
   res.status(204).end();
 }));
 
+/* The study plan: one JSON document, imported whole from a file and read
+   back whole. Checked for the one thing the tab cannot draw without — a list
+   of terms — so a wrong file is refused rather than blanking the tab. */
+app.get('/api/study-plan', wrap(async (req, res) => {
+  const row = await get('SELECT plan, updated_at FROM study_plan WHERE id = 1');
+  res.setHeader('Cache-Control', 'no-store');
+  let plan = null;
+  try { plan = row ? JSON.parse(row.plan) : null; } catch { plan = null; }
+  res.json({ plan, updatedAt: row ? row.updated_at : null });
+}));
+
+app.put('/api/study-plan', wrap(async (req, res) => {
+  const plan = req.body?.plan;
+  if (!plan || typeof plan !== 'object' || !Array.isArray(plan.terms) || !plan.terms.length) {
+    return res.status(400).json({ error: 'that is not a study plan — it needs a list of terms.' });
+  }
+  const text = JSON.stringify(plan);
+  if (text.length > 500_000) return res.status(413).json({ error: 'that plan is too large.' });
+  const now = Date.now();
+  await run(`
+    INSERT INTO study_plan (id, plan, updated_at) VALUES (1, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET plan = excluded.plan, updated_at = excluded.updated_at
+  `, [text, now]);
+  res.json({ updatedAt: now });
+}));
+
+app.delete('/api/study-plan', wrap(async (req, res) => {
+  await run('DELETE FROM study_plan WHERE id = 1');
+  res.status(204).end();
+}));
+
 // ---------- the wire (global headlines) ----------
 
 app.get('/api/headlines', async (req, res) => {

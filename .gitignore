@@ -37,3 +37,7 @@ src/data/*.local.ics
 
 # Dated copies of the archive (npm run db:backup, pre-migration snapshots).
 server/backups/
+
+# The study plan (Calendar → Study plan) holds grades. It lives in the
+# database; the JSON it was imported from stays on this PC.
+*.local.json

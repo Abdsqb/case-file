@@ -7297,6 +7297,464 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
 }
 
 /* ==========================================================================
+   THE STUDY PLAN (Calendar → Study plan, views/StudyPlan.jsx)
+   The degree as the rest of the app draws things: glass cards, mono labels,
+   and the accent only on what is done or happening now. Grades stay neutral:
+   red and amber mean overdue and soon here, never a mark on a transcript.
+   ========================================================================== */
+
+/* A requirement's state: done is lit, now is white, planned is a ring. */
+.sp-mark {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.sp-mark--done     { background: var(--accent); box-shadow: 0 0 8px 0 var(--accent-glow); }
+.sp-mark--progress { background: var(--text); }
+.sp-mark--planned  { border: 1px solid var(--border-strong); }
+.sp-mark--todo     { border: 1px dashed var(--text-faint); }
+
+.status-dot--soon { background: var(--amber); box-shadow: 0 0 8px 0 rgba(227, 179, 65, 0.4); }
+
+/* --- degree progress ------------------------------------------------------ */
+
+.sp-progress__bar {
+  display: flex;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--bar-dim);
+}
+.sp-progress__seg--done { background: var(--bar); }
+.sp-progress__seg--now  { background: var(--accent); box-shadow: 0 0 10px 0 var(--accent-glow); }
+
+.sp-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px 16px;
+  margin: 4px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+.sp-facts dt {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+.sp-facts dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.sp-error { margin: 0; font-size: 12px; color: var(--hot); }
+
+/* --- requirements --------------------------------------------------------- */
+
+.sp-legend { display: inline-flex; gap: 12px; color: var(--text-faint); }
+.sp-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+
+.sp-reqs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px 28px;
+}
+/* The general electives are one line; they go under the minor, not in a
+   column of their own. */
+.sp-reqs { align-items: start; }
+.sp-reqs__group:nth-child(1),
+.sp-reqs__group:nth-child(2) { grid-row: span 2; }
+.sp-reqs__group:nth-child(4) { grid-column: 3; grid-row: 2; }
+
+.sp-reqs__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.sp-reqs__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+
+.sp-req { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
+.sp-req > .sp-mark { margin-top: 5px; }
+.sp-req__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sp-req__name { font-size: 12.5px; line-height: 1.35; color: var(--text); }
+.sp-req__by {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+.sp-req.is-done .sp-req__name { color: var(--text-muted); }
+
+@media (max-width: 1180px) {
+  .sp-reqs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sp-reqs__group:nth-child(n) { grid-row: auto; grid-column: auto; }
+}
+
+/* --- every term ----------------------------------------------------------- */
+
+.sp-terms {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(150px, 1fr);
+  gap: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+  margin: 0 calc(var(--pad) * -1);
+  padding: 0 var(--pad) 4px;
+}
+
+.sp-term {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 14px;
+  scroll-snap-align: start;
+}
+.sp-term + .sp-term { border-left: 1px solid var(--line-soft); }
+.sp-term:first-child { padding-left: 0; }
+
+/* One line through every term, a node on it for each. */
+.sp-term__rail {
+  position: relative;
+  height: 13px;
+  margin: 0 -14px 10px;
+}
+.sp-term:first-child .sp-term__rail { margin-left: 0; }
+.sp-term__rail::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--line);
+}
+.sp-term.is-done .sp-term__rail::before { background: var(--bar); opacity: 0.5; }
+.sp-term__node {
+  position: absolute;
+  top: 0;
+  left: 14px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.sp-term:first-child .sp-term__node { left: 0; }
+.sp-term.is-done .sp-term__node { background: var(--fg); border-color: var(--fg); }
+.sp-term.is-current .sp-term__node {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px 0 var(--accent-glow);
+}
+
+.sp-term__head { display: flex; align-items: center; gap: 8px; }
+.sp-term__label { font-size: 14px; font-weight: 500; letter-spacing: -0.015em; color: var(--text); white-space: nowrap; }
+.sp-term__now {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+  box-shadow: 0 0 14px -4px var(--accent-glow);
+}
+.sp-term__meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+  padding-bottom: 8px;
+}
+
+.sp-term__courses {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+}
+
+.sp-course { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sp-course__title { font-size: 12.5px; line-height: 1.3; color: var(--text); }
+.sp-course__line { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.sp-course__code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.sp-course__grade {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+.sp-course__cr { flex: none; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
+.sp-course__counts { font-size: 11px; color: var(--text-muted); }
+
+.sp-term.is-done .sp-course__title { color: var(--text-muted); }
+.sp-course.is-tbd .sp-course__title { color: var(--text-faint); font-style: italic; }
+.sp-course.is-void .sp-course__title { text-decoration: line-through; text-decoration-color: var(--text-faint); }
+.sp-course.is-void .sp-course__grade { color: var(--text-faint); }
+
+.sp-term__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+.sp-term.is-current .sp-term__foot .meter__fill { background: var(--accent); }
+.sp-term.is-planned .sp-term__foot .meter__fill { background: var(--text-faint); }
+
+/* --- registration --------------------------------------------------------- */
+
+.sp-regs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
+.sp-reg {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.sp-reg:last-child { border-bottom: 0; }
+
+.sp-reg__when {
+  display: grid;
+  grid-template-columns: 6px auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+  font-family: var(--font-mono);
+}
+.sp-reg__when > .status-dot { grid-row: 1; }
+.sp-reg__day  { font-size: 11.5px; color: var(--text-muted); }
+.sp-reg__date { grid-column: 2; font-size: 10.5px; color: var(--text-faint); }
+.sp-reg__when.is-ok .sp-reg__day   { color: var(--accent); }
+.sp-reg__when.is-soon .sp-reg__day { color: var(--text); }
+
+.sp-reg__what  { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sp-reg__title { font-size: 13px; color: var(--text); }
+.sp-reg__code  { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); margin-left: 4px; }
+.sp-reg__how   { font-size: 11.5px; line-height: 1.45; color: var(--text-muted); }
+
+.sp-reg__odds {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.sp-reg__odds.is-high { border-color: var(--accent-edge); color: var(--accent); }
+
+.sp-warn {
+  margin: 6px 0 0;
+  padding: 10px 12px 10px 14px;
+  border-left: 2px solid var(--amber);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: rgba(227, 179, 65, 0.06);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* --- next term's week ----------------------------------------------------- */
+
+.sp-week {
+  display: grid;
+  grid-template-columns: 26px repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  height: 320px;
+}
+.sp-week__hours { position: relative; margin-top: 20px; overflow: visible; }
+.sp-week__hours span {
+  position: absolute;
+  right: 2px;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+}
+.sp-week__day { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sp-week__label {
+  height: 14px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  text-align: center;
+}
+.sp-week__lane { position: relative; flex: 1 1 auto; }
+.sp-week__tick {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line-soft);
+}
+
+.sp-block {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 6px;
+  overflow: hidden;
+  border-radius: 6px;
+  border: 1px solid var(--accent-edge);
+  background: var(--accent-wash);
+}
+.sp-block.is-online {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
+}
+.sp-block__title { font-size: 10.5px; line-height: 1.2; color: var(--text); overflow-wrap: anywhere; }
+.sp-block__time  { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-muted); }
+
+.sp-week__extra { display: flex; flex-direction: column; gap: 3px; }
+
+/* --- backups -------------------------------------------------------------- */
+
+.sp-backups { display: flex; flex-direction: column; gap: 18px; }
+.sp-backups__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
+.sp-backup {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  grid-template-areas: 'title time note' 'code code code';
+  column-gap: 12px;
+  row-gap: 1px;
+  padding: 7px 0;
+}
+.sp-backup__title { grid-area: title; font-size: 12.5px; color: var(--text); }
+.sp-backup__time  { grid-area: time; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.sp-backup__code  { grid-area: code; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
+.sp-backup__note  { grid-area: note; justify-self: end; font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+.sp-backup__note.is-best { color: var(--accent); }
+
+/* --- to confirm ----------------------------------------------------------- */
+
+.sp-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+
+.sp-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  margin: 0 -8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 200ms ease;
+}
+.sp-item:hover, .sp-item:focus-visible { background: var(--bg-elevated); outline: none; }
+
+.sp-item__box {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+.sp-item__box svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: var(--accent-ink);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+.sp-item.is-done .sp-item__box { background: var(--accent); border-color: var(--accent); }
+.sp-item.is-done .sp-item__box svg { opacity: 1; }
+
+.sp-item__text { font-size: 12.5px; line-height: 1.45; color: var(--text); transition: color 180ms ease; }
+.sp-item.is-done .sp-item__text {
+  color: var(--text-faint);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-faint);
+}
+
+.sp-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+.sp-rules ul {
+  margin: 0;
+  padding-left: 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: disc;
+}
+.sp-rules li { font-size: 11.5px; line-height: 1.45; color: var(--text-muted); }
+.sp-rules li::marker { color: var(--text-faint); }
+
+/* --- a phone ---------------------------------------------------------------- */
+
+@media (max-width: 760px) {
+  .sp-reqs { grid-template-columns: minmax(0, 1fr); }
+  .sp-legend { display: none; }
+  /* Two terms and a bit across, so it reads as a row that scrolls. */
+  .sp-terms { grid-auto-columns: 68%; }
+  .sp-reg { grid-template-columns: 88px minmax(0, 1fr); }
+  .sp-reg__odds { display: none; }
+  .sp-backup { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'title note' 'time time' 'code code'; }
+  /* A fifth of a phone is too narrow for a course name and its hours: the
+     name only, broken at syllables rather than mid-letter. */
+  .sp-block { padding: 4px 4px; }
+  .sp-block__title { font-size: 9.5px; overflow-wrap: normal; hyphens: auto; -webkit-hyphens: auto; }
+  .sp-block__time { display: none; }
+}
+
+/* ==========================================================================
    EXPERIMENT: the dashboard's cards without their glass, on a phone.
    There the dashboard's cards lose their fill, blur and shadow and keep only
    their contents and their four corners; a desktop's keep their glass, as

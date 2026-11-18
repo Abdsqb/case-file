@@ -253,6 +253,22 @@ export function clearTimetable() {
   return request('DELETE', '/timetable');
 }
 
+/* ------------------------------- study plan ------------------------------- */
+
+/** → { plan, updatedAt } — plan is null until one has been imported. */
+export function getStudyPlan() {
+  return request('GET', '/study-plan');
+}
+
+/** Stores the whole plan. Refused (400) without a list of terms. */
+export function saveStudyPlan(plan) {
+  return request('PUT', '/study-plan', { plan });
+}
+
+export function clearStudyPlan() {
+  return request('DELETE', '/study-plan');
+}
+
 /* --------------------------------- today ---------------------------------- */
 
 /** The to-do list for a local day (YYYY-MM-DD).

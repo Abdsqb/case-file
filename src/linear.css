@@ -1407,3 +1407,31 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
 .sp-group__name { font-weight: 600; }
 .sp-card,
 .sp-left__item { font-weight: 500; }
+
+/* --------------------------------------------------------------------------
+   14. SETTINGS
+   Linear's settings rows: what it is and what it does on the left, the
+   control on the right — every row, however long its description.
+   -------------------------------------------------------------------------- */
+
+.settings-row {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 0;
+  border-bottom-color: var(--line-soft);
+}
+.settings-row__text { flex: 1 1 auto; gap: 2px; }
+.settings-row > :not(.settings-row__text) { flex: none; }
+.settings-row__title { font-size: 13px; font-weight: 500; color: var(--text); }
+.settings-row__hint { font-size: 12px; line-height: 1.45; color: var(--text-muted); max-width: 60ch; }
+.accent-picker { gap: 8px; }
+.toggle__track { box-shadow: none; }
+
+/* The background tiles: Linear's selectable cards. */
+.backdrop-tile { border-radius: 8px; }
+
+/* A phone has not the width for both: the control goes under the words. */
+@media (max-width: 640px) {
+  .settings-row { flex-wrap: wrap; gap: 10px 16px; }
+}

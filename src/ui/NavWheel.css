@@ -118,7 +118,7 @@
 .navwheel__wedge {
   fill: rgba(var(--accent-rgb), 0.2);
   stroke: rgba(var(--accent-rgb), 0.75);
-  stroke-width: 0.7;
+  stroke-width: 0.35;   /* a hairline: the fill carries the shape */
   stroke-linejoin: round;
 }
 .navwheel__halo {

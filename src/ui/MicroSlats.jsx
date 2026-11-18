@@ -289,14 +289,16 @@ void main() {
   float glow = 1.0 - exp(-max(ink, 0.0) * uInk * 1.6);
   light = 1.0 - (1.0 - clamp(light, 0.0, 1.0)) * (1.0 - glow);
 
+  // Case File: the intro still forms the sea from the top down, but without
+  // the bright band that used to ride ahead of it — each row just comes in
+  // at its own light.
   float front = uIntro * 1.35;
   float reveal = 1.0 - smoothstep(front - 0.35, front, v);
-  float sweep = exp(-pow((v - front + 0.22) / 0.07, 2.0)) * (1.0 - uIntro);
-  light = (light + sweep * 0.8) * reveal;
+  light = light * reveal;
   light = max(light, 0.045 * reveal);
   float span = mix(1.0 - uStretch, 1.0, level) + glow * 0.3;
   span = clamp(span, 0.08, 1.0) * mix(0.1, 1.0, reveal);
-  float tint = clamp(max(glint * 1.4, glow * 0.9) + sweep, 0.0, 1.0);
+  float tint = clamp(max(glint * 1.4, glow * 0.9), 0.0, 1.0);
   float lean = clamp(flow.x / 1400.0, -1.0, 1.0) * uLean * reveal;
 
   fragColor = vec4(clamp(light, 0.0, 1.0), span, tint, 0.5 + 0.5 * lean);

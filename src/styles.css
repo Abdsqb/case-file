@@ -986,6 +986,10 @@ summary:focus-visible,
 }
 .card { --corner: 14px; }
 
+/* Settings → Corner marks, off: the cards keep their glass but lose the
+   bright strokes at their corners. */
+[data-corners='off'] .card::after { content: none; }
+
 .card__head {
   flex: none;
   display: flex;
@@ -3022,17 +3026,6 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
   height: 100%;
   display: block;
 }
-.backdrop-tile__off {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  color: var(--fg-dim);
-}
-
 .backdrop-tile__text {
   display: flex;
   flex-direction: column;

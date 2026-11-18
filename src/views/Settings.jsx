@@ -46,6 +46,7 @@ import {
   KEY_PARALLAX,
   KEY_RADIUS,
   KEY_CARD_GLASS,
+  KEY_CORNERS,
   KEY_REDUCED_MOTION,
   KEY_WEEK_START,
   applyAccentPreference,
@@ -386,7 +387,7 @@ const codeMarks = new WeakMap()
 function codeMark(backdrop) {
   let mark = codeMarks.get(backdrop)
   if (mark === undefined) {
-    mark = fingerprint(String(paintStill) + String(backdrop.shape) + String(backdrop.preview) + JSON.stringify(backdrop))
+    mark = fingerprint(String(paintStill) + String(backdrop.preview) + JSON.stringify(backdrop))
     codeMarks.set(backdrop, mark)
   }
   return mark
@@ -512,7 +513,7 @@ function BackdropTile({ backdrop, accent, reduced, blur, checked, buttonRef, onP
     const canvas = canvasRef.current
     if (!canvas) return undefined
     const size = { width: PREVIEW_W, height: PREVIEW_H }
-    if (!playing || reduced || backdrop.off) return showStill(canvas, backdrop, accent, size)
+    if (!playing || reduced) return showStill(canvas, backdrop, accent, size)
     const colours = readColours()
     let raf = 0
     let last = 0
@@ -554,7 +555,6 @@ function BackdropTile({ backdrop, accent, reduced, blur, checked, buttonRef, onP
           // gives it the same look.
           style={blur ? { filter: `blur(${(blur * 0.25).toFixed(2)}px)` } : undefined}
         />
-        {backdrop.off ? <span className="backdrop-tile__off" aria-hidden="true">off</span> : null}
       </span>
       <span className="backdrop-tile__text">
         <span className="backdrop-tile__name">{backdrop.name}</span>
@@ -844,7 +844,10 @@ export function Settings({ projects, now }) {
     getSession().then((s) => { if (alive) setSignInRequired(!!(s && s.required)) }).catch(() => {})
     return () => { alive = false }
   }, [])
-  const backdrop = useSetting(KEY_BACKDROP, DEFAULT_BACKDROP)
+  /* Read through readBackdrop(): a stored one since removed counts as the
+     default, which is what is actually drawn. */
+  useSetting(KEY_BACKDROP, DEFAULT_BACKDROP)
+  const backdrop = readBackdrop()
   useSetting(KEY_BACKDROP_BLUR, '')
   const blur = readBackdropBlur()
   useSetting(KEY_SLAT_SHADE, '')
@@ -852,6 +855,7 @@ export function Settings({ projects, now }) {
   useSetting(KEY_RADIUS, '')
   const radius = readRadius()
   const cardGlass = useSetting(KEY_CARD_GLASS, true)
+  const corners = useSetting(KEY_CORNERS, true)
 
   const stats = useMemo(() => globalStats(cases, clock), [cases, clock])
   /* Asked once. The answer is a function of .env, which cannot change without
@@ -924,12 +928,23 @@ export function Settings({ projects, now }) {
 
               <SettingRow
                 title="Card backgrounds"
-                hint="The frosted glass behind each card and the to-do window. Off, each is its contents and its four corners. On a phone the dashboard's cards have none either way."
+                hint="The frosted glass behind each card and the to-do window. Off, each is just its contents and its corner marks."
               >
                 <Toggle
                   checked={cardGlass}
                   onChange={(next) => writeSetting(KEY_CARD_GLASS, next ? null : false)}
                   label={<SwitchState name="Card backgrounds" on={cardGlass} />}
+                />
+              </SettingRow>
+
+              <SettingRow
+                title="Corner marks"
+                hint="The bright strokes at the four corners of every card. Off, a card's edge is only its glass."
+              >
+                <Toggle
+                  checked={corners}
+                  onChange={(next) => writeSetting(KEY_CORNERS, next ? null : false)}
+                  label={<SwitchState name="Corner marks" on={corners} />}
                 />
               </SettingRow>
 
@@ -1058,7 +1073,7 @@ export function Settings({ projects, now }) {
             ) : null}
           </div>
           <div className="card__foot">
-            <span>Drawn in your accent colour. Reduce motion holds it still.</span>
+            <span>Glass Current takes your accent colour. Reduce motion holds it still.</span>
             <span className="dim">casefile.backdrop · casefile.backdropBlur · casefile.slatShade</span>
           </div>
         </Card>

@@ -17,10 +17,11 @@
  *   casefile.parallax        'on' | 'off'   — IsoCase pointer parallax
  *   casefile.weekStart       '1'  | '0'     — Monday (default) or Sunday
  *   casefile.accent          'violet' (default) | 'white' | 'red' | 'green' | 'turquoise' | 'ember'
- *   casefile.backdrop        'silk' (default) | any other id in ui/backdrops.js
+ *   casefile.backdrop        'slats' (default, Undertow) | 'shards' (Glass Current)
  *   casefile.backdropBlur    '0' | '1.5' (default) | '3' | '6' | '12' — px of blur over it
  *   casefile.slatShade       'grey' (default) | 'dim' | 'dark' | 'deep' — Undertow's slats
  *   casefile.cardGlass       'on' (default) | 'off' — the glass behind each card
+ *   casefile.corners         'on' (default) | 'off' — the bright marks at a card's corners
  *
  * Other views read these with the exported `useSetting(key, fallback)` hook.
  * Every read is wrapped in try/catch: a corrupt value, a disabled storage
@@ -46,6 +47,7 @@ export const KEY_BACKDROP_BLUR = 'backdropBlur'
 export const KEY_RADIUS = 'radius'
 export const KEY_CARD_GLASS = 'cardGlass'
 export const KEY_SLAT_SHADE = 'slatShade'
+export const KEY_CORNERS = 'corners'
 
 /* Undertow's slats: the grey they were first drawn in, then three steps
    down toward the dark behind them. The glint is the crest's colour, kept a
@@ -321,6 +323,18 @@ export function applyCardGlassPreference() {
   else root.dataset.cards = 'bare'
 }
 
+/* ------------------------------------------------------------------ *
+ * corner marks — off, <html> carries data-corners="off" (styles.css)
+ * ------------------------------------------------------------------ */
+
+export function applyCornersPreference() {
+  if (typeof document === 'undefined') return
+  const on = coerce(readRaw(KEY_CORNERS), true)
+  const root = document.documentElement
+  if (on) root.removeAttribute('data-corners')
+  else root.dataset.corners = 'off'
+}
+
 // Applied at import time so the preferences survive a reload even when the
 // user never opens this view, and re-applied whenever anything (including
 // another tab) changes them. Registered before any React subscriber, so the
@@ -330,6 +344,7 @@ export function applyPreferences() {
   applyAccentPreference()
   applyRadiusPreference()
   applyCardGlassPreference()
+  applyCornersPreference()
 }
 
 if (typeof window !== 'undefined') {

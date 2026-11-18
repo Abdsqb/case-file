@@ -111,7 +111,7 @@
 .navwheel__mover {
   transform-box: view-box;
   transform-origin: 190px 190px;
-  transition: transform 190ms cubic-bezier(0.25, 0.9, 0.35, 1), opacity 140ms ease;   /* keeps up with the pointer; still a glide */
+  transition: transform 80ms cubic-bezier(0.2, 0.8, 0.4, 1), opacity 140ms ease;   /* nearly a snap: it follows the pointer rather than gliding after it */
 }
 .navwheel.is-instant .navwheel__mover { transition: none; }
 
@@ -170,9 +170,10 @@
 .navwheel.is-shown .navwheel__item {
   opacity: 1;
   transform: none;
+  /* All at once, one short pop: no stagger around the ring. */
   transition:
-    opacity 260ms ease calc(var(--i, 0) * 28ms + 60ms),
-    transform 520ms var(--pn-open, cubic-bezier(0.34, 1.3, 0.64, 1)) calc(var(--i, 0) * 28ms + 40ms),
+    opacity 160ms ease 40ms,
+    transform 260ms cubic-bezier(0.34, 1.25, 0.64, 1) 40ms,
     color 140ms ease;
 }
 .navwheel__item svg {

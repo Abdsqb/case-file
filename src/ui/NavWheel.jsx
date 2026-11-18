@@ -283,7 +283,7 @@ export default function NavWheel({ items, current, open, onOpen, onClose, onPick
             const Icon = ICONS[it.id];
             // Where it comes out from: 24px back toward the middle.
             const a = ((-90 + i * SEG) * Math.PI) / 180;
-            const from = { '--i': i, '--dx': `${f(-Math.cos(a) * 24)}px`, '--dy': `${f(-Math.sin(a) * 24)}px` };
+            const from = { '--dx': `${f(-Math.cos(a) * 24)}px`, '--dy': `${f(-Math.sin(a) * 24)}px` };
             return (
               <li key={it.id} style={{ left: `${(x / BOX) * 100}%`, top: `${(y / BOX) * 100}%` }}>
                 <button

@@ -8334,3 +8334,20 @@ input.plan-card__title:focus { outline: none; box-shadow: none; }
   .plan-insert { opacity: 0.6; }
   .planboard__port { height: calc(100dvh - 190px); }
 }
+
+/* Plan's in-app bars (naming a board, deleting one) and a card's own ask. */
+.plan-bar { margin: 0 0 12px; }
+.plan-card__confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  color: var(--text);
+  border-top: 1px solid var(--line-soft);
+  background: var(--hot-soft);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+.plan-card__confirm-actions { display: inline-flex; gap: 6px; }
+.plan-card__confirm .pill { padding: 4px 10px; font-size: 12px; }
+.plan-card__ask { white-space: nowrap; }

@@ -15,7 +15,8 @@
  */
 
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Card, EmptyState, IconMenu, Pill } from '../ui/primitives.jsx'
+import { Trash2 } from 'lucide-react'
+import { Card, EmptyState, Field, IconMenu, Pill } from '../ui/primitives.jsx'
 import { SegmentIsland } from '../ui/CaseIslands.jsx'
 import ChatMarkdown from '../ui/ChatMarkdown.jsx'
 import { createBoard, deleteBoard, getBoards, orderBoards, saveBoard } from '../lib/api.js'
@@ -201,30 +202,44 @@ export default function Plan() {
     timers.current.set(id, setTimeout(() => flush(id), SAVE_AFTER_MS))
   }, [flush])
 
-  const newBoard = useCallback(async () => {
-    const name = window.prompt('Name the new board', `Board ${(boardsRef.current?.length || 0) + 1}`)
-    if (name === null) return
+  /* Naming a board — a new one or this one — happens in a bar under the
+     header, as a case is named in Case files; deleting one asks there too. */
+  const [form, setForm] = useState(null)        // { mode: 'new' | 'rename', value }
+  const [confirming, setConfirming] = useState(false)
+
+  const startNew = () => {
+    setConfirming(false)
+    setForm({ mode: 'new', value: '' })
+  }
+  const startRename = () => {
+    if (!active) return
+    setConfirming(false)
+    setForm({ mode: 'rename', value: active.name })
+  }
+
+  const submitForm = useCallback(async () => {
+    if (!form) return
+    const name = form.value.trim()
+    if (!name) return
+    setForm(null)
+    if (form.mode === 'rename') {
+      if (!active || name === active.name) return
+      setBoards((list) => list.map((x) => (x.id === active.id ? { ...x, name } : x)))
+      try { await saveBoard(active.id, { name }) } catch (err) { setError(err?.message || 'The name could not be saved.') }
+      return
+    }
     try {
-      const b = await createBoard(name.trim() || 'Untitled', { chains: [{ id: uid(), from: null, cards: [blankCard()] }] })
+      const b = await createBoard(name, { chains: [{ id: uid(), from: null, cards: [blankCard()] }] })
       setBoards((list) => [...(list || []), b])
       setActiveId(b.id)
     } catch (err) {
       setError(err?.message || 'The board could not be made.')
     }
-  }, [])
-
-  const rename = useCallback(async () => {
-    if (!active) return
-    const name = window.prompt('Rename the board', active.name)
-    if (name === null || !name.trim()) return
-    setBoards((list) => list.map((x) => (x.id === active.id ? { ...x, name: name.trim() } : x)))
-    try { await saveBoard(active.id, { name: name.trim() }) } catch (err) { setError(err?.message || 'The name could not be saved.') }
-  }, [active])
+  }, [form, active])
 
   const remove = useCallback(async () => {
     if (!active) return
-    const n = active.data.chains.reduce((k, ch) => k + ch.cards.length, 0)
-    if (!window.confirm(`Delete “${active.name}” and its ${n} card${n === 1 ? '' : 's'}? This cannot be undone.`)) return
+    setConfirming(false)
     clearTimeout(timers.current.get(active.id))
     timers.current.delete(active.id)
     try {
@@ -269,18 +284,66 @@ export default function Plan() {
             {saving === 'saving' ? 'saving…' : saving === 'error' ? 'not saved' : 'saved'}
           </span>
         ) : null}
-        <Pill onClick={newBoard}>New board</Pill>
+        <Pill onClick={startNew}>New board</Pill>
         {active ? (
           <IconMenu
             label="Board options"
             items={[
-              { key: 'rename', label: 'Rename board', onClick: rename },
-              { key: 'delete', label: 'Delete board', danger: true, onClick: remove },
+              { key: 'rename', label: 'Rename board', onClick: startRename },
+              { key: 'delete', label: 'Delete board', danger: true, onClick: () => { setForm(null); setConfirming(true) } },
             ]}
           />
         ) : null}
       </div>
     </div>
+  )
+
+  const cardCount = active ? active.data.chains.reduce((k, ch) => k + ch.cards.length, 0) : 0
+  const bars = (
+    <>
+      {form ? (
+        <div className="composer plan-bar">
+          <Field
+            className="composer__field"
+            label={form.mode === 'rename' ? 'Rename board' : 'New board'}
+            value={form.value}
+            onChange={(v) => setForm((f) => (f ? { ...f, value: v } : f))}
+            placeholder="Board name"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                submitForm()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                e.stopPropagation()
+                setForm(null)
+              }
+            }}
+          />
+          <div className="composer__actions">
+            <Pill active onClick={submitForm} disabled={!form.value.trim()}>
+              {form.mode === 'rename' ? 'Save' : 'Create'}
+            </Pill>
+            <Pill className="pill--ghost" onClick={() => setForm(null)}>Cancel</Pill>
+          </div>
+        </div>
+      ) : null}
+      {confirming && active ? (
+        <div className="composer plan-bar" role="alert">
+          <span className="grow micro">
+            delete board {active.name} and its {cardCount} {cardCount === 1 ? 'card' : 'cards'}? this cannot be undone.
+          </span>
+          <div className="composer__actions">
+            <Pill className="pill--danger" onClick={remove}>
+              <Trash2 size={13} strokeWidth={1.5} aria-hidden="true" />
+              Delete board
+            </Pill>
+            <Pill className="pill--ghost" onClick={() => setConfirming(false)}>Cancel</Pill>
+          </div>
+        </div>
+      ) : null}
+    </>
   )
 
   if (boards === undefined) return head
@@ -289,13 +352,14 @@ export default function Plan() {
     return (
       <>
         {head}
+        {bars}
         <div className="bento">
           <Card className="span-12">
             <div className="card__body">
               <EmptyState
                 lead="No boards yet."
                 hint={error || 'A board is a line of steps, left to right, that can fork. Start one and write the first step.'}
-                action={<Pill onClick={newBoard} active>New board</Pill>}
+                action={form ? null : <Pill onClick={startNew} active>New board</Pill>}
               />
             </div>
           </Card>
@@ -307,6 +371,7 @@ export default function Plan() {
   return (
     <>
       {head}
+      {bars}
       <div className="bento">
         <Card className="span-12 planboard">
           <Board key={active.id} board={active} edit={edit} />
@@ -512,9 +577,13 @@ function Board({ board, edit }) {
     const [c] = at.ch.cards.splice(at.i, 1)
     at.ch.cards.splice(j, 0, c)
   })
+  /* A card with nothing written in it goes at once; one with words asks
+     first, on the card itself. */
+  const [doomed, setDoomed] = useState(null)
   const remove = (card) => {
     const hasWords = card.title.trim() || card.body.trim()
-    if (hasWords && !window.confirm(`Delete “${card.title.trim() || 'this card'}”?`)) return
+    if (hasWords && doomed !== card.id) { setDoomed(card.id); return }
+    setDoomed(null)
     change((d) => removeCard(d, card.id))
   }
   const setField = (cardId, key, value) => change((d) => {
@@ -619,6 +688,8 @@ function Board({ board, edit }) {
                 onBranch={() => branch(c.id)}
                 onMove={(dir) => move(c.id, dir)}
                 onDelete={() => remove(c)}
+                confirming={doomed === c.id}
+                onKeep={() => setDoomed(null)}
               />
             )
           }))}
@@ -682,6 +753,7 @@ function Board({ board, edit }) {
 function PlanCard({
   card, place, number, branchCard, first, last, writing, fresh,
   onTitle, onBody, onWrite, onDoneWriting, onAddAfter, onBranch, onMove, onDelete,
+  confirming, onKeep,
 }) {
   /* A new card takes the cursor without the browser scrolling the canvas to
      it: Board pans the view there instead. */
@@ -736,6 +808,15 @@ function PlanCard({
           <span className="plan-card__hint">Write…</span>
         )}
       </div>
+      {confirming ? (
+        <div className="plan-card__confirm" role="alert">
+          <span className="micro plan-card__ask">delete step?</span>
+          <span className="plan-card__confirm-actions">
+            <Pill className="pill--danger" onClick={onDelete}>Delete</Pill>
+            <Pill className="pill--ghost" onClick={onKeep}>Keep</Pill>
+          </span>
+        </div>
+      ) : null}
     </article>
   )
 }

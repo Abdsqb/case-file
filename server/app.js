@@ -546,7 +546,8 @@ app.get('/api/study-plan', wrap(async (req, res) => {
 
 app.put('/api/study-plan', wrap(async (req, res) => {
   const plan = req.body?.plan;
-  if (!plan || typeof plan !== 'object' || !Array.isArray(plan.terms) || !plan.terms.length) {
+  /* A plan being typed in may have no terms yet, but it always has the list. */
+  if (!plan || typeof plan !== 'object' || !Array.isArray(plan.terms)) {
     return res.status(400).json({ error: 'that is not a study plan — it needs a list of terms.' });
   }
   const text = JSON.stringify(plan);

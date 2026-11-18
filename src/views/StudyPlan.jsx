@@ -2,25 +2,31 @@
  * StudyPlan — Calendar's third tab: the degree, term by term.
  *
  * The plan is one JSON document kept in the database (it holds grades, and
- * the bundle is public), imported whole from a file. This screen draws it and
- * writes back only one thing: ticking an open item off.
+ * the bundle is public). It is typed in here: Edit turns the cards into forms,
+ * each change is saved a moment after the last keystroke, and every total is
+ * worked out from the courses rather than typed — credits, the GPA, and which
+ * requirements are met.
  *
- *   Degree progress — credits against 128, the GPA, when it ends
- *   Requirements    — core, major, minor, electives, each done / now / planned
+ *   Degree progress — credits against the total, the GPA, when it ends
+ *   Requirements    — groups of requirements, met by the courses marked as
+ *                     counting toward them (or ticked "met" another way)
  *   Terms           — every semester side by side, past ones with grades
- *   Registration    — what to register for next, and when
- *   Next term's week, the backups, and the open questions
+ *   Older plans may also carry registration, backups and open questions;
+ *   those are shown when present.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Card, CardHead, EmptyState, IconMenu, Meter, Metric, Pill } from '../ui/primitives.jsx'
+import { Card, CardHead, EmptyState, IconMenu, MenuButton, Meter, Metric, Pill, PillSelect } from '../ui/primitives.jsx'
 import { clearStudyPlan, getStudyPlan, saveStudyPlan } from '../lib/api.js'
 
 function cx(...parts) {
   return parts.filter(Boolean).join(' ')
 }
 
+const uid = () => Math.random().toString(36).slice(2, 9)
+
 const DAY_MS = 86400000
+const SAVE_AFTER_MS = 600
 const WEEK = [
   { day: 1, label: 'Mon' },
   { day: 2, label: 'Tue' },
@@ -29,10 +35,195 @@ const WEEK = [
   { day: 5, label: 'Fri' },
 ]
 
-/* Credits a course earns: a withdrawal is on the record and earns nothing. */
-const creditOf = (c) => (c.noCredit ? 0 : Number(c.cr) || 0)
+/* NYU's scale. P, W and I carry no grade points. */
+const POINTS = { A: 4, 'A-': 3.667, 'B+': 3.333, B: 3, 'B-': 2.667, 'C+': 2.333, C: 2, 'C-': 1.667, 'D+': 1.333, D: 1, F: 0 }
+const GRADE_OPTIONS = [{ value: 'none', label: '—' }, ...['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F', 'P', 'W', 'I'].map((g) => ({ value: g, label: g }))]
+const EARNS_NOTHING = new Set(['F', 'W', 'I'])
+const STATUS_OPTIONS = [
+  { value: 'done', label: 'Done' },
+  { value: 'current', label: 'Now' },
+  { value: 'planned', label: 'Planned' },
+]
+const PHASE = { done: 'done', current: 'now', planned: 'planned' }
+const phaseOf = (t) => PHASE[t.status] || 'planned'
 
-function minutes(hhmm) {
+/* Credits a course earns: a withdrawal, a fail or an incomplete earns none. */
+const creditOf = (c) => (c.noCredit || EARNS_NOTHING.has(c.grade) ? 0 : Number(c.cr) || 0)
+const requiredOf = (plan) => Number(plan.credits?.required) || 128
+const toNum = (v) => (v === '' ? '' : Math.max(0, Number(v) || 0))
+
+/* --------------------------------------------------------------------------
+   the plan as data
+   -------------------------------------------------------------------------- */
+
+function blankPlan() {
+  return {
+    version: 2,
+    student: { program: '', home: '', minor: '', graduation: '', standing: '' },
+    credits: { required: 128 },
+    requirements: [
+      { id: uid(), group: 'Core', items: [] },
+      { id: uid(), group: 'Major', items: [] },
+      { id: uid(), group: 'Minor', items: [] },
+      { id: uid(), group: 'General electives', credits: '', items: [] },
+    ],
+    terms: [],
+  }
+}
+
+/* Every term, course, group and requirement gets an id, and every course a
+   list of what it counts toward, so the editor can address them. */
+function normalize(plan) {
+  return {
+    ...plan,
+    student: { ...(plan.student || {}) },
+    credits: { required: 128, ...(plan.credits || {}) },
+    requirements: (plan.requirements || []).map((g) => ({
+      ...g,
+      id: g.id || uid(),
+      group: g.group ?? '',
+      items: (g.items || []).map((it) => ({ ...it, id: it.id || uid(), name: it.name ?? '' })),
+    })),
+    terms: (plan.terms || []).map((t) => ({
+      ...t,
+      id: t.id || uid(),
+      label: t.label ?? '',
+      campus: t.campus ?? '',
+      status: t.status || 'planned',
+      courses: (t.courses || []).map((c) => ({ ...c, id: c.id || uid(), reqs: Array.isArray(c.reqs) ? c.reqs : [] })),
+    })),
+  }
+}
+
+/* Drop links to requirements that no longer exist. */
+function unlink(plan, ids) {
+  for (const t of plan.terms) for (const c of t.courses) c.reqs = c.reqs.filter((id) => !ids.has(id))
+}
+
+/* "Fall 2026" → "Spring 2027" → "Fall 2027". */
+function nextLabel(prev, nowTs) {
+  const m = /^(fall|spring|summer)\s+(\d{4})$/i.exec((prev || '').trim())
+  if (!m) {
+    const d = new Date(nowTs)
+    return d.getMonth() >= 6 ? `Fall ${d.getFullYear()}` : `Spring ${d.getFullYear()}`
+  }
+  const y = Number(m[2])
+  return m[1].toLowerCase() === 'fall' ? `Spring ${y + 1}` : `Fall ${y}`
+}
+
+/* Everything that is counted rather than typed. */
+function tallyOf(plan) {
+  const credits = { done: 0, now: 0, planned: 0 }
+  let points = 0
+  let graded = 0
+  const slots = new Map()
+  const groupOf = new Map()
+  for (const g of plan.requirements) {
+    groupOf.set(g.id, g.id)
+    for (const it of g.items) groupOf.set(it.id, g.id)
+  }
+  const groupCr = new Map()
+  const termCr = new Map()
+
+  for (const t of plan.terms) {
+    const ph = phaseOf(t)
+    let sum = 0
+    for (const c of t.courses) {
+      const cr = creditOf(c)
+      sum += cr
+      credits[ph] += cr
+      if (ph === 'done' && !c.noCredit && c.grade in POINTS) {
+        points += POINTS[c.grade] * (Number(c.cr) || 0)
+        graded += Number(c.cr) || 0
+      }
+      if (!cr) continue
+      const groups = new Set()
+      for (const id of c.reqs || []) {
+        if (!groupOf.has(id)) continue
+        let s = slots.get(id)
+        if (!s) slots.set(id, (s = { done: 0, now: 0, planned: 0, courses: [] }))
+        s[ph] += 1
+        s.courses.push({ c, t, ph })
+        groups.add(groupOf.get(id))
+      }
+      for (const gid of groups) {
+        const g = groupCr.get(gid) || { done: 0, now: 0, planned: 0 }
+        g[ph] += cr
+        groupCr.set(gid, g)
+      }
+    }
+    termCr.set(t.id, sum)
+  }
+
+  const items = new Map()
+  const groups = new Map()
+  let met = 0
+  let all = 0
+  for (const g of plan.requirements) {
+    let gMet = 0
+    for (const it of g.items) {
+      const st = itemState(it, slots.get(it.id))
+      items.set(it.id, st)
+      if (st.status === 'done') gMet += 1
+    }
+    const cr = groupCr.get(g.id) || { done: 0, now: 0, planned: 0 }
+    const target = Number(g.credits) || 0
+    let crStatus = null
+    if (target) {
+      crStatus = cr.done >= target ? 'done' : cr.done + cr.now >= target ? 'progress'
+        : cr.done + cr.now + cr.planned >= target ? 'planned' : 'todo'
+      all += 1
+      if (crStatus === 'done') met += 1
+    }
+    groups.set(g.id, { met: gMet, all: g.items.length, cr, target, crStatus })
+    met += gMet
+    all += g.items.length
+  }
+
+  return {
+    credits,
+    total: credits.done + credits.now + credits.planned,
+    gpa: graded ? points / graded : null,
+    graded,
+    items,
+    groups,
+    met,
+    all,
+    termCr,
+  }
+}
+
+function itemState(it, s) {
+  const need = Math.max(1, Math.round(Number(it.need)) || 1)
+  const d = s?.done || 0
+  const n = s?.now || 0
+  const p = s?.planned || 0
+  let status = 'todo'
+  if (it.met || d >= need) status = 'done'
+  else if (d + n >= need) status = 'progress'
+  else if (d + n + p >= need) status = 'planned'
+  return { status, need, have: it.met ? need : Math.min(need, d + n + p), courses: s?.courses || [] }
+}
+
+/* "CSCI-SHU 210 · CSCI-UA 202 now · CSCI-SHU 420 Fall 2027" */
+function byText(courses) {
+  return courses
+    .map(({ c, t, ph }) => {
+      const name = c.code || c.title || 'a course'
+      if (ph === 'done') return name
+      if (ph === 'now') return `${name} now`
+      return `${name} ${t.label}`.trim()
+    })
+    .join(' · ')
+}
+
+const STATUS_LABEL = { done: 'done', progress: 'in progress', planned: 'planned', todo: 'not planned' }
+
+function Mark({ status }) {
+  return <span className={cx('sp-mark', `sp-mark--${status}`)} aria-hidden="true" />
+}
+
+const minutes = (hhmm) => {
   const [h, m] = String(hhmm).split(':').map(Number)
   return h * 60 + (m || 0)
 }
@@ -60,12 +251,6 @@ function whenOf(iso, nowTs) {
   return { text: label, tone: 'idle' }
 }
 
-const STATUS_LABEL = { done: 'done', progress: 'in progress', planned: 'planned', todo: 'not planned' }
-
-function Mark({ status }) {
-  return <span className={cx('sp-mark', `sp-mark--${status}`)} aria-hidden="true" />
-}
-
 /* --------------------------------------------------------------------------
    the screen
    -------------------------------------------------------------------------- */
@@ -73,75 +258,107 @@ function Mark({ status }) {
 export default function StudyPlan({ now }) {
   const nowTs = now instanceof Date ? now.getTime() : Number(now) || Date.now()
 
-  /* undefined while loading, null when none has been imported. */
+  /* undefined while loading, null when there is none yet. */
   const [plan, setPlan] = useState(undefined)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState('saved')
   const [error, setError] = useState(null)
-  const fileRef = useRef(null)
+
+  const planRef = useRef(plan)
+  const timer = useRef(null)
 
   useEffect(() => {
     let live = true
     getStudyPlan()
-      .then((r) => { if (live) setPlan(r?.plan ?? null) })
+      .then((r) => {
+        if (!live) return
+        const p = r?.plan ? normalize(r.plan) : null
+        planRef.current = p
+        setPlan(p)
+      })
       .catch(() => { if (live) setPlan(null) })
     return () => { live = false }
   }, [])
 
-  const importFile = useCallback(async (e) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    setError(null)
+  /* Saved a moment after the last change, and at once on the way out. */
+  const flush = useCallback(async () => {
+    clearTimeout(timer.current)
+    timer.current = null
+    const p = planRef.current
+    if (!p) return
     try {
-      const next = JSON.parse(await file.text())
-      await saveStudyPlan(next)
-      setPlan(next)
+      await saveStudyPlan(p)
+      if (planRef.current === p) { setSaving('saved'); setError(null) }
     } catch (err) {
-      setError(err instanceof SyntaxError ? 'That file is not valid JSON.' : err?.message || 'The plan could not be saved.')
+      setSaving('error')
+      setError(err?.message || 'The plan could not be saved.')
     }
   }, [])
 
+  useEffect(() => () => { if (timer.current) flush() }, [flush])
+
+  useEffect(() => {
+    const warn = (e) => { if (timer.current) { flush(); e.preventDefault() } }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [flush])
+
+  /* Every change goes through here: a copy, changed, shown, saved behind. */
+  const edit = useCallback((fn) => {
+    if (!planRef.current) return
+    const next = structuredClone(planRef.current)
+    fn(next)
+    planRef.current = next
+    setPlan(next)
+    setSaving('saving')
+    clearTimeout(timer.current)
+    timer.current = setTimeout(flush, SAVE_AFTER_MS)
+  }, [flush])
+
+  const start = useCallback(async () => {
+    const p = blankPlan()
+    planRef.current = p
+    setPlan(p)
+    setEditing(true)
+    setSaving('saving')
+    await flush()
+  }, [flush])
+
+  const finish = useCallback(() => {
+    setEditing(false)
+    if (timer.current) flush()
+  }, [flush])
+
   const download = useCallback(() => {
-    if (!plan) return
-    const blob = new Blob([JSON.stringify(plan, null, 2)], { type: 'application/json' })
+    if (!planRef.current) return
+    const blob = new Blob([JSON.stringify(planRef.current, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = 'study-plan.json'
     a.click()
     setTimeout(() => URL.revokeObjectURL(a.href), 1000)
-  }, [plan])
+  }, [])
 
   const remove = useCallback(async () => {
-    if (!window.confirm('Remove the study plan from the app? The file you imported it from is not touched.')) return
+    if (!window.confirm('Delete the whole study plan — every term, course and requirement? This cannot be undone.')) return
+    clearTimeout(timer.current)
+    timer.current = null
     await clearStudyPlan()
+    planRef.current = null
     setPlan(null)
+    setEditing(false)
   }, [])
 
-  /* Ticking an open item: shown at once, saved behind it, put back if the
-     save fails. */
-  const planRef = useRef(plan)
-  planRef.current = plan
   const toggleItem = useCallback((id) => {
-    const prev = planRef.current
-    if (!prev) return
-    const next = {
-      ...prev,
-      openItems: prev.openItems.map((it) => (it.id === id ? { ...it, done: !it.done } : it)),
-    }
-    setPlan(next)
-    saveStudyPlan(next).catch(() => setPlan(prev))
-  }, [])
+    edit((p) => {
+      const it = (p.openItems || []).find((x) => x.id === id)
+      if (it) it.done = !it.done
+    })
+  }, [edit])
 
-  const picker = (
-    <input
-      ref={fileRef}
-      type="file"
-      accept=".json,application/json"
-      onChange={importFile}
-      hidden
-    />
-  )
+  const tally = useMemo(() => (plan ? tallyOf(plan) : null), [plan])
 
-  if (plan === undefined) return <div className="bento">{picker}</div>
+  if (plan === undefined) return <div className="bento" />
 
   if (!plan) {
     return (
@@ -150,41 +367,56 @@ export default function StudyPlan({ now }) {
           <div className="card__body">
             <EmptyState
               lead="No study plan yet."
-              hint={error || 'Import the plan’s .json file — it is kept with your archive, behind the password.'}
-              action={
-                <Pill onClick={() => fileRef.current?.click()} active>
-                  Import plan
-                </Pill>
-              }
+              hint="Start one and type in your terms, courses and requirements. Credits, GPA and requirements add themselves up as you go."
+              action={<Pill onClick={start} active>Start a plan</Pill>}
             />
           </div>
         </Card>
-        {picker}
       </div>
     )
   }
 
-  const menu = (
-    <IconMenu
-      label="Study plan options"
-      items={[
-        { key: 'replace', label: 'Replace with a file…', onClick: () => fileRef.current?.click() },
-        { key: 'download', label: 'Download as .json', onClick: download },
-        { key: 'remove', label: 'Remove plan', danger: true, onClick: remove },
-      ]}
-    />
+  const right = (
+    <span className="sp-head-actions">
+      {editing ? (
+        <span className={cx('sp-saving micro', saving === 'error' && 'is-error')} aria-live="polite">
+          {saving === 'saving' ? 'saving…' : saving === 'error' ? 'not saved' : 'saved'}
+        </span>
+      ) : null}
+      <Pill onClick={editing ? finish : () => setEditing(true)} active={editing}>
+        {editing ? 'Done' : 'Edit'}
+      </Pill>
+      <IconMenu
+        label="Study plan options"
+        items={[
+          { key: 'download', label: 'Download a copy (.json)', onClick: download },
+          { key: 'remove', label: 'Delete plan', danger: true, onClick: remove },
+        ]}
+      />
+    </span>
   )
 
+  if (editing) {
+    return (
+      <div className="bento studyplan is-editing">
+        <Progress plan={plan} tally={tally} right={right} error={error} />
+        <DegreeEditor plan={plan} edit={edit} />
+        <RequirementsEditor plan={plan} tally={tally} edit={edit} />
+        <TermsEditor plan={plan} tally={tally} edit={edit} nowTs={nowTs} />
+      </div>
+    )
+  }
+
+  const nextTerm = plan.terms.find((t) => t.status === 'planned')
   return (
     <div className="bento studyplan">
-      <Progress plan={plan} right={menu} error={error} />
-      <Requirements groups={plan.requirements || []} />
-      <Terms terms={plan.terms} required={plan.credits?.required || 128} />
+      <Progress plan={plan} tally={tally} right={right} error={error} />
+      <Requirements plan={plan} tally={tally} onEdit={() => setEditing(true)} />
+      <Terms plan={plan} tally={tally} onEdit={() => setEditing(true)} />
       {plan.registration ? <Registration reg={plan.registration} nowTs={nowTs} /> : null}
-      <NextWeek term={plan.terms.find((t) => t.status === 'planned')} />
+      <NextWeek term={nextTerm} />
       {plan.backups?.length ? <Backups backups={plan.backups} /> : null}
-      <OpenItems items={plan.openItems || []} rules={plan.rules || []} onToggle={toggleItem} />
-      {picker}
+      {plan.openItems?.length ? <OpenItems items={plan.openItems} rules={plan.rules || []} onToggle={toggleItem} /> : null}
     </div>
   )
 }
@@ -193,45 +425,38 @@ export default function StudyPlan({ now }) {
    degree progress
    -------------------------------------------------------------------------- */
 
-function Progress({ plan, right, error }) {
+function Progress({ plan, tally, right, error }) {
   const s = plan.student || {}
-  const required = plan.credits?.required || 128
-  const tally = useMemo(() => {
-    let earned = 0
-    let current = 0
-    let planned = 0
-    for (const t of plan.terms) {
-      const sum = t.courses.reduce((n, c) => n + creditOf(c), 0)
-      if (t.status === 'done') earned += sum
-      else if (t.status === 'current') current += sum
-      else planned += sum
-    }
-    return { earned, current, planned, total: earned + current + planned }
-  }, [plan.terms])
-  const secured = tally.earned + tally.current
+  const required = requiredOf(plan)
+  const { credits } = tally
+  const secured = credits.done + credits.now
   const spare = tally.total - required
+  const gpa = tally.gpa ?? (s.gpa ? Number(s.gpa) : null)
 
   return (
     <Card className="span-4 sp-progress" aria-label="Degree progress">
       <CardHead
         title="Degree progress"
-        subtitle={[s.program, s.home].filter(Boolean).join(' · ')}
+        subtitle={[s.program, s.home].filter(Boolean).join(' · ') || 'Your degree'}
         right={right}
       />
       <div className="card__body">
-        <Metric value={secured} unit={`of ${required} credits`} sub={`${tally.earned} earned · ${tally.current} this term`} />
+        <Metric value={secured} unit={`of ${required} credits`} sub={`${credits.done} earned · ${credits.now} this term`} />
         <div className="sp-progress__bar" aria-hidden="true">
-          <span className="sp-progress__seg sp-progress__seg--done" style={{ width: `${(tally.earned / required) * 100}%` }} />
-          <span className="sp-progress__seg sp-progress__seg--now" style={{ width: `${(tally.current / required) * 100}%` }} />
+          <span className="sp-progress__seg sp-progress__seg--done" style={{ width: `${Math.min(100, (credits.done / required) * 100)}%` }} />
+          <span className="sp-progress__seg sp-progress__seg--now" style={{ width: `${Math.min(100, (credits.now / required) * 100)}%` }} />
         </div>
         <div className="row row--between micro">
-          <span>{tally.total} planned</span>
+          <span>{tally.total} planned in all</span>
           <span>{spare >= 0 ? `${spare} to spare` : `${-spare} short`}</span>
         </div>
 
         <dl className="sp-facts">
           {s.graduation ? (<><dt>graduating</dt><dd>{s.graduation}</dd></>) : null}
-          {s.gpa ? (<><dt>gpa</dt><dd>{Number(s.gpa).toFixed(3)}{s.gpaAsOf ? <span className="dim"> · {s.gpaAsOf}</span> : null}</dd></>) : null}
+          {gpa != null ? (
+            <><dt>gpa</dt><dd>{gpa.toFixed(3)}{tally.gpa != null ? <span className="dim"> · {tally.graded} graded cr</span> : null}</dd></>
+          ) : null}
+          <dt>requirements</dt><dd>{tally.met} of {tally.all} met</dd>
           {s.standing ? (<><dt>standing</dt><dd>{s.standing}</dd></>) : null}
           {s.minor ? (<><dt>minor</dt><dd>{s.minor}</dd></>) : null}
           {s.location ? (<><dt>now</dt><dd>{s.location}</dd></>) : null}
@@ -246,19 +471,13 @@ function Progress({ plan, right, error }) {
    requirements
    -------------------------------------------------------------------------- */
 
-function Requirements({ groups }) {
-  const counts = useMemo(() => {
-    let done = 0
-    let all = 0
-    for (const g of groups) for (const it of g.items) { all += 1; if (it.status === 'done') done += 1 }
-    return { done, all }
-  }, [groups])
-
+function Requirements({ plan, tally, onEdit }) {
+  const groups = plan.requirements
   return (
     <Card className="span-8" aria-label="Requirements">
       <CardHead
         title="Requirements"
-        subtitle={`${counts.done} of ${counts.all} met`}
+        subtitle={tally.all ? `${tally.met} of ${tally.all} met` : 'None yet'}
         right={
           <span className="sp-legend micro">
             <span><Mark status="done" /> done</span>
@@ -268,30 +487,57 @@ function Requirements({ groups }) {
         }
       />
       <div className="card__body">
-        <div className="sp-reqs">
-          {groups.map((g) => {
-            const met = g.items.filter((it) => it.status === 'done').length
-            return (
-              <section key={g.group} className="sp-reqs__group">
-                <div className="sp-reqs__head">
-                  <span className="section-label">{g.group.toLowerCase()}</span>
-                  <span className="micro dim">{met}/{g.items.length}</span>
-                </div>
-                <ul className="sp-reqs__list">
-                  {g.items.map((it) => (
-                    <li key={it.name} className={cx('sp-req', `is-${it.status}`)} title={STATUS_LABEL[it.status]}>
-                      <Mark status={it.status} />
-                      <span className="sp-req__text">
-                        <span className="sp-req__name">{it.name}</span>
-                        {it.by ? <span className="sp-req__by">{it.by}</span> : null}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )
-          })}
-        </div>
+        {!tally.all ? (
+          <EmptyState lead="No requirements yet." hint="Add your core, major and minor requirements, then mark which courses count toward each." action={<Pill onClick={onEdit}>Edit plan</Pill>} />
+        ) : (
+          <div className="sp-reqs">
+            {groups.map((g) => {
+              const gs = tally.groups.get(g.id)
+              if (!g.items.length && !gs.target) return null
+              return (
+                <section key={g.id} className="sp-reqs__group">
+                  <div className="sp-reqs__head">
+                    <span className="section-label">{(g.group || 'untitled').toLowerCase()}</span>
+                    <span className="micro dim">
+                      {g.items.length ? `${gs.met}/${gs.all}` : null}
+                      {g.items.length && gs.target ? ' · ' : null}
+                      {gs.target ? `${gs.cr.done + gs.cr.now + gs.cr.planned}/${gs.target} cr` : null}
+                    </span>
+                  </div>
+                  <ul className="sp-reqs__list">
+                    {g.items.map((it) => {
+                      const st = tally.items.get(it.id)
+                      const by = [byText(st.courses), it.met && !st.courses.length && !it.note ? 'met' : '', it.note].filter(Boolean).join(' — ')
+                      return (
+                        <li key={it.id} className={cx('sp-req', `is-${st.status}`)} title={STATUS_LABEL[st.status]}>
+                          <Mark status={st.status} />
+                          <span className="sp-req__text">
+                            <span className="sp-req__name">
+                              {it.name || 'untitled'}
+                              {st.need > 1 ? <span className="sp-req__count"> {st.have}/{st.need}</span> : null}
+                            </span>
+                            {by ? <span className="sp-req__by">{by}</span> : null}
+                          </span>
+                        </li>
+                      )
+                    })}
+                    {gs.target ? (
+                      <li className={cx('sp-req', `is-${gs.crStatus}`)} title={STATUS_LABEL[gs.crStatus]}>
+                        <Mark status={gs.crStatus} />
+                        <span className="sp-req__text">
+                          <span className="sp-req__name">{gs.target} credits</span>
+                          <span className="sp-req__by">
+                            {gs.cr.done} done · {gs.cr.now} now · {gs.cr.planned} planned
+                          </span>
+                        </span>
+                      </li>
+                    ) : null}
+                  </ul>
+                </section>
+              )
+            })}
+          </div>
+        )}
       </div>
     </Card>
   )
@@ -301,68 +547,475 @@ function Requirements({ groups }) {
    every term, side by side
    -------------------------------------------------------------------------- */
 
-function Terms({ terms, required }) {
+/* Each requirement's short name; one that two groups share (Statistics, for
+   the major and the minor) carries its group to tell them apart. */
+function reqNames(plan) {
+  const seen = new Map()
+  for (const g of plan.requirements) for (const it of g.items) {
+    const k = (it.name || '').trim().toLowerCase()
+    seen.set(k, (seen.get(k) || 0) + 1)
+  }
+  const names = new Map()
+  for (const g of plan.requirements) {
+    names.set(g.id, g.group || 'untitled')
+    for (const it of g.items) {
+      const name = it.name || 'untitled'
+      const shared = seen.get((it.name || '').trim().toLowerCase()) > 1
+      names.set(it.id, shared && g.group ? `${g.group} · ${name}` : name)
+    }
+  }
+  return names
+}
+
+function Terms({ plan, tally, onEdit }) {
+  const required = requiredOf(plan)
+  const names = useMemo(() => reqNames(plan), [plan])
   const rows = useMemo(() => {
     let running = 0
-    return terms.map((t) => {
-      const cr = t.courses.reduce((n, c) => n + creditOf(c), 0)
+    return plan.terms.map((t) => {
+      const cr = tally.termCr.get(t.id) || 0
       running += cr
       return { ...t, cr, running }
     })
-  }, [terms])
+  }, [plan.terms, tally])
 
   const railRef = useRef(null)
   /* The current term in view on a narrow screen, where the row scrolls. */
   useEffect(() => {
     const rail = railRef.current
-    const now = rail?.querySelector('.sp-term.is-current')
-    if (!rail || !now || rail.scrollWidth <= rail.clientWidth) return
-    rail.scrollLeft = now.offsetLeft - 8
+    const cur = rail?.querySelector('.sp-term.is-current')
+    if (!rail || !cur || rail.scrollWidth <= rail.clientWidth) return
+    rail.scrollLeft = cur.offsetLeft - 8
   }, [rows])
 
   return (
     <Card className="span-12" aria-label="Terms">
       <CardHead
         title="Terms"
-        subtitle={`${rows.length} semesters · ${rows[rows.length - 1]?.running ?? 0} credits by the end`}
+        subtitle={rows.length ? `${rows.length} semesters · ${rows[rows.length - 1].running} credits by the end` : 'None yet'}
       />
       <div className="card__body">
-        <div className="sp-terms" ref={railRef}>
-          {rows.map((t) => (
-            <section key={t.id} className={cx('sp-term', `is-${t.status}`)} aria-label={t.label}>
-              <div className="sp-term__rail" aria-hidden="true"><span className="sp-term__node" /></div>
-              <header className="sp-term__head">
-                <span className="sp-term__label">{t.label}</span>
-                {t.status === 'current' ? <span className="sp-term__now">now</span> : null}
-              </header>
-              <div className="sp-term__meta">
-                {t.campus.toLowerCase()} · {t.cr} cr
-              </div>
-              <ul className="sp-term__courses">
-                {t.courses.map((c, i) => (
-                  <li key={`${c.code}-${i}`} className={cx('sp-course', c.tbd && 'is-tbd', c.noCredit && 'is-void')}>
-                    <span className="sp-course__title">{c.title}</span>
-                    <span className="sp-course__line">
-                      <span className="sp-course__code">{c.code || c.counts}</span>
-                      {c.grade ? (
-                        <span className="sp-course__grade">{c.grade}</span>
-                      ) : (
-                        <span className="sp-course__cr">{c.cr}</span>
-                      )}
-                    </span>
-                    {c.code && c.counts && !c.grade ? <span className="sp-course__counts">{c.counts}</span> : null}
-                  </li>
-                ))}
-              </ul>
-              <footer className="sp-term__foot">
-                <span className="micro">{t.running}<span className="dim"> / {required}</span></span>
-                <Meter value={Math.min(1, t.running / required)} label={`${t.running} of ${required} credits after ${t.label}`} />
-              </footer>
-            </section>
-          ))}
+        {!rows.length ? (
+          <EmptyState lead="No terms yet." hint="Add each semester and the courses in it." action={<Pill onClick={onEdit}>Edit plan</Pill>} />
+        ) : (
+          <div className="sp-terms" ref={railRef}>
+            {rows.map((t) => (
+              <section key={t.id} className={cx('sp-term', `is-${t.status}`)} aria-label={t.label}>
+                <div className="sp-term__rail" aria-hidden="true"><span className="sp-term__node" /></div>
+                <header className="sp-term__head">
+                  <span className="sp-term__label">{t.label || 'Untitled term'}</span>
+                  {t.status === 'current' ? <span className="sp-term__now">now</span> : null}
+                </header>
+                <div className="sp-term__meta">
+                  {[t.campus?.toLowerCase(), `${t.cr} cr`].filter(Boolean).join(' · ')}
+                </div>
+                <ul className="sp-term__courses">
+                  {t.courses.map((c) => {
+                    const counts = c.reqs.map((id) => names.get(id)).filter(Boolean)[0] || c.counts
+                    return (
+                      <li key={c.id} className={cx('sp-course', c.tbd && 'is-tbd', !creditOf(c) && 'is-void')}>
+                        <span className="sp-course__title">{c.title || c.code || 'Untitled course'}</span>
+                        <span className="sp-course__line">
+                          <span className="sp-course__code">{c.code || counts}</span>
+                          {c.grade ? (
+                            <span className="sp-course__grade">{c.grade}</span>
+                          ) : (
+                            <span className="sp-course__cr">{c.cr}</span>
+                          )}
+                        </span>
+                        {c.code && counts && !c.grade ? <span className="sp-course__counts">{counts}</span> : null}
+                      </li>
+                    )
+                  })}
+                </ul>
+                <footer className="sp-term__foot">
+                  <span className="micro">{t.running}<span className="dim"> / {required}</span></span>
+                  <Meter value={Math.min(1, t.running / required)} label={`${t.running} of ${required} credits after ${t.label}`} />
+                </footer>
+              </section>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+/* --------------------------------------------------------------------------
+   the editor: the degree
+   -------------------------------------------------------------------------- */
+
+function Field({ label, className, value, ...input }) {
+  return (
+    <label className={cx('field', className)}>
+      <span className="field__label">{label}</span>
+      <input className="field__input" value={value ?? ''} {...input} />
+    </label>
+  )
+}
+
+function DegreeEditor({ plan, edit }) {
+  const s = plan.student
+  const set = (k) => (e) => {
+    const v = e.target.value
+    edit((p) => { p.student[k] = v })
+  }
+  return (
+    <Card className="span-8" aria-label="Degree">
+      <CardHead title="Degree" subtitle="What you study, and how many credits it takes to finish" />
+      <div className="card__body">
+        <div className="sp-form">
+          <Field label="Program / major" className="sp-form__wide" value={s.program} onChange={set('program')} placeholder="Computer Science, BS" />
+          <Field label="Home campus" value={s.home} onChange={set('home')} placeholder="NYU Shanghai" />
+          <Field label="Minor" value={s.minor} onChange={set('minor')} placeholder="Business" />
+          <Field label="Graduating" value={s.graduation} onChange={set('graduation')} placeholder="Spring 2028" />
+          <Field label="Standing" value={s.standing} onChange={set('standing')} placeholder="Junior" />
+          <Field
+            label="Credits to graduate"
+            type="number"
+            min="0"
+            inputMode="numeric"
+            value={plan.credits.required}
+            onChange={(e) => { const v = toNum(e.target.value); edit((p) => { p.credits.required = v }) }}
+          />
         </div>
       </div>
     </Card>
+  )
+}
+
+/* --------------------------------------------------------------------------
+   the editor: requirements
+   -------------------------------------------------------------------------- */
+
+function RequirementsEditor({ plan, tally, edit }) {
+  const [fresh, setFresh] = useState(null)
+  const addGroup = () => {
+    const id = uid()
+    edit((p) => { p.requirements.push({ id, group: '', items: [] }) })
+    setFresh(id)
+  }
+  return (
+    <Card className="span-12" aria-label="Requirements">
+      <CardHead
+        title="Requirements"
+        subtitle={`${tally.met} of ${tally.all} met · mark courses below as counting toward these`}
+        right={<Pill onClick={addGroup}>Add group</Pill>}
+      />
+      <div className="card__body">
+        {plan.requirements.length ? (
+          <div className="sp-ed-groups">
+            {plan.requirements.map((g) => (
+              <GroupEditor key={g.id} g={g} state={tally.groups.get(g.id)} tally={tally} edit={edit} focus={fresh === g.id} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState lead="No requirement groups." hint="A group is Core, Major, Minor, Electives — whatever your degree is split into." action={<Pill onClick={addGroup} active>Add group</Pill>} />
+        )}
+      </div>
+    </Card>
+  )
+}
+
+function GroupEditor({ g, state, tally, edit, focus }) {
+  const [fresh, setFresh] = useState(null)
+  const find = (p) => p.requirements.find((x) => x.id === g.id)
+  const findItem = (p, id) => find(p).items.find((x) => x.id === id)
+
+  const removeGroup = () => {
+    if (g.items.length && !window.confirm(`Remove “${g.group || 'this group'}” and its ${g.items.length} requirement${g.items.length === 1 ? '' : 's'}?`)) return
+    const ids = new Set([g.id, ...g.items.map((i) => i.id)])
+    edit((p) => {
+      p.requirements = p.requirements.filter((x) => x.id !== g.id)
+      unlink(p, ids)
+    })
+  }
+  const addItem = () => {
+    const id = uid()
+    edit((p) => { find(p).items.push({ id, name: '' }) })
+    setFresh(id)
+  }
+  const removeItem = (id) => edit((p) => {
+    find(p).items = find(p).items.filter((x) => x.id !== id)
+    unlink(p, new Set([id]))
+  })
+
+  const summary = [
+    g.items.length ? `${state.met} of ${state.all} met` : null,
+    state.target ? `${state.cr.done + state.cr.now + state.cr.planned} of ${state.target} cr planned` : null,
+  ].filter(Boolean).join(' · ')
+
+  return (
+    <section className="sp-ed-group">
+      <div className="sp-ed-group__head">
+        <input
+          className="sp-in sp-in--head"
+          value={g.group}
+          placeholder="Group, e.g. Major"
+          aria-label="Group name"
+          autoFocus={focus}
+          onChange={(e) => { const v = e.target.value; edit((p) => { find(p).group = v }) }}
+        />
+        <label className="sp-ed-unit" title="Credits this group needs, if it is counted in credits (e.g. 32 for electives)">
+          <input
+            className="sp-in sp-in--num"
+            type="number"
+            min="0"
+            inputMode="numeric"
+            value={g.credits ?? ''}
+            placeholder="—"
+            aria-label="Credits needed"
+            onChange={(e) => { const v = toNum(e.target.value); edit((p) => { find(p).credits = v }) }}
+          />
+          <span>cr</span>
+        </label>
+        <button type="button" className="sp-x" aria-label={`Remove ${g.group || 'group'}`} onClick={removeGroup}>×</button>
+      </div>
+      <div className="sp-ed-group__sum micro">{summary || 'Add requirements, or a credit total'}</div>
+
+      <ul className="sp-ed-items">
+        {g.items.map((it) => {
+          const st = tally.items.get(it.id)
+          const by = byText(st.courses)
+          return (
+            <li key={it.id} className="sp-ed-item">
+              <Mark status={st.status} />
+              <div className="sp-ed-item__main">
+                <input
+                  className="sp-in"
+                  value={it.name}
+                  placeholder="e.g. Data Structures"
+                  aria-label="Requirement"
+                  autoFocus={fresh === it.id}
+                  onChange={(e) => { const v = e.target.value; edit((p) => { findItem(p, it.id).name = v }) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') addItem() }}
+                />
+                <span className="sp-ed-item__by">
+                  {by || (it.met ? 'met another way' : 'no course counts toward it yet')}
+                  {st.need > 1 ? ` · ${st.have}/${st.need}` : ''}
+                </span>
+              </div>
+              <label className="sp-ed-unit" title="How many courses it takes">
+                <span>×</span>
+                <input
+                  className="sp-in sp-in--num"
+                  type="number"
+                  min="1"
+                  inputMode="numeric"
+                  value={it.need ?? 1}
+                  aria-label="Courses needed"
+                  onChange={(e) => { const v = toNum(e.target.value); edit((p) => { findItem(p, it.id).need = v }) }}
+                />
+              </label>
+              <button
+                type="button"
+                className={cx('sp-met', it.met && 'is-on')}
+                aria-pressed={!!it.met}
+                title="Met another way — placement, transfer credit, a waiver"
+                onClick={() => edit((p) => { const x = findItem(p, it.id); x.met = !x.met })}
+              >
+                met
+              </button>
+              <button type="button" className="sp-x" aria-label={`Remove ${it.name || 'requirement'}`} onClick={() => removeItem(it.id)}>×</button>
+            </li>
+          )
+        })}
+      </ul>
+      <button type="button" className="sp-add" onClick={addItem}>+ Add requirement</button>
+    </section>
+  )
+}
+
+/* --------------------------------------------------------------------------
+   the editor: terms and courses
+   -------------------------------------------------------------------------- */
+
+function TermsEditor({ plan, tally, edit, nowTs }) {
+  const [fresh, setFresh] = useState(null)
+  const required = requiredOf(plan)
+  const suggestion = nextLabel(plan.terms[plan.terms.length - 1]?.label, nowTs)
+
+  const addTerm = () => {
+    const last = plan.terms[plan.terms.length - 1]
+    const id = uid()
+    edit((p) => { p.terms.push({ id, label: suggestion, campus: last?.campus || '', status: 'planned', courses: [] }) })
+    setFresh(id)
+  }
+
+  /* What a course can count toward: each group as a whole, then its items. */
+  const options = useMemo(() => {
+    const out = []
+    for (const g of plan.requirements) {
+      out.push({ id: g.id, label: g.group || 'untitled group', group: true })
+      for (const it of g.items) out.push({ id: it.id, label: `${g.group ? `${g.group} · ` : ''}${it.name || 'untitled'}` })
+    }
+    return out
+  }, [plan.requirements])
+  const names = useMemo(() => reqNames(plan), [plan])
+
+  let running = 0
+  return (
+    <Card className="span-12" aria-label="Terms">
+      <CardHead
+        title="Terms"
+        subtitle={`${plan.terms.length} terms · ${tally.total} of ${required} credits planned`}
+        right={<Pill onClick={addTerm}>Add {suggestion}</Pill>}
+      />
+      <div className="card__body">
+        {!plan.terms.length ? (
+          <EmptyState lead="No terms yet." hint="Start with your first semester and work forward." action={<Pill onClick={addTerm} active>Add {suggestion}</Pill>} />
+        ) : (
+          <div className="sp-ed-terms">
+            {plan.terms.map((t) => {
+              const cr = tally.termCr.get(t.id) || 0
+              running += cr
+              return (
+                <TermEditor
+                  key={t.id}
+                  t={t}
+                  cr={cr}
+                  running={running}
+                  required={required}
+                  options={options}
+                  names={names}
+                  edit={edit}
+                  focus={fresh === t.id}
+                />
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+function TermEditor({ t, cr, running, required, options, names, edit, focus }) {
+  const [fresh, setFresh] = useState(null)
+  const find = (p) => p.terms.find((x) => x.id === t.id)
+  const findCourse = (p, id) => find(p).courses.find((x) => x.id === id)
+
+  const addCourse = () => {
+    const id = uid()
+    edit((p) => { find(p).courses.push({ id, code: '', title: '', cr: 4, grade: '', reqs: [] }) })
+    setFresh(id)
+  }
+  const removeTerm = () => {
+    if (t.courses.length && !window.confirm(`Remove ${t.label || 'this term'} and its ${t.courses.length} course${t.courses.length === 1 ? '' : 's'}?`)) return
+    edit((p) => { p.terms = p.terms.filter((x) => x.id !== t.id) })
+  }
+  const setTerm = (k) => (e) => {
+    const v = e.target.value
+    edit((p) => { find(p)[k] = v })
+  }
+
+  return (
+    <section className={cx('sp-ed-term', `is-${t.status}`)} aria-label={t.label || 'Term'}>
+      <header className="sp-ed-term__head">
+        <input className="sp-in sp-in--head" value={t.label} placeholder="Fall 2026" aria-label="Term" autoFocus={focus} onChange={setTerm('label')} />
+        <input className="sp-in sp-ed-term__campus" value={t.campus} placeholder="Campus" aria-label="Campus" onChange={setTerm('campus')} />
+        <PillSelect
+          value={t.status}
+          options={STATUS_OPTIONS}
+          label="Term status"
+          className="sp-ed-status"
+          onChange={(v) => edit((p) => {
+            /* Only one term can be the current one. */
+            if (v === 'current') for (const x of p.terms) if (x.status === 'current') x.status = 'done'
+            find(p).status = v
+          })}
+        />
+        <span className="sp-ed-term__cr micro">
+          {cr} cr<span className="dim"> · {running}/{required}</span>
+        </span>
+        <button type="button" className="sp-x" aria-label={`Remove ${t.label || 'term'}`} onClick={removeTerm}>×</button>
+      </header>
+
+      {t.courses.length ? (
+        <div className="sp-ed-courses">
+          <div className="sp-ed-course sp-ed-course--labels micro" aria-hidden="true">
+            <span>code</span><span>course</span><span>cr</span><span>grade</span><span>counts toward</span><span />
+          </div>
+          {t.courses.map((c) => (
+            <div key={c.id} className={cx('sp-ed-course', !creditOf(c) && 'is-void')}>
+              <input
+                className="sp-in sp-in--code"
+                value={c.code ?? ''}
+                placeholder="TBD"
+                aria-label="Course code"
+                autoFocus={fresh === c.id}
+                onChange={(e) => { const v = e.target.value; edit((p) => { findCourse(p, c.id).code = v }) }}
+              />
+              <input
+                className="sp-in sp-ed-course__title"
+                value={c.title ?? ''}
+                placeholder="Course title"
+                aria-label="Course title"
+                onChange={(e) => { const v = e.target.value; edit((p) => { findCourse(p, c.id).title = v }) }}
+                onKeyDown={(e) => { if (e.key === 'Enter') addCourse() }}
+              />
+              <input
+                className="sp-in sp-in--num"
+                type="number"
+                min="0"
+                inputMode="numeric"
+                value={c.cr ?? ''}
+                aria-label="Credits"
+                onChange={(e) => { const v = toNum(e.target.value); edit((p) => { findCourse(p, c.id).cr = v }) }}
+              />
+              <PillSelect
+                value={c.grade || 'none'}
+                options={GRADE_OPTIONS}
+                label="Grade"
+                className="sp-ed-grade"
+                onChange={(v) => edit((p) => {
+                  const x = findCourse(p, c.id)
+                  x.grade = v === 'none' ? '' : v
+                  if (x.noCredit && v !== 'W') delete x.noCredit
+                })}
+              />
+              <div className="sp-ed-counts">
+                {c.reqs.filter((id) => names.has(id)).map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className="sp-chip"
+                    title="Stop counting it toward this"
+                    onClick={() => edit((p) => { const x = findCourse(p, c.id); x.reqs = x.reqs.filter((r) => r !== id) })}
+                  >
+                    {names.get(id)}<span aria-hidden="true">×</span>
+                  </button>
+                ))}
+                <MenuButton
+                  label="Counts toward"
+                  className="sp-chip sp-chip--add"
+                  items={options.length ? options.map((o) => ({
+                    key: o.id,
+                    label: o.group ? `${o.label} (as a whole)` : o.label,
+                    on: c.reqs.includes(o.id),
+                    onClick: () => edit((p) => {
+                      const x = findCourse(p, c.id)
+                      x.reqs = x.reqs.includes(o.id) ? x.reqs.filter((r) => r !== o.id) : [...x.reqs, o.id]
+                    }),
+                  })) : [{ key: 'none', label: 'Add requirements above first', disabled: true }]}
+                >
+                  {c.reqs.length ? '+' : '+ counts toward'}
+                </MenuButton>
+              </div>
+              <button
+                type="button"
+                className="sp-x"
+                aria-label={`Remove ${c.code || c.title || 'course'}`}
+                onClick={() => edit((p) => { find(p).courses = find(p).courses.filter((x) => x.id !== c.id) })}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <button type="button" className="sp-add" onClick={addCourse}>+ Add course</button>
+    </section>
   )
 }
 
@@ -409,7 +1062,7 @@ function NextWeek({ term }) {
     const out = []
     const loose = []
     for (const c of term?.courses || []) {
-      if (!c.meets?.length) { if (!c.tbd) loose.push(c); continue }
+      if (!c.meets?.length) { if (!c.tbd && c.time) loose.push(c); continue }
       for (const m of c.meets) out.push({ c, day: m.day, a: minutes(m.start), b: minutes(m.end) })
     }
     const lo = out.length ? Math.min(...out.map((x) => x.a)) : 9 * 60
@@ -441,7 +1094,7 @@ function NextWeek({ term }) {
                 ))}
                 {blocks.filter((x) => x.day === d.day).map((x) => (
                   <div
-                    key={`${x.c.code}-${x.a}`}
+                    key={`${x.c.id}-${x.a}`}
                     className={cx('sp-block', x.c.mode === 'online' && 'is-online')}
                     style={{ top: `${((x.a - from) / span) * 100}%`, height: `${((x.b - x.a) / span) * 100}%` }}
                     title={`${x.c.title} · ${x.c.time}${x.c.mode ? ` · ${x.c.mode}` : ''}`}
@@ -457,7 +1110,7 @@ function NextWeek({ term }) {
         {extra.length ? (
           <div className="sp-week__extra micro">
             {extra.map((c) => (
-              <span key={c.code}>{c.title} — {c.time}</span>
+              <span key={c.id}>{c.title} — {c.time}</span>
             ))}
           </div>
         ) : null}

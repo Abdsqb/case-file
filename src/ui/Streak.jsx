@@ -513,9 +513,9 @@ export default function Streak({ view }) {
               color="#59545e"
               glintColor="#4f4f4f"
               backgroundColor="transparent"
-              slatWidth={2}
-              slatHeight={6}
-              gap={3}
+              slatWidth={3}
+              slatHeight={9}
+              gap={4}
               roundness={1}
               interactive
               cursorStrength={1}

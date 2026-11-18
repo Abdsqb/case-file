@@ -559,9 +559,9 @@ export const BACKDROPS = [
     preview: (ctx, W, H, colours, secs, reveal) => {
       /* Three times the real slat size: at a fifth of the window, the real
          ones would be smaller than a pixel. */
-      const sw = 6;
-      const sh = 18;
-      const gap = 9;
+      const sw = 9;
+      const sh = 27;
+      const gap = 12;
       for (let y = 0; y < H; y += sh + gap) {
         if (y / H > reveal * 1.35) break;
         for (let x = 0; x < W; x += sw + gap) {

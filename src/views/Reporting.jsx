@@ -12,12 +12,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, RefreshCw } from 'lucide-react'
-import { Card, CardHead, EmptyState, Pill } from '../ui/primitives.jsx'
+import { Card, CardHead, EmptyState, Meter, Pill } from '../ui/primitives.jsx'
 import { SegmentIsland } from '../ui/CaseIslands.jsx'
 import { listHeadlines, listProjects, moveProject } from '../lib/api.js'
 import { dayDiff, flattenEntries, startOfDay, statusTone } from '../lib/metrics.js'
 import { applyWalk, siblingWalk } from '../lib/reorder.js'
 import { useSetting } from '../lib/settings.js'
+import { caseColor } from '../ui/nav.js'
 
 /** the wire is polled no more often than this. */
 const POLL_MS = 300000
@@ -248,6 +249,9 @@ function ReportTable({ head, rows, cols }) {
             {row.title}
           </span>
           <span className="rtable__cell rtable__cell--case" role="cell" title={row.caseName}>
+            {row.caseId !== undefined ? (
+              <span className="rtable__dot" style={{ '--dot': caseColor(row.caseId) }} aria-hidden="true" />
+            ) : null}
             {row.caseName}
           </span>
           <span
@@ -314,6 +318,108 @@ function Signal({ item, now, tone }) {
         )}
       </div>
     </article>
+  )
+}
+
+/* ------------------------------------------------------------------ *
+ * insights — Linear's way of reading a project: a row of numbers, then
+ * the shape of the work as a bar chart
+ * ------------------------------------------------------------------ */
+
+function Stat({ label, value, sub, tone, meter }) {
+  return (
+    <Card className="span-3 stat">
+      <div className="card__body">
+        <span className="stat__label">{label}</span>
+        <span className={cx('stat__value', tone === 'late' && 'is-late')}>{value}</span>
+        {meter !== undefined ? <Meter value={meter} label={label} /> : null}
+        <span className="stat__sub">{sub}</span>
+      </div>
+    </Card>
+  )
+}
+
+/* Open work by when it is due: one bar a bucket, overdue first in red and
+   undated last in grey. One series, so no legend — the card's title names
+   it; a hover (or a tap) reads out a bar. */
+function WorkloadBars({ bars }) {
+  const ref = useRef(null)
+  const [w, setW] = useState(0)
+  const [hover, setHover] = useState(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return undefined
+    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const H = 208
+  const pad = { l: 28, r: 4, t: 14, b: 28 }
+  const max = Math.max(1, ...bars.map((b) => b.value))
+  const step = max <= 4 ? 1 : max <= 10 ? 2 : max <= 25 ? 5 : 10
+  const top = Math.ceil(max / step) * step
+  const ticks = []
+  for (let v = 0; v <= top; v += step) ticks.push(v)
+  const plotW = Math.max(0, w - pad.l - pad.r)
+  const slot = plotW / bars.length
+  const bw = Math.min(40, slot * 0.58)
+  const compact = slot < 46
+  const y = (v) => pad.t + (1 - v / top) * (H - pad.t - pad.b)
+  const base = y(0)
+
+  return (
+    <div className="wbars" ref={ref} onMouseLeave={() => setHover(null)}>
+      {w ? (
+        <svg width={w} height={H} role="img" aria-label={bars.map((b) => `${b.tip}: ${b.value}`).join(', ')}>
+          {ticks.map((v) => (
+            <g key={v} className="wbars__grid">
+              <line x1={pad.l} x2={w - pad.r} y1={y(v)} y2={y(v)} />
+              <text x={pad.l - 8} y={y(v)} dy="0.32em" textAnchor="end">{v}</text>
+            </g>
+          ))}
+          {bars.map((b, i) => {
+            const mid = pad.l + slot * i + slot / 2
+            const x = mid - bw / 2
+            const yt = y(b.value)
+            const h = base - yt
+            const r = Math.min(4, bw / 2, h)
+            return (
+              <g key={b.key}>
+                {h > 0 ? (
+                  <path
+                    className={cx('wbars__bar', b.tone && `is-${b.tone}`, hover === i && 'is-hot')}
+                    d={`M${x},${base} V${yt + r} Q${x},${yt} ${x + r},${yt} H${x + bw - r} Q${x + bw},${yt} ${x + bw},${yt + r} V${base} Z`}
+                  />
+                ) : null}
+                <text className={cx('wbars__x', hover === i && 'is-hot')} x={mid} y={H - 9} textAnchor="middle">
+                  {/* Too narrow for every date: the weeks label every other one. */}
+                  {compact ? (slot < 40 && b.key.startsWith('w') && i % 2 === 0 ? '' : b.short) : b.label}
+                </text>
+                <rect
+                  className="wbars__hit"
+                  x={pad.l + slot * i}
+                  y={0}
+                  width={slot}
+                  height={H}
+                  onMouseEnter={() => setHover(i)}
+                  onClick={() => setHover(i)}
+                />
+              </g>
+            )
+          })}
+        </svg>
+      ) : null}
+      {hover !== null && w ? (
+        <div
+          className={cx('wbars__tip', hover > bars.length / 2 && 'is-left')}
+          style={{ left: pad.l + slot * hover + slot / 2, top: y(bars[hover].value) }}
+        >
+          <span className="wbars__tipv">{bars[hover].value}</span>
+          <span>{bars[hover].tip}</span>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -406,11 +512,48 @@ export function Reporting({ projects, now, onRefresh }) {
     return { overdue, week, later, undated, open: entries.length }
   }, [list, scope, clock, weekEnd])
 
+  /* The insights: how much of the scope is done, and its open work by the
+     week it is due — this week and the five after, then later, with overdue
+     before and the undated after. */
+  const insights = useMemo(() => {
+    const scoped = flattenEntries(list).filter((e) => scope === 'all' || String(e.projectId) === scope)
+    const total = scoped.length
+    const done = scoped.filter((e) => e.completed).length
+    const WEEKS = 6
+    const first = Number.isFinite(weekEnd) ? addDays(weekEnd, -6) : startOfDay(clock)
+    const weeks = Array.from({ length: WEEKS }, (_, i) => ({ start: addDays(first, i * 7), value: 0 }))
+    let later = 0
+    for (const e of [...buckets.week, ...buckets.later]) {
+      const i = Math.floor(dayDiff(startOfDay(e.dueDate), first) / 7)
+      if (i >= 0 && i < WEEKS) weeks[i].value += 1
+      else later += 1
+    }
+    const day = (ms) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const num = (ms) => {
+      const d = new Date(ms)
+      return `${d.getMonth() + 1}/${d.getDate()}`
+    }
+    const bars = [
+      { key: 'overdue', label: 'Overdue', short: 'Late', tip: 'Overdue', value: buckets.overdue.length, tone: 'late' },
+      ...weeks.map((wk, i) => ({
+        key: `w${i}`,
+        label: i === 0 ? 'This week' : day(wk.start),
+        short: i === 0 ? 'Now' : num(wk.start),
+        tip: i === 0 ? 'Due this week' : `Due the week of ${day(wk.start)}`,
+        value: wk.value,
+      })),
+      { key: 'later', label: 'Later', short: 'Later', tip: `Due after ${day(addDays(first, WEEKS * 7 - 1))}`, value: later },
+      { key: 'none', label: 'No date', short: 'None', tip: 'No due date', value: buckets.undated.length, tone: 'none' },
+    ]
+    return { total, done, completion: total ? done / total : 0, bars }
+  }, [list, scope, clock, weekEnd, buckets])
+
   const rowBase = (entry) => ({
     id: entry.id,
     title:
       typeof entry.title === 'string' && entry.title.trim() ? entry.title.trim() : 'Untitled entry',
     caseName: entry.projectName || '—',
+    caseId: entry.projectId,
     sub: !!entry.isSub,
   })
 
@@ -478,14 +621,7 @@ export function Reporting({ projects, now, onRefresh }) {
             {describeError(wire.error)} showing the last copy received.
           </div>
         ) : null}
-        <div
-          className="tiplist"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-            gap: '10px',
-          }}
-        >
+        <div className="tiplist signals__list">
           {wire.items.map((item, i) => (
             <Signal
               key={item.id !== undefined && item.id !== null ? String(item.id) : `signal-${i}`}
@@ -531,6 +667,35 @@ export function Reporting({ projects, now, onRefresh }) {
           <span className="micro muted">This week {buckets.week.length}</span>
         </div>
       </div>
+
+      {failed ? null : (
+        <div className="bento insights">
+          <Stat label="Open" value={buckets.open} sub={`${insights.total} logged in all`} />
+          <Stat
+            label="Overdue"
+            value={buckets.overdue.length}
+            tone={buckets.overdue.length ? 'late' : undefined}
+            sub={buckets.overdue.length ? 'past their due date' : 'nothing late'}
+          />
+          <Stat label="Due this week" value={buckets.week.length} sub={weekLabel} />
+          <Stat
+            label="Completion"
+            value={`${Math.round(insights.completion * 100)}%`}
+            sub={`${insights.done} of ${insights.total} closed`}
+            meter={insights.completion}
+          />
+          <Card className="span-12 insights__chart">
+            <CardHead
+              className="card__head"
+              title="Open work by due date"
+              subtitle="Entries still open, by the week they are due"
+            />
+            <div className="card__body">
+              <WorkloadBars bars={insights.bars} />
+            </div>
+          </Card>
+        </div>
+      )}
 
       {failed ? (
         <div className="bento">
@@ -585,7 +750,7 @@ export function Reporting({ projects, now, onRefresh }) {
       )}
 
       <div className="bento">
-        <Card className="span-12">
+        <Card className="span-12 signals">
           <CardHead
             className="card__head"
             title="Signals"

@@ -1198,3 +1198,125 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
 }
 /* The reading sits just under its tabs, not in the middle of the frame. */
 .readdeck__slide { align-items: flex-start; perspective: none; }
+
+/* --------------------------------------------------------------------------
+   11. REPORTING
+   Linear's insights: a row of numbers, the open work as a bar chart, then
+   the queues as tables and the wire as a list.
+   -------------------------------------------------------------------------- */
+
+.stat .card__body { gap: 6px; padding: 14px var(--pad); }
+.stat__label { font-size: 12.5px; font-weight: 500; color: var(--text-muted); }
+.stat__value {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  color: var(--text);
+}
+.stat__value.is-late { color: var(--red); }
+.stat__sub { font-size: 12px; color: var(--text-faint); }
+.stat .meter { margin: 2px 0; }
+
+/* The chart. */
+.wbars { position: relative; min-width: 0; }
+.wbars svg { display: block; overflow: visible; }
+.wbars__grid line { stroke: rgba(255, 255, 255, 0.06); stroke-width: 1; }
+.wbars__grid text,
+.wbars__x { font-family: var(--font); font-size: 11px; fill: var(--text-faint); }
+.wbars__x.is-hot { fill: var(--text); }
+.wbars__bar { fill: var(--accent); transition: opacity 100ms ease; }
+.wbars__bar.is-late { fill: var(--red); }
+.wbars__bar.is-none { fill: rgba(255, 255, 255, 0.2); }
+.wbars:hover .wbars__bar:not(.is-hot) { opacity: 0.55; }
+.wbars__hit { fill: transparent; cursor: default; }
+.wbars__tip {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  pointer-events: none;
+  background: rgb(var(--overlay-rgb));
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  transform: translate(12px, -50%);
+}
+.wbars__tip.is-left { transform: translate(calc(-100% - 12px), -50%); }
+.wbars__tipv { font-size: 15px; font-weight: 600; color: var(--text); }
+
+/* The queues: the entry gets the room, the case is a colour and a name. */
+.rtable { --rtable-cols: 48px minmax(90px, 1fr) minmax(0, 0.75fr) 40px; }
+.rtable__head,
+.rtable__row { gap: 10px; }
+.rtable__head { font-size: 12px; font-weight: 500; color: var(--text-faint); border-bottom-color: var(--border); }
+.rtable__row,
+.rtable__cell { font-size: 12.5px; }
+.rtable__row { padding: 8px 0; }
+.rtable__row:hover,
+.rtable__row:focus-within { background: var(--hover); }
+.rtable__cell--strong { font-weight: 500; }
+.rtable__cell--hot { color: var(--red); }
+.rtable__cell--case { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); }
+.rtable__dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--dot); }
+
+/* The wire, as a list in two columns, scrolling inside its card. */
+.signals__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 28px;
+  max-height: 560px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.signals .tip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'head head' 'body meta';
+  gap: 4px 12px;
+  padding: 10px 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: 0;
+  box-shadow: none;
+}
+.signals .tip__head { grid-area: head; display: flex; align-items: center; gap: 8px; }
+.signals .tip__head .pill {
+  min-height: 0;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 0;
+  border-radius: 4px;
+}
+.signals .tip__note { font-family: var(--font); font-size: 12px; color: var(--text-faint); }
+.signals .tip__body { grid-area: body; font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--text); }
+.signals .tip__meta { grid-area: meta; align-self: end; }
+.signals .tip__link { font-family: var(--font); font-size: 12px; color: var(--text-muted); }
+.signals .tip__link:hover { color: var(--accent); }
+.signals .tip--sage { border-color: var(--line-soft); }
+
+/* The grid is six columns wide below 1180px: two numbers a row there. */
+@media (max-width: 1180px) {
+  .bento.insights > .stat { grid-column: span 3; }
+}
+@media (max-width: 640px) {
+  .signals__list { grid-template-columns: minmax(0, 1fr); max-height: 480px; }
+  .rtable { --rtable-cols: 46px minmax(0, 1fr) 40px; }
+}
+@media (max-width: 640px) {
+  .stat .card__body { padding: 12px 14px; }
+  .stat__value { font-size: 24px; }
+  .rtable__cell--case { display: none; }
+}

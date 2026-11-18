@@ -1320,3 +1320,90 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
   .stat__value { font-size: 24px; }
   .rtable__cell--case { display: none; }
 }
+
+/* --------------------------------------------------------------------------
+   12. CALENDAR
+   The month as Linear draws a calendar: one grid of hairlines rather than a
+   box a day, today's date in an indigo dot, events as quiet chips.
+   -------------------------------------------------------------------------- */
+
+.month { gap: 0; }
+.month__dow { gap: 0; padding-bottom: 6px; }
+.month__dowcell {
+  padding-left: 8px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-faint);
+}
+.month__grid {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.moncell {
+  gap: 3px;
+  padding: 6px 6px 8px;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: 0;
+}
+.moncell:nth-child(7n) { border-right: 0; }
+.moncell.is-out { opacity: 1; background: rgba(0, 0, 0, 0.18); }
+.moncell.is-out .moncell__num { color: var(--text-faint); opacity: 0.6; }
+.moncell.is-today { background: rgba(var(--accent-rgb), 0.05); border-color: var(--line-soft); }
+.moncell__num {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  border-radius: 11px;
+}
+.moncell.is-today .moncell__num { background: var(--accent); color: #fff; }
+
+.enttag {
+  padding: 2px 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.045);
+  border-left-width: 2px;
+  border-radius: 4px;
+}
+.enttag:hover,
+.enttag:focus-visible,
+.enttag.is-hot { background: rgba(255, 255, 255, 0.09); color: var(--text); }
+.enttag--done { color: var(--text-faint); }
+
+/* --------------------------------------------------------------------------
+   13. STUDY PLAN — labels in sentence case, numbers in Inter
+   -------------------------------------------------------------------------- */
+
+.sp-facts dt {
+  font-family: var(--font);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--text-faint);
+}
+.sp-facts dt::first-letter,
+.sp-term__meta::first-letter { text-transform: uppercase; }
+.sp-term__meta { font-family: var(--font); font-size: 11.5px; letter-spacing: 0; }
+.sp-ring__legend dt::first-letter { text-transform: uppercase; }
+.sp-ring__value { font-weight: 600; letter-spacing: -0.03em; }
+.sp-gpa__value { font-weight: 600; }
+.sp-term__label { font-weight: 600; }
+.sp-term__now { font-family: var(--font); font-weight: 600; text-transform: none; }
+.sp-group__name { font-weight: 600; }
+.sp-card,
+.sp-left__item { font-weight: 500; }

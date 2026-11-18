@@ -1,0 +1,834 @@
+/* ==========================================================================
+   linear.css — the app in Linear's design language.
+
+   Loaded last (App.jsx), so everything here wins over styles.css, motion.css
+   and mobile.css. The earlier design is untouched underneath: remove the one
+   import and it is back, and git tag `pre-linear-redesign` holds all of it.
+
+   What Linear's language is, and so what this file does:
+     - a near-black window, the sidebar sitting straight on it, and the page
+       on a panel of its own beside it, a step lighter, with a hairline edge
+     - solid surfaces and 1px borders; no glass, no glow, no 3D. Depth is a
+       shade of grey, not a shadow
+     - Inter throughout, small (13px), medium weight for anything you click,
+       grey for anything secondary; no serif, no monospace for data — numbers
+       are Inter's tabular figures
+     - one accent, indigo, used for what is selected, primary and done
+     - quick, quiet motion: things fade up a few pixels, nothing springs
+
+   Sections:
+     1  tokens          5  the phone: header, drawer, tab bar
+     2  the ground      6  components
+     3  the shell       7  motion
+     4  the sidebar     8  overlays
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. TOKENS
+   -------------------------------------------------------------------------- */
+
+/* The neutrals, the same under every accent: Linear's greys carry no hue.
+   :root[data-accent] outranks the per-accent blocks in styles.css, which
+   tinted the ground toward the accent. */
+:root,
+:root[data-accent] {
+  --bg:            #08090A;
+  --page:          #0E0F11;
+  --text:          #F7F8F8;
+  --text-rgb:      247, 248, 248;
+  --text-muted:    #8A8F98;
+  --text-faint:    #62666D;
+  --text-2:        #D0D6E0;     /* sidebar items, table text: a step under white */
+
+  --panel-rgb:     20, 21, 24;
+  --overlay-rgb:   25, 26, 30;
+  --raised-rgb:    28, 29, 33;
+  --raised-hi-rgb: 34, 35, 40;
+  --solid-rgb:     22, 23, 26;
+  --solid-hi-rgb:  29, 30, 34;
+
+  --bg-elevated:   rgba(255, 255, 255, 0.03);
+  --border:        rgba(255, 255, 255, 0.075);
+  --border-strong: rgba(255, 255, 255, 0.13);
+  --line-soft:     rgba(255, 255, 255, 0.05);
+  --hover:         rgba(255, 255, 255, 0.045);
+  --selected:      rgba(255, 255, 255, 0.075);
+
+  /* Status, as Linear draws it. */
+  --amber:         #F2C94C;
+  --red:           #EB5757;
+  --green:         #4CB782;
+  --hot-soft:      rgba(235, 87, 87, 0.12);
+  --hot-wash:      rgba(235, 87, 87, 0.16);
+  --hot-wash-hi:   rgba(235, 87, 87, 0.3);
+
+  /* Chart ink: near-white, the accent kept for the live value. */
+  --bar:           rgba(247, 248, 248, 0.82);
+  --bar-dim:       rgba(255, 255, 255, 0.07);
+
+  /* No glow anywhere: every glow in the app is built from this. */
+  --accent-glow:   transparent;
+
+  /* Solid by default (the flat ground); glass only over a moving backdrop,
+     below. */
+  --card-bg:       #131417;
+  --panel:         rgb(var(--panel-rgb));
+  --panel-blur:    none;
+  --overlay:       rgba(var(--overlay-rgb), 0.98);
+
+  --radius:        8px;
+  --radius-sm:     6px;
+  --radius-xs:     5px;
+
+  --font: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Data is set in Inter's tabular figures, as Linear sets it. */
+  --font-mono: var(--font);
+  --font-serif: var(--font);
+  /* For the rare thing that really is code. */
+  --font-code: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --pad:        16px;
+  --gap:        12px;
+  --shell-x:    24px;
+  --sidebar-w:  236px;
+}
+
+/* The accent. Indigo is the default (no attribute on <html>); a chosen one
+   keeps its own colour from styles.css. White ink on every fill of it. */
+:root:not([data-accent]),
+[data-accent='indigo'] {
+  --accent:       #6C78E6;
+  --accent-hover: #8089EC;
+  --accent-ink:   #FFFFFF;
+  --accent-rgb:   108, 120, 230;
+  --accent-cool:  #4EA7FC;
+}
+:root {
+  --accent-faint: rgba(var(--accent-rgb), 0.12);
+  --accent-wash:  rgba(var(--accent-rgb), 0.16);
+  --accent-edge:  rgba(var(--accent-rgb), 0.5);
+}
+
+/* Over Undertow or Glass Current the panels go back to glass, or they would
+   cover the background they were chosen to show. */
+:root:not([data-backdrop='flat']) {
+  --card-bg:    rgba(18, 19, 22, 0.62);
+  --panel:      rgba(var(--panel-rgb), 0.62);
+  --panel-blur: blur(24px) saturate(1.2);
+  --page:       transparent;
+}
+
+/* --------------------------------------------------------------------------
+   2. THE GROUND
+   -------------------------------------------------------------------------- */
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.006em;
+  font-optical-sizing: auto;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
+}
+
+::selection { background: rgba(var(--accent-rgb), 0.35); }
+
+* { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* No dot grid; the vignette only when something is moving behind. */
+body::before { display: none; }
+:root[data-backdrop='flat'] body::after { display: none; }
+
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
+
+/* The serif's one word per title is plain Inter now. */
+.serif {
+  font-family: inherit;
+  font-style: normal;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+.filing__why { font-family: var(--font); }
+
+/* --------------------------------------------------------------------------
+   3. THE SHELL
+   The sidebar is fixed down the left; the page is a panel beside it, the
+   window's own scroll moving its contents. The pagebar sticks to the top.
+   -------------------------------------------------------------------------- */
+
+.app {
+  min-height: 100%;
+  display: block;
+  padding-left: var(--sidebar-w);
+}
+
+.page {
+  position: relative;
+  min-height: calc(100vh - 16px);
+  min-height: calc(100dvh - 16px);
+  margin: 8px 8px 8px 0;
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pagebar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  flex: none;
+  padding: 0 18px;
+  background: var(--page);
+  border-bottom: 1px solid var(--border);
+  border-radius: 12px 12px 0 0;
+}
+:root:not([data-backdrop='flat']) .pagebar {
+  background: rgba(14, 15, 17, 0.72);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+.pagebar__menu { display: none; }
+.pagebar__icon { width: 16px; height: 16px; flex: none; color: var(--text-muted); stroke-width: 1.75; }
+.pagebar__title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The sidebar says how the archive stands on a desktop; the pagebar says it
+   on a phone, where there is no sidebar. */
+.pagebar__standing { display: none; }
+
+.shell {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 20px var(--shell-x) 40px;
+  min-width: 0;
+}
+
+/* The earlier design's chrome. */
+.topbar,
+.notab { display: none !important; }
+
+/* A view's own toolbar (its switcher, its actions) sits under the pagebar.
+   Its first label named the screen, which the pagebar does now. */
+.viewhead { margin-bottom: 16px; min-height: 30px; }
+.viewhead__left > .section-label:first-child { display: none; }
+
+/* --------------------------------------------------------------------------
+   4. THE SIDEBAR
+   -------------------------------------------------------------------------- */
+
+.sb {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 60;
+  width: var(--sidebar-w);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 10px 10px 12px;
+  /* The sidebar never scrolls as a whole: the cases list does, between the
+     screens above it and Settings below, however many cases there are. */
+  overflow: hidden;
+  color: var(--text-2);
+}
+.sb-scrim { display: none; }
+
+.sb__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 36px;
+  padding: 0 8px;
+  flex: none;
+}
+.sb__mark {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--accent), rgba(var(--accent-rgb), 0.55));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.sb__name { flex: 1 1 auto; font-size: 14px; font-weight: 600; letter-spacing: -0.015em; color: var(--text); }
+.sb__close { display: none; }
+
+.sb__group { display: flex; flex-direction: column; gap: 1px; flex: none; }
+.sb__group--cases { flex: 0 1 auto; min-height: 0; }
+.sb__cases {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.sb__heading {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-faint);
+}
+
+.sb__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+.sb__item:hover { background: var(--hover); color: var(--text); }
+.sb__item.is-current { background: var(--selected); color: var(--text); }
+.sb__item:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--accent-edge); }
+.sb__icon { width: 16px; height: 16px; flex: none; color: var(--text-muted); stroke-width: 1.75; }
+.sb__item.is-current .sb__icon,
+.sb__item:hover .sb__icon { color: var(--text); }
+.sb__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb__kbd {
+  flex: none;
+  padding: 0 5px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+.sb__item:hover .sb__kbd,
+.sb__item:focus-visible .sb__kbd { opacity: 1; }
+
+.sb__item--case { font-weight: 450; }
+.sb__dot {
+  width: 9px;
+  height: 9px;
+  margin: 0 3.5px;
+  flex: none;
+  border-radius: 3px;
+  background: var(--dot, var(--accent));
+}
+.sb__count { flex: none; font-size: 12px; font-weight: 500; color: var(--text-faint); }
+
+.sb__foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+  padding-top: 8px;
+}
+.sb__standing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.sb__standing-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--green); }
+.sb__standing.is-overdue .sb__standing-dot { background: var(--red); }
+.sb__standing.is-soon .sb__standing-dot { background: var(--amber); }
+
+/* A window too narrow for the whole sidebar: icons only. */
+@media (min-width: 641px) and (max-width: 1023px) {
+  :root { --sidebar-w: 60px; }
+  .sb { padding: 10px 8px 12px; align-items: stretch; }
+  .sb__brand { justify-content: center; padding: 0; }
+  .sb__name,
+  .sb__label,
+  .sb__kbd,
+  .sb__group--cases,
+  .sb__standing { display: none; }
+  .sb__item { justify-content: center; padding: 0; height: 36px; }
+}
+
+/* --------------------------------------------------------------------------
+   5. THE PHONE
+   A header with the menu button, the sidebar as a drawer, and the tab bar
+   along the bottom with the to-do button seated at its end.
+   -------------------------------------------------------------------------- */
+
+.phonebar { display: none; }
+
+@media (max-width: 640px) {
+  :root { --shell-x: 14px; --sidebar-w: min(300px, 84vw); }
+
+  .app { padding-left: 0; }
+  .page {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  .pagebar {
+    height: calc(50px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) max(10px, env(safe-area-inset-right)) 0 max(6px, env(safe-area-inset-left));
+    border-radius: 0;
+    gap: 6px;
+    background: rgba(14, 15, 17, 0.86);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+  }
+  :root[data-backdrop='flat'] .pagebar { background: rgba(14, 15, 17, 0.92); }
+  .pagebar__menu {
+    display: inline-grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-2);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pagebar__menu:active { background: var(--hover); }
+  .pagebar__icon { display: none; }
+  .pagebar__title { font-size: 15px; font-weight: 600; flex: 1 1 auto; }
+  .pagebar__standing {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    padding: 0 9px;
+    height: 26px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+  }
+  .pagebar__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+  .pagebar__standing.is-overdue .pagebar__dot { background: var(--red); }
+  .pagebar__standing.is-soon .pagebar__dot { background: var(--amber); }
+
+  .shell { padding: 14px var(--shell-x) 28px; }
+
+  /* The drawer. */
+  .sb {
+    z-index: 260;
+    width: var(--sidebar-w);
+    padding: calc(10px + env(safe-area-inset-top)) 10px calc(14px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    background: #0B0C0E;
+    border-right: 1px solid var(--border);
+    transform: translateX(-102%);
+    visibility: hidden;
+    transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 280ms;
+  }
+  .sb.is-open {
+    transform: none;
+    visibility: visible;
+    transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s;
+    box-shadow: 20px 0 60px rgba(0, 0, 0, 0.5);
+  }
+  .sb__close {
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+  }
+  .sb__item { height: 38px; font-size: 14.5px; }
+  .sb__kbd { display: none; }
+  .sb-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 250;
+    background: rgba(0, 0, 0, 0.55);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 240ms ease;
+  }
+  .sb-scrim.is-open { opacity: 1; pointer-events: auto; }
+
+  /* The tab bar. Room under the page for it. */
+  #root { padding-bottom: calc(62px + env(safe-area-inset-bottom)); }
+  .phonebar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 180;
+    display: flex;
+    align-items: stretch;
+    height: calc(58px + env(safe-area-inset-bottom));
+    padding: 0 max(6px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(6px, env(safe-area-inset-left));
+    background: rgba(12, 13, 15, 0.9);
+    -webkit-backdrop-filter: blur(22px) saturate(1.3);
+    backdrop-filter: blur(22px) saturate(1.3);
+    border-top: 1px solid var(--border);
+  }
+  .phonebar__tab {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    color: var(--text-faint);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 120ms ease;
+  }
+  .phonebar__tab.is-current { color: var(--text); }
+  .phonebar__icon { width: 21px; height: 21px; stroke-width: 1.75; }
+  .phonebar__tab.is-current .phonebar__icon { color: var(--accent); }
+  .phonebar__label { font-size: 10.5px; font-weight: 500; letter-spacing: 0; }
+  .phonebar__seat { flex: none; width: 66px; }
+
+  /* The to-do button, seated at the bar's end: the app's one primary
+     action on a phone. A tap opens today's list; held, the corner wheel
+     fans up out of it. */
+  .todofab {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: calc(7px + env(safe-area-inset-bottom));
+    z-index: 190;
+    width: 46px;
+    height: 46px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    box-shadow: 0 6px 18px -6px rgba(var(--accent-rgb), 0.55);
+  }
+  .todofab svg { width: 21px; height: 21px; }
+  .todofab__count {
+    top: -5px;
+    right: -5px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: #fff;
+    color: #111;
+    font: 600 11px/18px var(--font);
+    box-shadow: 0 0 0 2px rgb(12, 13, 15);
+  }
+  .todofab.is-hidden { transform: translateY(8px) scale(0.92); }
+}
+
+/* --------------------------------------------------------------------------
+   6. COMPONENTS
+   -------------------------------------------------------------------------- */
+
+/* ---- cards ---- */
+.card {
+  background: var(--card-bg);
+  -webkit-backdrop-filter: var(--panel-blur);
+  backdrop-filter: var(--panel-blur);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+.card--flat { background: transparent; border-color: transparent; }
+.tip--sage { background-image: none; box-shadow: none; border-color: var(--accent-edge); }
+
+.card__head { padding: 14px var(--pad) 0; gap: 10px; }
+.card__headtext { gap: 2px; }
+.card__title { font-size: 13.5px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.35; }
+.card__sub { font-size: 12px; color: var(--text-muted); }
+.card__body { padding: var(--pad); gap: 14px; }
+.card__head + .card__body { padding-top: 12px; }
+.card__foot { padding: 10px var(--pad); border-top-color: var(--border); }
+
+/* ---- labels and small type ---- */
+.micro {
+  font-family: var(--font);
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+.section-label {
+  display: inline-block;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+.section-label::first-letter { text-transform: uppercase; }
+
+/* ---- buttons ---- */
+.pill {
+  min-height: 28px;
+  padding: 4px 10px;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: none;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.pill:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); border-color: var(--border-strong); }
+.pill:active:not(:disabled) { transform: none; background: rgba(255, 255, 255, 0.09); }
+.pill:disabled { opacity: 0.45; }
+.pill:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.45); }
+
+.pill--active,
+.pill.is-active,
+.pill[aria-pressed='true'],
+.pill[aria-expanded='true'] {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-ink);
+  box-shadow: none;
+}
+.pill--active:hover:not(:disabled),
+.pill.is-active:hover:not(:disabled),
+.pill[aria-pressed='true']:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: transparent;
+  color: var(--accent-ink);
+}
+.pill--ghost { background: transparent; border-color: transparent; color: var(--text-muted); }
+.pill--ghost:hover:not(:disabled) { background: var(--hover); border-color: transparent; color: var(--text); }
+.pill--micro { min-height: 22px; padding: 2px 8px; font-size: 11.5px; border-radius: 5px; }
+.pill--danger { color: var(--red); border-color: var(--border); }
+.pill--danger:hover:not(:disabled) { background: var(--hot-soft); border-color: rgba(235, 87, 87, 0.45); color: var(--red); }
+
+/* The ⋯ button. */
+.iconmenu { border-radius: 6px; }
+.iconmenu:hover,
+.iconmenu[aria-expanded='true'] { background: var(--hover); }
+
+/* ---- the segmented switch: Linear's tabs ---- */
+.segmented {
+  gap: 2px;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.segmented__item {
+  padding: 4px 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-radius: 5px;
+}
+.segmented__item--active,
+.segmented__item.is-active,
+.segmented__item[aria-selected='true'],
+.segmented__item[aria-pressed='true'] { color: var(--text); font-weight: 500; }
+.segmented__thumb {
+  top: 2px;
+  bottom: 2px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: none;
+}
+
+/* ---- status ---- */
+.statpill {
+  gap: 6px;
+  padding: 3px 9px 3px 8px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+}
+.statpill::before { animation: none; box-shadow: none; }
+.statpill--ok { --tone: var(--green); }
+
+/* ---- fields ---- */
+.field__label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.field__input,
+.field input[type='text'],
+.field input[type='date'],
+.field input:not([type]),
+.field--boxed .field__input,
+.field--boxed input {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.field__input:hover,
+.field input:hover { border-color: var(--border-strong); }
+.field__input:focus,
+.field input:focus,
+.field textarea:focus,
+input[type='text']:focus,
+input[type='search']:focus,
+input[type='number']:focus,
+input[type='date']:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent-edge);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18);
+}
+input::placeholder,
+textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
+
+/* ---- numbers ---- */
+.metric__value {
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  color: var(--text);
+}
+.metric--lg .metric__value { font-size: 38px; }
+.metric--sm .metric__value,
+.metric--small .metric__value { font-size: 24px; }
+.metric__unit { font-size: 12px; color: var(--text-muted); }
+.metric__sub { font-size: 12px; color: var(--text-muted); }
+
+.meter__track { height: 4px; background: rgba(255, 255, 255, 0.07); border-radius: 2px; }
+.meter--thick .meter__track { height: 6px; border-radius: 3px; }
+.meter__fill { background: var(--accent); border-radius: 2px; }
+.meter__value,
+.meter__label { font-size: 12px; }
+
+/* ---- empty states ---- */
+.empty { gap: 4px; padding: 20px 0; min-height: 84px; }
+.empty__lead { font-size: 14px; font-weight: 500; letter-spacing: -0.01em; color: var(--text); }
+.empty__hint { font-size: 12.5px; color: var(--text-muted); max-width: 52ch; }
+
+/* ---- links ---- */
+.link { color: var(--text-muted); border-bottom-color: var(--border); }
+.link:hover { color: var(--text); }
+
+/* ---- dropdowns: Linear's menus ---- */
+.island-pop {
+  background: rgb(var(--overlay-rgb));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.island-menu { padding: 4px; gap: 0; }
+.island-menu__item {
+  min-height: 30px;
+  padding: 0 8px;
+  gap: 8px;
+  border-radius: 5px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.island-menu__item:hover,
+.island-menu__item:focus-visible { background: var(--selected); color: var(--text); box-shadow: none; }
+.island-menu__item.is-current { color: var(--text); }
+.island-menu__item.is-danger,
+.island-menu__item.is-danger:hover { color: var(--red); }
+.island-menu__sep { margin: 4px 0; background: var(--border); }
+.pillselect.island-select,
+.folder-island-trigger {
+  background: rgba(255, 255, 255, 0.04);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.pillselect.island-select:hover { background: rgba(255, 255, 255, 0.07); border-color: var(--border-strong); }
+
+/* ---- the phone's corner wheel, in the app's colours ---- */
+.cornerwheel__ground { background: rgba(4, 5, 6, 0.88); }
+.cornerwheel__hub { stroke: var(--border-strong); }
+.cornerwheel__rim { stroke: var(--accent); }
+.cornerwheel__item { color: var(--text-faint); }
+.cornerwheel__item.is-hot { color: var(--text); }
+
+/* --------------------------------------------------------------------------
+   7. MOTION
+   Quick and quiet: a screen's pieces fade up a few pixels, a little apart.
+   Nothing tilts, nothing has depth.
+   -------------------------------------------------------------------------- */
+
+@keyframes bld-rise     { from { opacity: 0; transform: translate3d(0, 6px, 0); } to { opacity: 1; transform: none; } }
+@keyframes bld-in-left  { from { opacity: 0; transform: translate3d(-8px, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes bld-in-right { from { opacity: 0; transform: translate3d(8px, 0, 0); } to { opacity: 1; transform: none; } }
+.view.is-building .card { animation-duration: 340ms; }
+.view.is-building .viewhead > * { animation-duration: 300ms; }
+
+.bento,
+.dash__slide { perspective: none; }
+.card:has(.flow),
+.card:has(.flow)[data-tilt='on'] {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   8. OVERLAYS — what opens over the page is solid, with a shadow under it
+   -------------------------------------------------------------------------- */
+
+.card.todo,
+.notes {
+  background: rgb(var(--overlay-rgb));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+}

@@ -6,6 +6,11 @@
      Geist             the UI: headings, labels, body (variable, 100-900)
      Geist Mono        everything that is data: counts, times, ids, status
      Instrument Serif  the one emphasised word in a title, italic */
+/* Inter, with its optical sizes (it turns into Inter Display at heading
+   sizes on its own): the face of the Linear design (linear.css). The three
+   below are the earlier design's, kept so that design still renders if the
+   Linear layer is taken out. */
+import "@fontsource-variable/inter/opsz.css";
 import "@fontsource-variable/geist";
 import "@fontsource/geist-mono/400.css";
 import "@fontsource/geist-mono/500.css";

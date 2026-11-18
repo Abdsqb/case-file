@@ -1,7 +1,8 @@
 /**
  * backdrops.js — the backgrounds the app can sit on.
  *
- * Two, each drawn by its own component, loaded only when it is picked:
+ * None, the default, is the plain ground and draws nothing. The other two are
+ * each drawn by their own component, loaded only when picked:
  *
  *   Undertow       a dark sea of slats on WebGL2 (MicroSlats.jsx)
  *   Glass Current  ribbons of glass shards ray-traced on WebGPU (AeroShards.jsx)
@@ -41,6 +42,22 @@ function currentSketch(W, H, secs, reveal, draw) {
    =========================================================================== */
 
 export const BACKDROPS = [
+  /* ---- None ---------------------------------------------------------------
+     The plain dark ground Linear sits on: nothing drawn, nothing running, and
+     the panels go solid over it (linear.css, data-backdrop="flat"). */
+  {
+    id: 'flat',
+    name: 'None',
+    line: 'A plain dark ground. Fastest, and easiest on the battery.',
+    component: null,
+    preview: (ctx, W, H) => {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
+      ctx.fillRect(W * 0.06, H * 0.1, W * 0.2, H * 0.8);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.045)';
+      ctx.fillRect(W * 0.3, H * 0.1, W * 0.64, H * 0.8);
+    },
+  },
+
   /* ---- Undertow -----------------------------------------------------------
      A dark sea made of slats, swelling toward you from a horizon above the
      top edge, drawn by React Bits' MicroSlats on WebGL2 (MicroSlats.jsx).

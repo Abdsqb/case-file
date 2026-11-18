@@ -95,7 +95,7 @@ export const RADII = [
   { value: 12, label: 'Round' },
   { value: 16, label: 'Rounder' },
 ]
-export const DEFAULT_RADIUS = RADII[1].value
+export const DEFAULT_RADIUS = RADII[3].value   // Soft: Linear's 8px
 
 /** The stored radius, or the default when it is missing or not one we offer. */
 export function readRadius() {
@@ -106,6 +106,7 @@ export function readRadius() {
 /* The order the swatches sit in. Each id has a block in styles.css under
    ACCENTS; the first is the default and the one with no attribute at all. */
 export const ACCENTS = [
+  { id: 'indigo', label: 'Indigo' },
   { id: 'violet', label: 'Violet' },
   { id: 'white', label: 'White' },
   { id: 'red', label: 'Red' },
@@ -327,9 +328,19 @@ export function applyCardGlassPreference() {
  * corner marks — off, <html> carries data-corners="off" (styles.css)
  * ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ *
+ * backdrop — <html data-backdrop="flat|slats|shards">, so the stylesheet
+ * can make the panels solid on the flat ground and glass over a moving one
+ * ------------------------------------------------------------------ */
+
+export function applyBackdropAttr() {
+  if (typeof document === 'undefined') return
+  document.documentElement.dataset.backdrop = readBackdrop()
+}
+
 export function applyCornersPreference() {
   if (typeof document === 'undefined') return
-  const on = coerce(readRaw(KEY_CORNERS), true)
+  const on = coerce(readRaw(KEY_CORNERS), false)   // off by default: Linear has none
   const root = document.documentElement
   if (on) root.removeAttribute('data-corners')
   else root.dataset.corners = 'off'
@@ -345,6 +356,7 @@ export function applyPreferences() {
   applyRadiusPreference()
   applyCardGlassPreference()
   applyCornersPreference()
+  applyBackdropAttr()
 }
 
 if (typeof window !== 'undefined') {

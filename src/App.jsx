@@ -1,18 +1,23 @@
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 
 import './styles.css';
 import './motion.css';
 import './mobile.css';
+/* The Linear design, last so it wins: tokens, the sidebar shell, and every
+   component in Linear's language. Take this one line out and the app is in
+   its earlier design again (git tag pre-linear-redesign has all of it). */
+import './linear.css';
+import { Menu } from 'lucide-react';
 import { listProjects } from './lib/api';
 import Dashboard from './views/Dashboard';
 import NotesDrawer, { OPEN_NOTES } from './ui/NotesDrawer.jsx';
 import Streak from './ui/Streak.jsx';
 import Standby from './ui/Standby.jsx';
-import TodayWindow, { OPEN_TODAY } from './ui/TodayWindow.jsx';
-import NavWheel from './ui/NavWheel.jsx';
+import TodayWindow from './ui/TodayWindow.jsx';
 import CornerWheel from './ui/CornerWheel.jsx';
-import { usePhoneWidth } from './ui/island.js';
-import TopNav from './ui/TopNav.jsx';
+import Sidebar from './ui/Sidebar.jsx';
+import PhoneBar from './ui/PhoneBar.jsx';
+import { ICONS, NAV } from './ui/nav.js';
 
 /* The dashboard is in the first bundle; the other five screens are chunks of
    their own, fetched in the background as soon as the first screen is up (see
@@ -65,28 +70,11 @@ function standingOf(projects, now) {
   return { tone: 'ok', text: 'all clear' };
 }
 
-const NAV = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'cases', label: 'Case files' },
-  { id: 'reporting', label: 'Reporting' },
-  { id: 'calendar', label: 'Calendar' },
-  { id: 'plan', label: 'Plan' },
-  { id: 'settings', label: 'Settings' },
-];
-
-/* The two things that open over the page. A keyboard has Shift+T and
-   Shift+N for them, so on a desktop the wheel holds the screens alone; a
-   phone has no Shift key, and there they come after the screens. */
-const NAV_ACTIONS = [
-  { id: 'today', label: "Today's to-do", hint: 'Shift+T', run: () => window.dispatchEvent(new Event(OPEN_TODAY)) },
-  { id: 'notes', label: 'Notes', hint: 'Shift+N', run: () => window.dispatchEvent(new Event(OPEN_NOTES)) },
-];
-const PHONE_WHEEL = [...NAV, ...NAV_ACTIONS];
-/* The phone's corner wheel, out of the held to-do button: the screens, and
-   the notes pad (the to-do is the button itself). With no name at the top
-   to tap, this is the way to all of them on a phone. */
-// Reversed: Notes out to the left, Dashboard at the top.
-const CORNER = [...NAV, ...NAV_ACTIONS.filter((a) => a.id === 'notes')].reverse();
+/* The phone's corner wheel, out of the held to-do button: every screen, and
+   the notes pad (the to-do is the button itself). Reversed: Notes out to the
+   left, Dashboard at the top. */
+const OPEN_NOTES_ITEM = { id: 'notes', label: 'Notes', run: () => window.dispatchEvent(new Event(OPEN_NOTES)) };
+const CORNER = [...NAV, OPEN_NOTES_ITEM].reverse();
 
 // How long the longest card in a screen takes to finish assembling. The tail is
 // the case render's pin sequence, which finishes at ~1920ms; this keeps headroom
@@ -125,10 +113,9 @@ export default function App() {
   const [projects, setProjects] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
-  const phone = usePhoneWidth();
-  const [wheelOpen, setWheelOpen] = useState(false);
-  const openWheel = useCallback(() => setWheelOpen(true), []);
-  const closeWheel = useCallback(() => setWheelOpen(false), []);
+  /* The sidebar as a drawer, on a phone. */
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   // The view lives in the hash so sections are linkable and the browser's back
   // button works. Anything unrecognised falls back to the dashboard.
   const [view, setView] = useState(() => readHash());
@@ -199,36 +186,6 @@ export default function App() {
 
   const openCase = useCallback(id => { setActiveCaseId(id); go('cases'); }, [go]);
 
-  /* The nav is always on screen.
-
-     It used to be summoned by putting the pointer near the top edge, which
-     meant a whole apparatus: a threshold test on every pointermove, an idle
-     timer to close it again, a guard so a stationary cursor aiming at it was
-     never yanked away, and a safety net for the case where the pointer leaves
-     through the top of the window into the browser's own chrome and the last
-     reported y latches it open forever. All of it is gone.
-
-     What is left is the one thing the layout still needs: the shell has to
-     start below the bar, and the bar is `position: fixed` so it contributes no
-     height of its own. Its measured height is published as --nav-h rather than
-     hard-coded, because the pill wraps to a second line on a narrow window and
-     a constant would be wrong exactly when it mattered. */
-  const barRef = useRef(null);
-  useEffect(() => {
-    const el = barRef.current;
-    if (!el) return undefined;
-
-    const publish = () => {
-      document.documentElement.style.setProperty('--nav-h', `${Math.round(el.offsetHeight)}px`);
-    };
-    publish();
-
-    if (typeof ResizeObserver !== 'function') return undefined;
-    const ro = new ResizeObserver(publish);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
   /* There used to be a pointer field here: --px and --py written onto the root
      element on every pointer frame. Nothing read them any more, and a custom
      property changed on the root restyles every element in the document, so
@@ -237,6 +194,8 @@ export default function App() {
      themselves, scoped to what they move. */
 
   const standing = useMemo(() => standingOf(projects, now), [projects, now]);
+  const CurrentIcon = ICONS[view];
+  const currentLabel = NAV.find((n) => n.id === view)?.label || '';
 
   let body = null;
   if (!loaded) {
@@ -295,29 +254,48 @@ export default function App() {
       <Streak view={view} />
 
       <div className="app">
-      <header className="topbar" ref={barRef}>
-        {/* The readout, not a control, in the top-left corner: it says how the
-            archive is standing and there is nothing to click. Loaded means
-            loaded — before that it would be reporting "all clear" about an
-            empty list. */}
-        {loaded ? (
-          <span className={`statpill statpill--${standing.tone} topbar__standing`}>
-            {standing.text}
-          </span>
-        ) : null}
+      {/* Linear's shell: the sidebar down the left, and the page beside it on
+          a panel of its own. On a phone the sidebar is a drawer instead, and
+          the tab bar along the bottom (with the to-do button seated in it)
+          takes its place. Loaded means loaded — before that the standing
+          would report "all clear" about an empty list. */}
+      <Sidebar
+        current={view}
+        onGo={go}
+        onOpenCase={openCase}
+        activeCaseId={activeCaseId}
+        projects={projects}
+        standing={loaded ? standing : null}
+        open={drawerOpen}
+        onClose={closeDrawer}
+      />
 
-        {/* No bar: one pill naming this screen, which opens into the rest. */}
-        <TopNav items={NAV} current={view} open={wheelOpen} onOpen={openWheel} />
-      </header>
+      <div className="page">
+        <header className="pagebar">
+          <button type="button" className="pagebar__menu" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
+            <Menu size={18} strokeWidth={1.75} aria-hidden="true" />
+          </button>
+          {CurrentIcon ? <CurrentIcon className="pagebar__icon" aria-hidden="true" /> : null}
+          <h1 className="pagebar__title">{currentLabel}</h1>
+          {loaded ? (
+            <span className={`pagebar__standing is-${standing.tone}`} role="status">
+              <span className="pagebar__dot" aria-hidden="true" />
+              {standing.text}
+            </span>
+          ) : null}
+        </header>
 
-      <main className="shell" id="main">
-        {/* The key is the whole trick: navigating remounts this subtree, which
-            restarts every CSS animation inside it, so each screen assembles
-            itself on arrival instead of cutting in. */}
-        <BuildStage key={view} stamp={view}>
-          <Suspense fallback={null}>{body}</Suspense>
-        </BuildStage>
-      </main>
+        <main className="shell" id="main">
+          {/* The key is the whole trick: navigating remounts this subtree, which
+              restarts every CSS animation inside it, so each screen assembles
+              itself on arrival instead of cutting in. */}
+          <BuildStage key={view} stamp={view}>
+            <Suspense fallback={null}>{body}</Suspense>
+          </BuildStage>
+        </main>
+      </div>
+
+      <PhoneBar current={view} onGo={go} />
 
       {/* Outside <main> and outside the keyed BuildStage: the pad belongs to the
           app rather than to whichever screen is showing, so navigating must not
@@ -334,16 +312,6 @@ export default function App() {
       {/* Last, and above everything: left alone for a minute the app goes soft
           behind a clock. It covers the pad and its tab as well, which is the
           point — standby is about the window, not about a screen. */}
-      {/* The menu: from the top pill, or Alt held anywhere. */}
-      <NavWheel
-        items={phone ? PHONE_WHEEL : NAV}
-        current={view}
-        open={wheelOpen}
-        onOpen={openWheel}
-        onClose={closeWheel}
-        onPick={(item) => (item.run ? item.run() : go(item.id))}
-      />
-
       {/* A phone: the screens and the notes pad, fanned out of the held to-do button. */}
       <CornerWheel items={CORNER} current={view} onPick={(item) => (item.run ? item.run() : go(item.id))} />
 

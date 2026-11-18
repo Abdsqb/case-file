@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ICONS } from './NavWheel.jsx';
+import { ICONS } from './nav.js';
 import { SPRINGS } from './island.js';
 import './CornerWheel.css';
 

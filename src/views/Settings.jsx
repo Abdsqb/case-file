@@ -855,7 +855,7 @@ export function Settings({ projects, now }) {
   useSetting(KEY_RADIUS, '')
   const radius = readRadius()
   const cardGlass = useSetting(KEY_CARD_GLASS, true)
-  const corners = useSetting(KEY_CORNERS, true)
+  const corners = useSetting(KEY_CORNERS, false)
 
   const stats = useMemo(() => globalStats(cases, clock), [cases, clock])
   /* Asked once. The answer is a function of .env, which cannot change without

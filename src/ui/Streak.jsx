@@ -94,6 +94,9 @@ export default function Streak({ view }) {
     };
   }, []);
 
+  /* None: nothing behind the page at all — no layer, no context, no loop. */
+  if (!backdrop.component) return null;
+
   return (
     <div className="streak" style={diffusion} data-dense={DENSE.has(view) ? 'true' : 'false'} aria-hidden="true">
       <Suspense fallback={null}>

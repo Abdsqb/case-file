@@ -517,9 +517,7 @@ export default function Streak({ view }) {
               slatHeight={18}
               gap={6}
               roundness={1}
-              interactive
-              cursorStrength={1}
-              cursorSize={40}
+              interactive={false}
               swirl={0}
               trail={0.6}
               lean={0}

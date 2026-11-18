@@ -550,7 +550,7 @@ export const BACKDROPS = [
   /* ---- Undertow -----------------------------------------------------------
      A dark sea made of tiny slats, swelling toward you from a horizon above
      the top edge, drawn by React Bits' MicroSlats on WebGL2 (MicroSlats.jsx).
-     The cursor stirs real fluid through it. Mounted like the currents. */
+     It ignores the cursor: the sea rolls on its own. Mounted like the currents. */
   {
     id: 'slats',
     name: 'Undertow',

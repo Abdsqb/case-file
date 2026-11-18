@@ -16,7 +16,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Card, CardHead, EmptyState, IconMenu, MenuButton, Meter, Metric, Pill, PillSelect } from '../ui/primitives.jsx'
+import { ChevronDown } from 'lucide-react'
+import { Card, CardHead, EmptyState, IconMenu, MenuButton, Meter, Metric, Pill, PillSelect, Segmented } from '../ui/primitives.jsx'
 import { clearStudyPlan, getStudyPlan, saveStudyPlan } from '../lib/api.js'
 
 function cx(...parts) {
@@ -408,15 +409,16 @@ export default function StudyPlan({ now }) {
   }
 
   const nextTerm = plan.terms.find((t) => t.status === 'planned')
+  const hasNext = !!(plan.registration?.items?.length || plan.backups?.length || nextTerm?.courses.some((c) => c.meets?.length))
   return (
     <div className="bento studyplan">
       <Progress plan={plan} tally={tally} right={right} error={error} />
       <Requirements plan={plan} tally={tally} onEdit={() => setEditing(true)} />
       <Terms plan={plan} tally={tally} onEdit={() => setEditing(true)} />
-      {plan.registration ? <Registration reg={plan.registration} nowTs={nowTs} /> : null}
-      <NextWeek term={nextTerm} />
-      {plan.backups?.length ? <Backups backups={plan.backups} /> : null}
-      {plan.openItems?.length ? <OpenItems items={plan.openItems} rules={plan.rules || []} onToggle={toggleItem} /> : null}
+      <NextTerm plan={plan} term={nextTerm} nowTs={nowTs} wide={!plan.openItems?.length} />
+      {plan.openItems?.length ? (
+        <OpenItems items={plan.openItems} rules={plan.rules || []} onToggle={toggleItem} wide={!hasNext} />
+      ) : null}
     </div>
   )
 }
@@ -471,8 +473,30 @@ function Progress({ plan, tally, right, error }) {
    requirements
    -------------------------------------------------------------------------- */
 
+/* A bar in three tones: met, under way, planned — against what is needed. */
+function StackBar({ parts, total }) {
+  const pct = (v) => `${total ? Math.min(100, (v / total) * 100) : 0}%`
+  return (
+    <span className="sp-stack" aria-hidden="true">
+      <span className="sp-stack__seg is-done" style={{ width: pct(parts.done) }} />
+      <span className="sp-stack__seg is-progress" style={{ width: pct(parts.progress) }} />
+      <span className="sp-stack__seg is-planned" style={{ width: pct(parts.planned) }} />
+    </span>
+  )
+}
+
+/* One line per group, and under it only what is still left to do; the full
+   list, with which course meets each requirement, opens on a click. */
 function Requirements({ plan, tally, onEdit }) {
-  const groups = plan.requirements
+  const [open, setOpen] = useState(() => new Set())
+  const toggle = (id) => setOpen((s) => {
+    const n = new Set(s)
+    if (n.has(id)) n.delete(id)
+    else n.add(id)
+    return n
+  })
+  const groups = plan.requirements.filter((g) => g.items.length || Number(g.credits))
+
   return (
     <Card className="span-8" aria-label="Requirements">
       <CardHead
@@ -480,59 +504,83 @@ function Requirements({ plan, tally, onEdit }) {
         subtitle={tally.all ? `${tally.met} of ${tally.all} met` : 'None yet'}
         right={
           <span className="sp-legend micro">
-            <span><Mark status="done" /> done</span>
+            <span><Mark status="done" /> met</span>
             <span><Mark status="progress" /> now</span>
             <span><Mark status="planned" /> planned</span>
           </span>
         }
       />
       <div className="card__body">
-        {!tally.all ? (
+        {!groups.length ? (
           <EmptyState lead="No requirements yet." hint="Add your core, major and minor requirements, then mark which courses count toward each." action={<Pill onClick={onEdit}>Edit plan</Pill>} />
         ) : (
-          <div className="sp-reqs">
+          <div className="sp-groups">
             {groups.map((g) => {
               const gs = tally.groups.get(g.id)
-              if (!g.items.length && !gs.target) return null
+              const isOpen = open.has(g.id)
+              const byCredits = !g.items.length
+              const parts = { done: 0, progress: 0, planned: 0 }
+              if (byCredits) {
+                parts.done = gs.cr.done
+                parts.progress = gs.cr.now
+                parts.planned = gs.cr.planned
+              } else {
+                for (const it of g.items) {
+                  const s = tally.items.get(it.id).status
+                  if (s in parts) parts[s] += 1
+                }
+              }
+              const left = g.items.filter((it) => tally.items.get(it.id).status !== 'done')
+
               return (
-                <section key={g.id} className="sp-reqs__group">
-                  <div className="sp-reqs__head">
-                    <span className="section-label">{(g.group || 'untitled').toLowerCase()}</span>
-                    <span className="micro dim">
-                      {g.items.length ? `${gs.met}/${gs.all}` : null}
-                      {g.items.length && gs.target ? ' · ' : null}
-                      {gs.target ? `${gs.cr.done + gs.cr.now + gs.cr.planned}/${gs.target} cr` : null}
+                <section key={g.id} className={cx('sp-group', isOpen && 'is-open')}>
+                  <button type="button" className="sp-group__head" aria-expanded={isOpen} onClick={() => toggle(g.id)}>
+                    <span className="sp-group__name">{g.group || 'Untitled'}</span>
+                    <StackBar parts={parts} total={byCredits ? gs.target : g.items.length} />
+                    <span className="sp-group__count">
+                      {byCredits ? `${gs.cr.done + gs.cr.now} / ${gs.target} cr` : `${gs.met} / ${gs.all}`}
                     </span>
-                  </div>
-                  <ul className="sp-reqs__list">
-                    {g.items.map((it) => {
-                      const st = tally.items.get(it.id)
-                      const by = [byText(st.courses), it.met && !st.courses.length && !it.note ? 'met' : '', it.note].filter(Boolean).join(' — ')
-                      return (
-                        <li key={it.id} className={cx('sp-req', `is-${st.status}`)} title={STATUS_LABEL[st.status]}>
-                          <Mark status={st.status} />
-                          <span className="sp-req__text">
-                            <span className="sp-req__name">
-                              {it.name || 'untitled'}
-                              {st.need > 1 ? <span className="sp-req__count"> {st.have}/{st.need}</span> : null}
+                    <ChevronDown className="sp-group__chev" size={14} strokeWidth={1.6} aria-hidden="true" />
+                  </button>
+
+                  {isOpen ? (
+                    <ul className="sp-reqs__list sp-group__detail">
+                      {g.items.map((it) => {
+                        const st = tally.items.get(it.id)
+                        const by = [byText(st.courses), it.met && !st.courses.length && !it.note ? 'met' : '', it.note].filter(Boolean).join(' — ')
+                        return (
+                          <li key={it.id} className={cx('sp-req', `is-${st.status}`)} title={STATUS_LABEL[st.status]}>
+                            <Mark status={st.status} />
+                            <span className="sp-req__text">
+                              <span className="sp-req__name">
+                                {it.name || 'untitled'}
+                                {st.need > 1 ? <span className="sp-req__count"> {st.have}/{st.need}</span> : null}
+                              </span>
+                              {by ? <span className="sp-req__by">{by}</span> : null}
                             </span>
-                            {by ? <span className="sp-req__by">{by}</span> : null}
-                          </span>
-                        </li>
-                      )
-                    })}
-                    {gs.target ? (
-                      <li className={cx('sp-req', `is-${gs.crStatus}`)} title={STATUS_LABEL[gs.crStatus]}>
-                        <Mark status={gs.crStatus} />
-                        <span className="sp-req__text">
-                          <span className="sp-req__name">{gs.target} credits</span>
-                          <span className="sp-req__by">
-                            {gs.cr.done} done · {gs.cr.now} now · {gs.cr.planned} planned
-                          </span>
-                        </span>
-                      </li>
-                    ) : null}
-                  </ul>
+                          </li>
+                        )
+                      })}
+                      {byCredits ? (
+                        <li className="sp-req__by">{gs.cr.done} done · {gs.cr.now} now · {gs.cr.planned} planned</li>
+                      ) : null}
+                    </ul>
+                  ) : byCredits ? null : left.length ? (
+                    <ul className="sp-left">
+                      {left.map((it) => {
+                        const st = tally.items.get(it.id)
+                        return (
+                          <li key={it.id} className={cx('sp-left__item', `is-${st.status}`)} title={byText(st.courses) || STATUS_LABEL[st.status]}>
+                            <Mark status={st.status} />
+                            {it.name || 'untitled'}
+                            {st.need > 1 ? <span className="sp-left__n">{st.have}/{st.need}</span> : null}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="sp-left__done micro">All met</p>
+                  )}
                 </section>
               )
             })}
@@ -575,7 +623,14 @@ function Terms({ plan, tally, onEdit }) {
     return plan.terms.map((t) => {
       const cr = tally.termCr.get(t.id) || 0
       running += cr
-      return { ...t, cr, running }
+      let pts = 0
+      let graded = 0
+      for (const c of t.courses) {
+        if (c.noCredit || !(c.grade in POINTS)) continue
+        pts += POINTS[c.grade] * (Number(c.cr) || 0)
+        graded += Number(c.cr) || 0
+      }
+      return { ...t, cr, running, gpa: t.status === 'done' && graded ? pts / graded : null }
     })
   }, [plan.terms, tally])
 
@@ -607,23 +662,25 @@ function Terms({ plan, tally, onEdit }) {
                   {t.status === 'current' ? <span className="sp-term__now">now</span> : null}
                 </header>
                 <div className="sp-term__meta">
-                  {[t.campus?.toLowerCase(), `${t.cr} cr`].filter(Boolean).join(' · ')}
+                  {[t.campus?.toLowerCase(), `${t.cr} cr`, t.gpa != null ? `gpa ${t.gpa.toFixed(2)}` : null].filter(Boolean).join(' · ')}
                 </div>
                 <ul className="sp-term__courses">
+                  {/* The name and the grade (or credits, ahead of a grade);
+                      the code and what it counts toward are in the tooltip. */}
                   {t.courses.map((c) => {
-                    const counts = c.reqs.map((id) => names.get(id)).filter(Boolean)[0] || c.counts
+                    const counts = c.reqs.map((id) => names.get(id)).filter(Boolean).join(', ') || c.counts
                     return (
-                      <li key={c.id} className={cx('sp-course', c.tbd && 'is-tbd', !creditOf(c) && 'is-void')}>
+                      <li
+                        key={c.id}
+                        className={cx('sp-course', c.tbd && 'is-tbd', !creditOf(c) && 'is-void')}
+                        title={[c.code, `${c.cr} cr`, counts && `counts toward ${counts}`].filter(Boolean).join(' · ')}
+                      >
                         <span className="sp-course__title">{c.title || c.code || 'Untitled course'}</span>
-                        <span className="sp-course__line">
-                          <span className="sp-course__code">{c.code || counts}</span>
-                          {c.grade ? (
-                            <span className="sp-course__grade">{c.grade}</span>
-                          ) : (
-                            <span className="sp-course__cr">{c.cr}</span>
-                          )}
-                        </span>
-                        {c.code && counts && !c.grade ? <span className="sp-course__counts">{counts}</span> : null}
+                        {c.grade ? (
+                          <span className="sp-course__grade">{c.grade}</span>
+                        ) : (
+                          <span className="sp-course__cr">{c.cr}</span>
+                        )}
                       </li>
                     )
                   })}
@@ -1020,44 +1077,74 @@ function TermEditor({ t, cr, running, required, options, names, edit, focus }) {
 }
 
 /* --------------------------------------------------------------------------
-   registration
+   next term: registering, the week, the backups — one card, one at a time
    -------------------------------------------------------------------------- */
 
-function Registration({ reg, nowTs }) {
+function NextTerm({ plan, term, nowTs, wide }) {
+  const reg = plan.registration
+  const backups = plan.backups || []
+  const hasWeek = !!term?.courses.some((c) => c.meets?.length)
+  const panes = [
+    reg?.items?.length ? { value: 'register', label: 'Register' } : null,
+    hasWeek ? { value: 'week', label: 'Week' } : null,
+    backups.length ? { value: 'backups', label: 'Backups' } : null,
+  ].filter(Boolean)
+  const [pane, setPane] = useState(null)
+
+  if (!panes.length) return null
+  const cur = panes.some((p) => p.value === pane) ? pane : panes[0].value
+  const label = term?.label || reg?.term || 'Next term'
+  const subtitle = {
+    register: 'When each course opens to you',
+    week: [term?.campus, 'as planned'].filter(Boolean).join(' · '),
+    backups: 'If a course fills',
+  }[cur]
+
   return (
-    <Card className="span-7" aria-label={`${reg.term} registration`}>
-      <CardHead title="Registration" subtitle={`${reg.term} · when each course opens to you`} />
-      <div className="card__body card__body--tight">
-        <ul className="sp-regs">
-          {reg.items.map((it) => {
-            const w = whenOf(it.date, nowTs)
-            return (
-              <li key={it.code} className="sp-reg">
-                <span className={cx('sp-reg__when', `is-${w.tone}`)}>
-                  <span className={cx('status-dot', w.tone === 'ok' && 'status-dot--live', w.tone === 'soon' && 'status-dot--soon', w.tone === 'idle' && 'status-dot--idle')} aria-hidden="true" />
-                  <span className="sp-reg__day">{w.text}</span>
-                  {w.sub ? <span className="sp-reg__date">{w.sub}</span> : null}
-                </span>
-                <span className="sp-reg__what">
-                  <span className="sp-reg__title">{it.title} <span className="sp-reg__code">{it.code}</span></span>
-                  <span className="sp-reg__how">{it.when}{it.note ? ` · ${it.note}` : ''}</span>
-                </span>
-                {it.odds ? <span className={cx('sp-reg__odds', `is-${it.odds}`)}>{it.odds}</span> : null}
-              </li>
-            )
-          })}
-        </ul>
-        {reg.warning ? <p className="sp-warn">{reg.warning}</p> : null}
+    <Card className={wide ? 'span-12' : 'span-7'} aria-label={label}>
+      <CardHead
+        className="sp-next__head"
+        title={label}
+        subtitle={subtitle}
+        right={panes.length > 1 ? <Segmented items={panes} value={cur} onChange={setPane} label={`${label}: show`} /> : null}
+      />
+      <div className={cx('card__body', cur === 'register' && 'card__body--tight')}>
+        {cur === 'register' ? <RegistrationList reg={reg} nowTs={nowTs} /> : null}
+        {cur === 'week' ? <WeekGrid term={term} /> : null}
+        {cur === 'backups' ? <BackupList backups={backups} /> : null}
       </div>
     </Card>
   )
 }
 
-/* --------------------------------------------------------------------------
-   next term's week
-   -------------------------------------------------------------------------- */
+function RegistrationList({ reg, nowTs }) {
+  return (
+    <>
+      <ul className="sp-regs">
+        {reg.items.map((it) => {
+          const w = whenOf(it.date, nowTs)
+          return (
+            <li key={it.code} className="sp-reg">
+              <span className={cx('sp-reg__when', `is-${w.tone}`)}>
+                <span className={cx('status-dot', w.tone === 'ok' && 'status-dot--live', w.tone === 'soon' && 'status-dot--soon', w.tone === 'idle' && 'status-dot--idle')} aria-hidden="true" />
+                <span className="sp-reg__day">{w.text}</span>
+                {w.sub ? <span className="sp-reg__date">{w.sub}</span> : null}
+              </span>
+              <span className="sp-reg__what">
+                <span className="sp-reg__title">{it.title} <span className="sp-reg__code">{it.code}</span></span>
+                <span className="sp-reg__how">{it.when}{it.note ? ` · ${it.note}` : ''}</span>
+              </span>
+              {it.odds ? <span className={cx('sp-reg__odds', `is-${it.odds}`)}>{it.odds}</span> : null}
+            </li>
+          )
+        })}
+      </ul>
+      {reg.warning ? <p className="sp-warn">{reg.warning}</p> : null}
+    </>
+  )
+}
 
-function NextWeek({ term }) {
+function WeekGrid({ term }) {
   const { blocks, from, to, extra } = useMemo(() => {
     const out = []
     const loose = []
@@ -1070,97 +1157,85 @@ function NextWeek({ term }) {
     return { blocks: out, from: Math.floor(lo / 60) * 60, to: Math.ceil(hi / 60) * 60, extra: loose }
   }, [term])
 
-  if (!term || !blocks.length) return null
   const span = to - from
   const hours = []
   for (let h = from; h <= to; h += 60) hours.push(h)
 
   return (
-    <Card className="span-5" aria-label={`${term.label} week`}>
-      <CardHead title={`${term.label} week`} subtitle={`${term.campus} · as planned`} />
-      <div className="card__body">
-        <div className="sp-week">
-          <div className="sp-week__hours" aria-hidden="true">
-            {hours.map((h) => (
-              <span key={h} style={{ top: `${((h - from) / span) * 100}%` }}>{clock(h)}</span>
-            ))}
-          </div>
-          {WEEK.map((d) => (
-            <div key={d.day} className="sp-week__day">
-              <span className="sp-week__label">{d.label}</span>
-              <div className="sp-week__lane">
-                {hours.map((h) => (
-                  <i key={h} className="sp-week__tick" style={{ top: `${((h - from) / span) * 100}%` }} />
-                ))}
-                {blocks.filter((x) => x.day === d.day).map((x) => (
-                  <div
-                    key={`${x.c.id}-${x.a}`}
-                    className={cx('sp-block', x.c.mode === 'online' && 'is-online')}
-                    style={{ top: `${((x.a - from) / span) * 100}%`, height: `${((x.b - x.a) / span) * 100}%` }}
-                    title={`${x.c.title} · ${x.c.time}${x.c.mode ? ` · ${x.c.mode}` : ''}`}
-                  >
-                    <span className="sp-block__title">{x.c.title}</span>
-                    <span className="sp-block__time">{clock(x.a)}–{clock(x.b)}</span>
-                  </div>
-                ))}
-              </div>
+    <>
+      <div className="sp-week">
+        <div className="sp-week__hours" aria-hidden="true">
+          {hours.map((h) => (
+            <span key={h} style={{ top: `${((h - from) / span) * 100}%` }}>{clock(h)}</span>
+          ))}
+        </div>
+        {WEEK.map((d) => (
+          <div key={d.day} className="sp-week__day">
+            <span className="sp-week__label">{d.label}</span>
+            <div className="sp-week__lane">
+              {hours.map((h) => (
+                <i key={h} className="sp-week__tick" style={{ top: `${((h - from) / span) * 100}%` }} />
+              ))}
+              {blocks.filter((x) => x.day === d.day).map((x) => (
+                <div
+                  key={`${x.c.id}-${x.a}`}
+                  className={cx('sp-block', x.c.mode === 'online' && 'is-online')}
+                  style={{ top: `${((x.a - from) / span) * 100}%`, height: `${((x.b - x.a) / span) * 100}%` }}
+                  title={`${x.c.title} · ${x.c.time}${x.c.mode ? ` · ${x.c.mode}` : ''}`}
+                >
+                  <span className="sp-block__title">{x.c.title}</span>
+                  <span className="sp-block__time">{clock(x.a)}–{clock(x.b)}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        {extra.length ? (
-          <div className="sp-week__extra micro">
-            {extra.map((c) => (
-              <span key={c.id}>{c.title} — {c.time}</span>
-            ))}
           </div>
-        ) : null}
+        ))}
       </div>
-    </Card>
-  )
-}
-
-/* --------------------------------------------------------------------------
-   backups
-   -------------------------------------------------------------------------- */
-
-function Backups({ backups }) {
-  return (
-    <Card className="span-7" aria-label="Backups">
-      <CardHead title="Backups" subtitle="If a course fills" />
-      <div className="card__body">
-        <div className="sp-backups">
-          {backups.map((b) => (
-            <section key={b.for} className="sp-backups__group">
-              <div className="sp-reqs__head">
-                <span className="section-label">for {b.for.toLowerCase()}</span>
-                <span className="micro dim">{b.slot}</span>
-              </div>
-              <ul className="sp-backups__list">
-                {b.options.map((o) => (
-                  <li key={o.code} className="sp-backup">
-                    <span className="sp-backup__title truncate">{o.title}</span>
-                    <span className="sp-backup__time">{o.time}</span>
-                    <span className="sp-backup__code">{o.code} · #{o.classNo}</span>
-                    <span className={cx('sp-backup__note', /best/i.test(o.note) && 'is-best')}>{o.note}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
+      {extra.length ? (
+        <div className="sp-week__extra micro">
+          {extra.map((c) => (
+            <span key={c.id}>{c.title} — {c.time}</span>
           ))}
         </div>
-      </div>
-    </Card>
+      ) : null}
+    </>
+  )
+}
+
+function BackupList({ backups }) {
+  return (
+    <div className="sp-backups">
+      {backups.map((b) => (
+        <section key={b.for} className="sp-backups__group">
+          <div className="sp-reqs__head">
+            <span className="section-label">for {b.for.toLowerCase()}</span>
+            <span className="micro dim">{b.slot}</span>
+          </div>
+          <ul className="sp-backups__list">
+            {b.options.map((o) => (
+              <li key={o.code} className="sp-backup">
+                <span className="sp-backup__title truncate">{o.title}</span>
+                <span className="sp-backup__time">{o.time}</span>
+                <span className="sp-backup__code">{o.code} · #{o.classNo}</span>
+                <span className={cx('sp-backup__note', /best/i.test(o.note) && 'is-best')}>{o.note}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
   )
 }
 
 /* --------------------------------------------------------------------------
-   open items and the rules
+   open items, with the planning rules folded away under them
    -------------------------------------------------------------------------- */
 
-function OpenItems({ items, rules, onToggle }) {
+function OpenItems({ items, rules, onToggle, wide }) {
+  const [showRules, setShowRules] = useState(false)
   const left = items.filter((it) => !it.done).length
   return (
-    <Card className="span-5" aria-label="To confirm with your advisor">
+    <Card className={wide ? 'span-12' : 'span-5'} aria-label="To confirm with your advisor">
       <CardHead title="To confirm" subtitle={left ? `${left} open with your advisor` : 'All confirmed'} />
       <div className="card__body">
         <ul className="sp-items">
@@ -1182,11 +1257,16 @@ function OpenItems({ items, rules, onToggle }) {
           ))}
         </ul>
         {rules.length ? (
-          <div className="sp-rules">
-            <span className="section-label">rules</span>
-            <ul>
-              {rules.map((r) => <li key={r}>{r}</li>)}
-            </ul>
+          <div className={cx('sp-rules', showRules && 'is-open')}>
+            <button type="button" className="sp-rules__toggle" aria-expanded={showRules} onClick={() => setShowRules((v) => !v)}>
+              <span className="section-label">{rules.length} planning rules</span>
+              <ChevronDown size={13} strokeWidth={1.6} aria-hidden="true" />
+            </button>
+            {showRules ? (
+              <ul>
+                {rules.map((r) => <li key={r}>{r}</li>)}
+              </ul>
+            ) : null}
           </div>
         ) : null}
       </div>

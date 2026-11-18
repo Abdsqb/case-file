@@ -48,6 +48,9 @@ const STATUS_OPTIONS = [
 const PHASE = { done: 'done', current: 'now', planned: 'planned' }
 const phaseOf = (t) => PHASE[t.status] || 'planned'
 
+/* A grade's colour: the As lit, the Cs warm, the Ds and Fs hot. */
+const gradeBand = (g) => (/^A/.test(g) ? 'is-a' : /^C/.test(g) ? 'is-c' : /^[DF]/.test(g) ? 'is-d' : null)
+
 /* Credits a course earns: a withdrawal, a fail or an incomplete earns none. */
 const creditOf = (c) => (c.noCredit || EARNS_NOTHING.has(c.grade) ? 0 : Number(c.cr) || 0)
 const requiredOf = (plan) => Number(plan.credits?.required) || 128
@@ -415,9 +418,10 @@ export default function StudyPlan({ now }) {
       <Progress plan={plan} tally={tally} right={right} error={error} />
       <Requirements plan={plan} tally={tally} onEdit={() => setEditing(true)} />
       <Terms plan={plan} tally={tally} onEdit={() => setEditing(true)} />
-      <NextTerm plan={plan} term={nextTerm} nowTs={nowTs} wide={!plan.openItems?.length} />
+      <GpaCard plan={plan} className={hasNext ? 'span-5' : 'span-12'} />
+      <NextTerm plan={plan} term={nextTerm} nowTs={nowTs} />
       {plan.openItems?.length ? (
-        <OpenItems items={plan.openItems} rules={plan.rules || []} onToggle={toggleItem} wide={!hasNext} />
+        <OpenItems items={plan.openItems} rules={plan.rules || []} onToggle={toggleItem} wide />
       ) : null}
     </div>
   )
@@ -427,13 +431,47 @@ export default function StudyPlan({ now }) {
    degree progress
    -------------------------------------------------------------------------- */
 
+/* The credits as a ring: earned, this term and planned, each its own arc
+   with a small gap between, against what the degree needs. */
+function Ring({ parts, total, size = 148, stroke = 9 }) {
+  const r = (size - stroke) / 2
+  const C = 2 * Math.PI * r
+  const gap = 3
+  let at = 0
+  const arcs = []
+  for (const [key, v] of parts) {
+    const len = Math.max(0, Math.min(v, total - at)) / total * C
+    if (len > gap) arcs.push({ key, len: len - gap, offset: (at / total) * C })
+    at += Math.max(0, Math.min(v, total - at))
+  }
+  return (
+    <svg className="sp-ring__svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+      <circle className="sp-ring__track" cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} fill="none" />
+      <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+        {arcs.map((a) => (
+          <circle
+            key={a.key}
+            className={cx('sp-ring__arc', `is-${a.key}`)}
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            strokeWidth={stroke}
+            fill="none"
+            strokeDasharray={`${a.len} ${C}`}
+            strokeDashoffset={-a.offset}
+          />
+        ))}
+      </g>
+    </svg>
+  )
+}
+
 function Progress({ plan, tally, right, error }) {
   const s = plan.student || {}
   const required = requiredOf(plan)
   const { credits } = tally
   const secured = credits.done + credits.now
   const spare = tally.total - required
-  const gpa = tally.gpa ?? (s.gpa ? Number(s.gpa) : null)
 
   return (
     <Card className="span-4 sp-progress" aria-label="Degree progress">
@@ -443,22 +481,27 @@ function Progress({ plan, tally, right, error }) {
         right={right}
       />
       <div className="card__body">
-        <Metric value={secured} unit={`of ${required} credits`} sub={`${credits.done} earned · ${credits.now} this term`} />
-        <div className="sp-progress__bar" aria-hidden="true">
-          <span className="sp-progress__seg sp-progress__seg--done" style={{ width: `${Math.min(100, (credits.done / required) * 100)}%` }} />
-          <span className="sp-progress__seg sp-progress__seg--now" style={{ width: `${Math.min(100, (credits.now / required) * 100)}%` }} />
-        </div>
-        <div className="row row--between micro">
-          <span>{tally.total} planned in all</span>
-          <span>{spare >= 0 ? `${spare} to spare` : `${-spare} short`}</span>
+        <div className="sp-ring">
+          <div className="sp-ring__dial" role="img" aria-label={`${secured} of ${required} credits: ${credits.done} earned, ${credits.now} this term, ${credits.planned} planned`}>
+            <Ring parts={[['done', credits.done], ['now', credits.now], ['planned', credits.planned]]} total={required} />
+            <div className="sp-ring__center">
+              <span className="sp-ring__value">{secured}</span>
+              <span className="sp-ring__unit">of {required} cr</span>
+            </div>
+          </div>
+          <dl className="sp-ring__legend">
+            <div><dt><i className="sp-key is-done" />earned</dt><dd>{credits.done}</dd></div>
+            <div><dt><i className="sp-key is-now" />this term</dt><dd>{credits.now}</dd></div>
+            <div><dt><i className="sp-key is-planned" />planned</dt><dd>{credits.planned}</dd></div>
+            <div className="sp-ring__spare">
+              <dt>{spare >= 0 ? 'to spare' : 'short'}</dt>
+              <dd className={spare < 0 ? 'is-short' : undefined}>{Math.abs(spare)}</dd>
+            </div>
+          </dl>
         </div>
 
         <dl className="sp-facts">
           {s.graduation ? (<><dt>graduating</dt><dd>{s.graduation}</dd></>) : null}
-          {gpa != null ? (
-            <><dt>gpa</dt><dd>{gpa.toFixed(3)}{tally.gpa != null ? <span className="dim"> · {tally.graded} graded cr</span> : null}</dd></>
-          ) : null}
-          <dt>requirements</dt><dd>{tally.met} of {tally.all} met</dd>
           {s.standing ? (<><dt>standing</dt><dd>{s.standing}</dd></>) : null}
           {s.minor ? (<><dt>minor</dt><dd>{s.minor}</dd></>) : null}
           {s.location ? (<><dt>now</dt><dd>{s.location}</dd></>) : null}
@@ -470,17 +513,187 @@ function Progress({ plan, tally, right, error }) {
 }
 
 /* --------------------------------------------------------------------------
+   the GPA, term by term
+   -------------------------------------------------------------------------- */
+
+/* Each finished term's GPA, and the running GPA after it. */
+function gpaSeries(plan) {
+  const out = []
+  let pts = 0
+  let cr = 0
+  for (const t of plan.terms) {
+    if (t.status !== 'done') continue
+    let tp = 0
+    let tc = 0
+    for (const c of t.courses) {
+      if (c.noCredit || !(c.grade in POINTS)) continue
+      tp += POINTS[c.grade] * (Number(c.cr) || 0)
+      tc += Number(c.cr) || 0
+    }
+    if (!tc) continue
+    pts += tp
+    cr += tc
+    out.push({ id: t.id, label: t.label, short: shortTerm(t.label), term: tp / tc, cum: pts / cr, cr: tc })
+  }
+  return out
+}
+
+/* "Fall 2024" → "fa 24" */
+function shortTerm(label) {
+  const m = /^(\w{2})\w*\s+\d{2}(\d{2})$/.exec(label || '')
+  return m ? `${m[1].toLowerCase()} ${m[2]}` : label
+}
+
+function useWidth(ref) {
+  const [w, setW] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [ref])
+  return w
+}
+
+function GpaCard({ plan, className }) {
+  const series = useMemo(() => gpaSeries(plan), [plan])
+  const boxRef = useRef(null)
+  const W = useWidth(boxRef)
+  const [hover, setHover] = useState(null)
+
+  const last = series[series.length - 1]
+  const prev = series[series.length - 2]
+  const H = 236
+  const pad = { l: 30, r: 44, t: 12, b: 24 }
+  const lo = series.length ? Math.min(2, Math.floor(Math.min(...series.map((p) => p.term)) * 2) / 2) : 2
+  const hi = 4
+  const x = (i) => pad.l + (series.length > 1 ? (i / (series.length - 1)) * (W - pad.l - pad.r) : (W - pad.l - pad.r) / 2)
+  const y = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b)
+  const ticks = []
+  for (let v = lo; v <= hi + 1e-9; v += 0.5) ticks.push(v)
+  const path = (key) => series.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join(' ')
+  const h = hover != null ? series[hover] : null
+
+  return (
+    <Card className={className} aria-label="GPA by term">
+      <CardHead
+        title="GPA"
+        subtitle={last ? `${series.length} graded terms` : 'No graded terms yet'}
+        right={
+          series.length > 1 ? (
+            <span className="sp-legend sp-legend--keep micro">
+              <span><i className="sp-key is-cum" />overall</span>
+              <span><i className="sp-key is-term" />each term</span>
+            </span>
+          ) : null
+        }
+      />
+      <div className="card__body">
+        {!last ? (
+          <EmptyState lead="Nothing graded yet." hint="Mark a term Done and give its courses grades." />
+        ) : (
+          <>
+            <div className="sp-gpa__head">
+              <span className="sp-gpa__value">{last.cum.toFixed(3)}</span>
+              <span className="sp-gpa__sub micro">
+                overall
+                {prev ? <> · {last.cum >= prev.cum ? '▲' : '▼'} {Math.abs(last.cum - prev.cum).toFixed(3)} since {prev.label}</> : null}
+              </span>
+            </div>
+            <div className="sp-gpa__chart" ref={boxRef} onMouseLeave={() => setHover(null)}>
+              {W ? (
+                <svg width={W} height={H} role="img" aria-label={series.map((p) => `${p.label}: term ${p.term.toFixed(2)}, overall ${p.cum.toFixed(2)}`).join('; ')}>
+                  {ticks.map((v) => (
+                    <g key={v} className="sp-gpa__grid">
+                      <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} />
+                      <text x={pad.l - 8} y={y(v)} dy="0.32em" textAnchor="end">{v.toFixed(1)}</text>
+                    </g>
+                  ))}
+                  {h ? <line className="sp-gpa__cross" x1={x(hover)} x2={x(hover)} y1={pad.t} y2={H - pad.b} /> : null}
+                  <path className="sp-gpa__line is-term" d={path('term')} />
+                  <path className="sp-gpa__line is-cum" d={path('cum')} />
+                  {series.map((p, i) => (
+                    <g key={p.id}>
+                      <circle className="sp-gpa__dot is-term" cx={x(i)} cy={y(p.term)} r={hover === i ? 5 : 4} />
+                      <circle className="sp-gpa__dot is-cum" cx={x(i)} cy={y(p.cum)} r={hover === i ? 5 : 4} />
+                      <text className="sp-gpa__x" x={x(i)} y={H - 6} textAnchor="middle">{p.short}</text>
+                      <rect
+                        className="sp-gpa__hit"
+                        x={x(i) - (W - pad.l - pad.r) / Math.max(1, series.length - 1) / 2}
+                        y={0}
+                        width={(W - pad.l - pad.r) / Math.max(1, series.length - 1)}
+                        height={H}
+                        onMouseEnter={() => setHover(i)}
+                        onClick={() => setHover(i)}
+                      />
+                    </g>
+                  ))}
+                  <text className="sp-gpa__end" x={x(series.length - 1) + 10} y={y(last.cum)} dy="0.32em">{last.cum.toFixed(2)}</text>
+                </svg>
+              ) : null}
+              {h ? (
+                <div
+                  className={cx('sp-gpa__tip', hover > series.length / 2 && 'is-left')}
+                  style={{ left: x(hover), top: Math.min(y(h.term), y(h.cum)) }}
+                >
+                  <span className="sp-gpa__tip-title">{h.label}</span>
+                  <span><i className="sp-key is-term" />term <b>{h.term.toFixed(2)}</b></span>
+                  <span><i className="sp-key is-cum" />overall <b>{h.cum.toFixed(3)}</b></span>
+                  <span className="dim">{h.cr} graded credits</span>
+                </div>
+              ) : null}
+            </div>
+          </>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+/* --------------------------------------------------------------------------
    requirements
    -------------------------------------------------------------------------- */
 
-/* A bar in three tones: met, under way, planned — against what is needed. */
-function StackBar({ parts, total }) {
-  const pct = (v) => `${total ? Math.min(100, (v / total) * 100) : 0}%`
+/* A requirement as blocks, one per course it takes, filled in order: met,
+   under way, planned, then still open. A credit target is blocks of four. */
+function unitsOf(g, gs, tally) {
+  const units = []
+  if (!g.items.length) {
+    const n = Math.max(1, Math.round(gs.target / 4))
+    const d = Math.round(gs.cr.done / 4)
+    const w = Math.round(gs.cr.now / 4)
+    const p = Math.round(gs.cr.planned / 4)
+    for (let i = 0; i < n; i++) {
+      const status = i < d ? 'done' : i < d + w ? 'progress' : i < d + w + p ? 'planned' : 'todo'
+      units.push({ key: i, status, tip: `${i * 4 + 1}–${i * 4 + 4} cr · ${STATUS_LABEL[status]}` })
+    }
+    return units
+  }
+  for (const it of g.items) {
+    const st = tally.items.get(it.id)
+    const phases = it.met ? Array(st.need).fill('done') : st.courses.map((c) => (c.ph === 'now' ? 'progress' : c.ph))
+    const order = { done: 0, progress: 1, planned: 2 }
+    phases.sort((a, b) => order[a] - order[b])
+    for (let k = 0; k < st.need; k++) {
+      const status = phases[k] || 'todo'
+      const course = it.met ? null : st.courses.find((c) => (c.ph === 'now' ? 'progress' : c.ph) === status)
+      units.push({
+        key: `${it.id}-${k}`,
+        status,
+        tip: `${it.name || 'untitled'}${st.need > 1 ? ` (${k + 1} of ${st.need})` : ''} · ${STATUS_LABEL[status]}${course ? ` · ${course.c.code || course.c.title}` : ''}`,
+      })
+    }
+  }
+  return units
+}
+
+function Tiles({ units }) {
   return (
-    <span className="sp-stack" aria-hidden="true">
-      <span className="sp-stack__seg is-done" style={{ width: pct(parts.done) }} />
-      <span className="sp-stack__seg is-progress" style={{ width: pct(parts.progress) }} />
-      <span className="sp-stack__seg is-planned" style={{ width: pct(parts.planned) }} />
+    <span className="sp-tiles">
+      {units.map((u) => (
+        <span key={u.key} className={cx('sp-tile', `is-${u.status}`)} data-tip={u.tip} aria-label={u.tip} />
+      ))}
     </span>
   )
 }
@@ -519,24 +732,13 @@ function Requirements({ plan, tally, onEdit }) {
               const gs = tally.groups.get(g.id)
               const isOpen = open.has(g.id)
               const byCredits = !g.items.length
-              const parts = { done: 0, progress: 0, planned: 0 }
-              if (byCredits) {
-                parts.done = gs.cr.done
-                parts.progress = gs.cr.now
-                parts.planned = gs.cr.planned
-              } else {
-                for (const it of g.items) {
-                  const s = tally.items.get(it.id).status
-                  if (s in parts) parts[s] += 1
-                }
-              }
               const left = g.items.filter((it) => tally.items.get(it.id).status !== 'done')
 
               return (
                 <section key={g.id} className={cx('sp-group', isOpen && 'is-open')}>
                   <button type="button" className="sp-group__head" aria-expanded={isOpen} onClick={() => toggle(g.id)}>
                     <span className="sp-group__name">{g.group || 'Untitled'}</span>
-                    <StackBar parts={parts} total={byCredits ? gs.target : g.items.length} />
+                    <Tiles units={unitsOf(g, gs, tally)} />
                     <span className="sp-group__count">
                       {byCredits ? `${gs.cr.done + gs.cr.now} / ${gs.target} cr` : `${gs.met} / ${gs.all}`}
                     </span>
@@ -677,7 +879,7 @@ function Terms({ plan, tally, onEdit }) {
                       >
                         <span className="sp-course__title">{c.title || c.code || 'Untitled course'}</span>
                         {c.grade ? (
-                          <span className="sp-course__grade">{c.grade}</span>
+                          <span className={cx('sp-course__grade', gradeBand(c.grade))}>{c.grade}</span>
                         ) : (
                           <span className="sp-course__cr">{c.cr}</span>
                         )}
@@ -1235,7 +1437,7 @@ function OpenItems({ items, rules, onToggle, wide }) {
   const [showRules, setShowRules] = useState(false)
   const left = items.filter((it) => !it.done).length
   return (
-    <Card className={wide ? 'span-12' : 'span-5'} aria-label="To confirm with your advisor">
+    <Card className={cx(wide ? 'span-12 sp-open--wide' : 'span-5')} aria-label="To confirm with your advisor">
       <CardHead title="To confirm" subtitle={left ? `${left} open with your advisor` : 'All confirmed'} />
       <div className="card__body">
         <ul className="sp-items">

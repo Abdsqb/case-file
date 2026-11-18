@@ -7777,17 +7777,125 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
 .sp-group.is-open .sp-group__chev { transform: rotate(180deg); }
 .sp-group__detail { margin-top: 12px; }
 
-.sp-stack {
-  display: flex;
-  height: 4px;
-  overflow: hidden;
-  background: var(--line-soft);
-  border-radius: 999px;
+/* A block per course a group needs: lit when met, white while under way,
+   outlined when planned, dashed while nothing covers it. */
+.sp-tiles { display: flex; gap: 4px; min-width: 0; }
+.sp-tile {
+  position: relative;
+  flex: 1 1 0;
+  max-width: 34px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid transparent;
 }
-.sp-stack__seg { flex: none; height: 100%; }
-.sp-stack__seg.is-done     { background: var(--accent); box-shadow: 0 0 8px 0 var(--accent-glow); }
-.sp-stack__seg.is-progress { background: var(--text); }
-.sp-stack__seg.is-planned  { background: var(--text-faint); opacity: 0.55; }
+.sp-tile.is-done     { background: var(--accent); box-shadow: 0 0 8px 0 var(--accent-glow); }
+.sp-tile.is-progress { background: var(--text); }
+.sp-tile.is-planned  { border-color: var(--text-faint); background: var(--accent-faint); }
+.sp-tile.is-todo     { border: 1px dashed var(--border-strong); }
+.sp-tile:hover { outline: 2px solid var(--surface, #0B0B10); outline-offset: 0; transform: translateY(-1px); }
+.sp-tile:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  z-index: 5;
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+/* --- the credit ring --------------------------------------------------------- */
+
+.sp-ring { display: flex; align-items: center; gap: 24px; padding: 4px 0 2px; }
+.sp-ring__dial { position: relative; flex: none; width: 148px; height: 148px; }
+.sp-ring__svg { display: block; }
+.sp-ring__track { stroke: var(--line-soft); }
+.sp-ring__arc.is-done    { stroke: var(--accent); filter: drop-shadow(0 0 5px var(--accent-glow)); }
+.sp-ring__arc.is-now     { stroke: var(--text); }
+.sp-ring__arc.is-planned { stroke: var(--text-muted); opacity: 0.4; }
+.sp-ring__center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.sp-ring__value { font-size: 40px; font-weight: 400; letter-spacing: -0.03em; line-height: 1; color: var(--fg); }
+.sp-ring__unit { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
+
+.sp-ring__legend { flex: 1 1 auto; margin: 0; display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.sp-ring__legend > div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.sp-ring__legend dt { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.sp-ring__legend dd { margin: 0; font-family: var(--font-mono); font-size: 13px; color: var(--text); }
+.sp-ring__spare { padding-top: 9px; border-top: 1px solid var(--line-soft); }
+.sp-ring__spare dd.is-short { color: var(--hot); }
+
+/* A legend key: the mark it names, in miniature. */
+.sp-key { flex: none; display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.sp-key.is-done    { background: var(--accent); box-shadow: 0 0 6px 0 var(--accent-glow); }
+.sp-key.is-now     { background: var(--text); }
+.sp-key.is-planned { border: 1px solid var(--text-faint); background: var(--accent-faint); }
+.sp-key.is-cum     { width: 14px; height: 2px; border-radius: 2px; background: var(--accent); }
+.sp-key.is-term    { width: 14px; height: 2px; border-radius: 2px; background: var(--text-faint); }
+
+/* --- the GPA chart ------------------------------------------------------------ */
+
+.sp-gpa__head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.sp-gpa__value { font-size: 34px; letter-spacing: -0.03em; line-height: 1; color: var(--fg); }
+.sp-gpa__sub { color: var(--text-faint); }
+.sp-gpa__chart { position: relative; margin-top: 14px; min-width: 0; }
+.sp-gpa__chart svg { display: block; overflow: visible; }
+.sp-gpa__grid line { stroke: var(--line-soft); stroke-width: 1; }
+.sp-gpa__grid text,
+.sp-gpa__x { font-family: var(--font-mono); font-size: 10px; fill: var(--text-faint); }
+.sp-gpa__cross { stroke: var(--border-strong); stroke-width: 1; }
+.sp-gpa__line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.sp-gpa__line.is-cum  { stroke: var(--accent); filter: drop-shadow(0 0 4px var(--accent-glow)); }
+.sp-gpa__line.is-term { stroke: var(--text-faint); stroke-dasharray: 4 4; }
+.sp-gpa__dot { stroke-width: 2; stroke: var(--surface, #0B0B10); transition: r 120ms ease; }
+.sp-gpa__dot.is-cum  { fill: var(--accent); }
+.sp-gpa__dot.is-term { fill: var(--text-muted); }
+.sp-gpa__end { font-family: var(--font-mono); font-size: 11px; fill: var(--text); }
+.sp-gpa__hit { fill: transparent; cursor: crosshair; }
+.sp-gpa__tip {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 11px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  transform: translate(14px, -50%);
+}
+.sp-gpa__tip.is-left { transform: translate(calc(-100% - 14px), -50%); }
+.sp-gpa__tip > span { display: inline-flex; align-items: center; gap: 7px; }
+.sp-gpa__tip b { font-family: var(--font-mono); font-weight: 400; color: var(--text); }
+.sp-gpa__tip-title { font-size: 12px; color: var(--text); }
+
+/* Grades: the As lit, the Cs warm, the Ds and Fs hot. */
+.sp-course__grade.is-a { color: var(--accent); }
+.sp-course__grade.is-c { color: var(--amber); }
+.sp-course__grade.is-d { color: var(--hot); }
+
+/* The open questions across the page, in two columns. */
+.sp-open--wide .sp-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
 
 /* What is left in a group, as small tags under its line. */
 .sp-left { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
@@ -7812,6 +7920,8 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
 @media (max-width: 760px) {
   .sp-reqs { columns: 1; }
   .sp-legend { display: none; }
+  /* The GPA chart has two lines; its key is how they are told apart. */
+  .sp-legend.sp-legend--keep { display: inline-flex; }
   /* Next term's three views go under its title rather than squeezing it. */
   .sp-next__head { flex-wrap: wrap; row-gap: 12px; }
   .sp-next__head > .card__headtext { flex: 1 1 100%; }
@@ -7822,7 +7932,9 @@ html[data-mouse] .entry:has(:focus-visible) .entry__more :is(.entry__cluster, .e
     row-gap: 8px;
   }
   .sp-group__name { grid-area: name; }
-  .sp-group__head > .sp-stack { grid-area: bar; }
+  .sp-group__head > .sp-tiles { grid-area: bar; }
+  .sp-tile { max-width: none; }
+  .sp-open--wide .sp-items { grid-template-columns: minmax(0, 1fr); }
   .sp-group__count { grid-area: count; }
   .sp-group__chev { grid-area: chev; }
   /* Two terms and a bit across, so it reads as a row that scrolls. */

@@ -557,11 +557,11 @@ export const BACKDROPS = [
     line: 'A dark sea of tiny slats, rolling in.',
     component: 'slats',
     preview: (ctx, W, H, colours, secs, reveal) => {
-      /* Three times the real slat size: at a fifth of the window, the real
-         ones would be smaller than a pixel. */
+      /* Half again the real slat size: at a fifth of the window, the real
+         ones would read as a texture rather than slats. */
       const sw = 9;
       const sh = 27;
-      const gap = 12;
+      const gap = 9;
       for (let y = 0; y < H; y += sh + gap) {
         if (y / H > reveal * 1.35) break;
         for (let x = 0; x < W; x += sw + gap) {

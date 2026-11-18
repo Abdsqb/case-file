@@ -39,6 +39,10 @@ import {
   KEY_ACCENT,
   KEY_BACKDROP,
   KEY_BACKDROP_BLUR,
+  KEY_SLAT_SHADE,
+  SLAT_SHADES,
+  DEFAULT_SLAT_SHADE,
+  readSlatShade,
   KEY_PARALLAX,
   KEY_RADIUS,
   KEY_CARD_GLASS,
@@ -843,6 +847,8 @@ export function Settings({ projects, now }) {
   const backdrop = useSetting(KEY_BACKDROP, DEFAULT_BACKDROP)
   useSetting(KEY_BACKDROP_BLUR, '')
   const blur = readBackdropBlur()
+  useSetting(KEY_SLAT_SHADE, '')
+  const slatShade = readSlatShade().value
   useSetting(KEY_RADIUS, '')
   const radius = readRadius()
   const cardGlass = useSetting(KEY_CARD_GLASS, true)
@@ -1035,10 +1041,25 @@ export function Settings({ projects, now }) {
                 label="Background diffusion"
               />
             </SettingRow>
+            {backdrop === 'slats' ? (
+              <SettingRow
+                title="Slat shade"
+                hint="How light Undertow's slats are drawn. Grey is how it first came; Deep sinks them almost into the dark."
+              >
+                <PillSelect
+                  className="island-select"
+                  align="end"
+                  options={SLAT_SHADES}
+                  value={slatShade}
+                  onChange={(next) => writeSetting(KEY_SLAT_SHADE, next === DEFAULT_SLAT_SHADE ? null : next)}
+                  label="Undertow slat shade"
+                />
+              </SettingRow>
+            ) : null}
           </div>
           <div className="card__foot">
             <span>Drawn in your accent colour. Reduce motion holds it still.</span>
-            <span className="dim">casefile.backdrop · casefile.backdropBlur</span>
+            <span className="dim">casefile.backdrop · casefile.backdropBlur · casefile.slatShade</span>
           </div>
         </Card>
 

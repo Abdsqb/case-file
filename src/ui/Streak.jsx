@@ -49,9 +49,11 @@ import {
   KEY_ACCENT,
   KEY_BACKDROP,
   KEY_BACKDROP_BLUR,
+  KEY_SLAT_SHADE,
   readAccent,
   readBackdrop,
   readBackdropBlur,
+  readSlatShade,
   useSetting,
 } from '../lib/settings.js';
 
@@ -450,6 +452,10 @@ export default function Streak({ view }) {
 
   /* Undertow forms from the top down on a phone; a desktop's is just there. */
   const phone = usePhoneWidth();
+  /* Its slats' shade, from Settings. A new one is just a new prop: the sea
+     reads its colour every frame, so nothing restarts. */
+  useSetting(KEY_SLAT_SHADE, '');
+  const shade = readSlatShade();
 
   const backdrop = backdropById(backdropId);
   /* Nothing behind the glass at all: no canvas, no context, no loop. */
@@ -514,8 +520,8 @@ export default function Streak({ view }) {
               key="slats"
               replay={visit}
               preset="swell"
-              color="#59545e"
-              glintColor="#4f4f4f"
+              color={shade.color}
+              glintColor={shade.glint}
               backgroundColor="transparent"
               slatWidth={6}
               slatHeight={18}

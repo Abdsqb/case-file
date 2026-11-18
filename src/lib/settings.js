@@ -19,6 +19,7 @@
  *   casefile.accent          'violet' (default) | 'white' | 'red' | 'green' | 'turquoise' | 'ember'
  *   casefile.backdrop        'silk' (default) | any other id in ui/backdrops.js
  *   casefile.backdropBlur    '0' | '1.5' (default) | '3' | '6' | '12' — px of blur over it
+ *   casefile.slatShade       'grey' (default) | 'dim' | 'dark' | 'deep' — Undertow's slats
  *   casefile.cardGlass       'on' (default) | 'off' — the glass behind each card
  *
  * Other views read these with the exported `useSetting(key, fallback)` hook.
@@ -44,6 +45,24 @@ export const KEY_BACKDROP = 'backdrop'
 export const KEY_BACKDROP_BLUR = 'backdropBlur'
 export const KEY_RADIUS = 'radius'
 export const KEY_CARD_GLASS = 'cardGlass'
+export const KEY_SLAT_SHADE = 'slatShade'
+
+/* Undertow's slats: the grey they were first drawn in, then three steps
+   down toward the dark behind them. The glint is the crest's colour, kept a
+   step under the slat so the sea still catches a little light. */
+export const SLAT_SHADES = [
+  { value: 'grey', label: 'Grey', color: '#59545e', glint: '#4f4f4f' },
+  { value: 'dim', label: 'Dim', color: '#47434c', glint: '#403f43' },
+  { value: 'dark', label: 'Dark', color: '#37343b', glint: '#323135' },
+  { value: 'deep', label: 'Deep', color: '#29272c', glint: '#252427' },
+]
+export const DEFAULT_SLAT_SHADE = SLAT_SHADES[0].value
+
+/** The stored slat shade, or the default when it is missing or not one we offer. */
+export function readSlatShade() {
+  const raw = readRaw(KEY_SLAT_SHADE)
+  return SLAT_SHADES.find((s) => s.value === raw) || SLAT_SHADES[0]
+}
 
 /* How much the light behind the glass is diffused, in CSS px of blur. The
    second is the default: a breath of haze, enough to soften the strands

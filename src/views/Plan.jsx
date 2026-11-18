@@ -138,6 +138,40 @@ function dropChains(data, ids) {
 }
 
 /* --------------------------------------------------------------------------
+   a bar that unfolds: grows open from nothing and folds away again, keeping
+   what it showed on screen while it closes
+   -------------------------------------------------------------------------- */
+
+const REVEAL_MS = 260
+
+function Reveal({ open, children }) {
+  const [mounted, setMounted] = useState(open)
+  const [expanded, setExpanded] = useState(false)
+  const last = useRef(children)
+  if (open) last.current = children
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      /* Two frames: one to lay it out folded, one to unfold it. */
+      let b = 0
+      const a = requestAnimationFrame(() => { b = requestAnimationFrame(() => setExpanded(true)) })
+      return () => { cancelAnimationFrame(a); cancelAnimationFrame(b) }
+    }
+    setExpanded(false)
+    const t = setTimeout(() => setMounted(false), REVEAL_MS)
+    return () => clearTimeout(t)
+  }, [open])
+
+  if (!mounted && !open) return null
+  return (
+    <div className={cx('plan-reveal', expanded && open && 'is-open')} aria-hidden={open ? undefined : true}>
+      <div className="plan-reveal__inner">{open ? children : last.current}</div>
+    </div>
+  )
+}
+
+/* --------------------------------------------------------------------------
    the screen
    -------------------------------------------------------------------------- */
 
@@ -301,6 +335,7 @@ export default function Plan() {
   const cardCount = active ? active.data.chains.reduce((k, ch) => k + ch.cards.length, 0) : 0
   const bars = (
     <>
+      <Reveal open={!!form}>
       {form ? (
         <div className="composer plan-bar">
           <Field
@@ -329,6 +364,8 @@ export default function Plan() {
           </div>
         </div>
       ) : null}
+      </Reveal>
+      <Reveal open={confirming && !!active}>
       {confirming && active ? (
         <div className="composer plan-bar" role="alert">
           <span className="grow micro">
@@ -343,6 +380,7 @@ export default function Plan() {
           </div>
         </div>
       ) : null}
+      </Reveal>
     </>
   )
 

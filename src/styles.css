@@ -8351,3 +8351,18 @@ input.plan-card__title:focus { outline: none; box-shadow: none; }
 .plan-card__confirm-actions { display: inline-flex; gap: 6px; }
 .plan-card__confirm .pill { padding: 4px 10px; font-size: 12px; }
 .plan-card__ask { white-space: nowrap; }
+
+/* The bar unfolding under Plan's header: it grows from no height while it
+   fades in and settles down a few pixels, and folds back the same way. */
+.plan-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    grid-template-rows 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease,
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.plan-reveal.is-open { grid-template-rows: 1fr; opacity: 1; transform: none; }
+.plan-reveal__inner { min-height: 0; overflow: hidden; }

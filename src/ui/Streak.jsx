@@ -29,6 +29,7 @@
 
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { STANDBY_EVENT } from './Standby.jsx';
+import { usePhoneWidth } from './island.js';
 
 /* The backdrops drawn by their own components, loaded only when picked:
    AeroShards brings WebGPU, and most visits need none of them. */
@@ -447,6 +448,9 @@ export default function Streak({ view }) {
     };
   }, []);
 
+  /* Undertow forms from the top down on a phone; a desktop's is just there. */
+  const phone = usePhoneWidth();
+
   const backdrop = backdropById(backdropId);
   /* Nothing behind the glass at all: no canvas, no context, no loop. */
   if (backdrop.off) return null;
@@ -521,7 +525,7 @@ export default function Streak({ view }) {
               swirl={0}
               trail={0.6}
               lean={0}
-              intro
+              intro={phone}
               speed={0.8}
               maxFps={30}
               direction={278}

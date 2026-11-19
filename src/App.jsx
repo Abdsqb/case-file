@@ -29,12 +29,14 @@ const loadReporting = () => import('./views/Reporting');
 const loadCalendar = () => import('./views/Calendar');
 const loadSettings = () => import('./views/Settings');
 const loadPlan = () => import('./views/Plan');
+const loadStudyPlan = () => import('./views/StudyPlan');
 const CaseFiles = lazy(loadCaseFiles);
 const Reporting = lazy(loadReporting);
 const Calendar = lazy(loadCalendar);
 const Settings = lazy(loadSettings);
 const Plan = lazy(loadPlan);
-const PRELOAD = [loadCaseFiles, loadReporting, loadCalendar, loadPlan, loadSettings];
+const StudyPlan = lazy(loadStudyPlan);
+const PRELOAD = [loadCaseFiles, loadReporting, loadCalendar, loadStudyPlan, loadPlan, loadSettings];
 
 const CLOCK_MS = 30000;         // drives overdue arithmetic only; nothing renders seconds
 
@@ -94,7 +96,7 @@ const BUILD_MS = 2300;
  * is a screen that appears instantly, never a blank one.
  */
 /* The screens with a details rail down their left side (ui/Rail.jsx). */
-const RAIL_VIEWS = new Set(['dashboard', 'cases']);
+const RAIL_VIEWS = new Set(['dashboard', 'cases', 'studyplan']);
 
 function BuildStage({ stamp, children }) {
   const [building, setBuilding] = useState(true);
@@ -241,6 +243,9 @@ export default function App() {
     // course's quizzes, exams, readings and deadlines onto its classes.
     // onSelectCase is what lets an entry on the month open its case file.
     body = <Calendar now={now} projects={projects} onSelectCase={openCase} />;
+  } else if (view === 'studyplan') {
+    // The degree: terms, courses, requirements and GPA (views/StudyPlan.jsx).
+    body = <StudyPlan now={now} />;
   } else if (view === 'plan') {
     // Boards of steps, left to right on a canvas (views/Plan.jsx).
     body = <Plan />;

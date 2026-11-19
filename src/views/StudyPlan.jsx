@@ -1,5 +1,5 @@
 /**
- * StudyPlan — Calendar's third tab: the degree, term by term.
+ * StudyPlan — the Study plan screen: the degree, term by term.
  *
  * The plan is one JSON document kept in the database (it holds grades, and
  * the bundle is public). It is typed in here: Edit turns the cards into forms,
@@ -7,18 +7,20 @@
  * worked out from the courses rather than typed — credits, the GPA, and which
  * requirements are met.
  *
- *   Degree progress — credits against the total, the GPA, when it ends
- *   Requirements    — groups of requirements, met by the courses marked as
- *                     counting toward them (or ticked "met" another way)
- *   Terms           — every semester side by side, past ones with grades
- *   Older plans may also carry registration, backups and open questions;
- *   those are shown when present.
+ * Laid out as the rest of the app is: the degree measured down the rail on
+ * the left (what it is, its credits, its GPA, each group of requirements),
+ * and one list at a time in the middle, picked by the tabs above it —
+ *   Terms         — every semester as a group of course rows
+ *   Requirements  — every requirement, and the course that meets it
+ *   Next term     — registering, the week and the backups, when present
+ *   To confirm    — the open questions, when present
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Card, CardHead, EmptyState, IconMenu, MenuButton, Meter, Metric, Pill, PillSelect, Segmented } from '../ui/primitives.jsx'
 import { clearStudyPlan, getStudyPlan, saveStudyPlan } from '../lib/api.js'
+import { Rail, RailProp, RailSection, WithRail } from '../ui/Rail.jsx'
 
 function cx(...parts) {
   return parts.filter(Boolean).join(' ')
@@ -267,6 +269,8 @@ export default function StudyPlan({ now }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState('saved')
   const [error, setError] = useState(null)
+  const [tab, setTab] = useState(readTab)
+  const [focusGroup, setFocusGroup] = useState(null)
 
   const planRef = useRef(plan)
   const timer = useRef(null)
@@ -400,29 +404,406 @@ export default function StudyPlan({ now }) {
     </span>
   )
 
+  const nextTerm = plan.terms.find((t) => t.status === 'planned')
+  const hasNext = !!(plan.registration?.items?.length || plan.backups?.length || nextTerm?.courses.some((c) => c.meets?.length))
+  const openLeft = (plan.openItems || []).filter((it) => !it.done).length
+  const tabs = [
+    { value: 'terms', label: 'Terms', count: plan.terms.length },
+    { value: 'reqs', label: 'Requirements', count: tally.all ? `${tally.met}/${tally.all}` : null },
+    hasNext ? { value: 'next', label: nextTerm?.label || plan.registration?.term || 'Next term' } : null,
+    plan.openItems?.length ? { value: 'confirm', label: 'To confirm', count: openLeft } : null,
+  ].filter(Boolean)
+  const cur = tabs.some((x) => x.value === tab) ? tab : 'terms'
+  const pickTab = (v) => {
+    setTab(v)
+    try { window.localStorage.setItem(TAB_KEY, v) } catch { /* the tab is a nicety */ }
+  }
+  const rail = (
+    <PlanRail
+      plan={plan}
+      tally={tally}
+      onGroup={(id) => {
+        setFocusGroup(id)
+        if (!editing) pickTab('reqs')
+      }}
+    />
+  )
+  const errorLine = error ? <p className="sp-error">{error}</p> : null
+
   if (editing) {
     return (
-      <div className="bento studyplan is-editing">
-        <Progress plan={plan} tally={tally} right={right} error={error} />
-        <DegreeEditor plan={plan} edit={edit} />
-        <RequirementsEditor plan={plan} tally={tally} edit={edit} />
-        <TermsEditor plan={plan} tally={tally} edit={edit} nowTs={nowTs} />
-      </div>
+      <WithRail rail={rail}>
+        <PlanBar right={right} />
+        {errorLine}
+        <div className="bento studyplan is-editing">
+          <DegreeEditor plan={plan} edit={edit} />
+          <RequirementsEditor plan={plan} tally={tally} edit={edit} />
+          <TermsEditor plan={plan} tally={tally} edit={edit} nowTs={nowTs} />
+        </div>
+      </WithRail>
     )
   }
 
-  const nextTerm = plan.terms.find((t) => t.status === 'planned')
-  const hasNext = !!(plan.registration?.items?.length || plan.backups?.length || nextTerm?.courses.some((c) => c.meets?.length))
   return (
-    <div className="bento studyplan">
-      <Progress plan={plan} tally={tally} right={right} error={error} />
-      <Requirements plan={plan} tally={tally} onEdit={() => setEditing(true)} />
-      <Terms plan={plan} tally={tally} onEdit={() => setEditing(true)} />
-      <GpaCard plan={plan} className={hasNext ? 'span-5' : 'span-12'} />
-      <NextTerm plan={plan} term={nextTerm} nowTs={nowTs} />
-      {plan.openItems?.length ? (
-        <OpenItems items={plan.openItems} rules={plan.rules || []} onToggle={toggleItem} wide />
+    <WithRail rail={rail}>
+      <PlanBar tabs={tabs} tab={cur} onTab={pickTab} right={right} />
+      {errorLine}
+      {cur === 'terms' ? <TermList plan={plan} tally={tally} onEdit={() => setEditing(true)} /> : null}
+      {cur === 'reqs' ? <ReqList plan={plan} tally={tally} focus={focusGroup} onEdit={() => setEditing(true)} /> : null}
+      {cur === 'next' ? (
+        <div className="bento">
+          <NextTerm plan={plan} term={nextTerm} nowTs={nowTs} wide />
+        </div>
       ) : null}
+      {cur === 'confirm' ? (
+        <div className="bento">
+          <OpenItems items={plan.openItems} rules={plan.rules || []} onToggle={toggleItem} wide />
+        </div>
+      ) : null}
+    </WithRail>
+  )
+}
+
+/* --------------------------------------------------------------------------
+   the screen's layout, as the rest of the app has it: the degree measured
+   down the rail on the left, and one list at a time in the middle
+   -------------------------------------------------------------------------- */
+
+const TAB_KEY = 'casefile.studyTab'
+const readTab = () => {
+  try { return window.localStorage.getItem(TAB_KEY) || 'terms' } catch { return 'terms' }
+}
+
+/* The tabs above the list, and the plan's own actions at the right. */
+function PlanBar({ tabs, tab, onTab, right }) {
+  return (
+    <div className="spbar">
+      {tabs ? (
+        <nav className="spbar__tabs" aria-label="Study plan views">
+          {tabs.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              className={cx('spbar__tab', t.value === tab && 'is-on')}
+              aria-current={t.value === tab ? 'true' : undefined}
+              onClick={() => onTab(t.value)}
+            >
+              {t.label}
+              {t.count != null ? <span className="spbar__count">{t.count}</span> : null}
+            </button>
+          ))}
+        </nav>
+      ) : <span className="spbar__title">Editing the plan</span>}
+      {right}
+    </div>
+  )
+}
+
+/* The degree, measured: what it is, its credits, its GPA and how far each
+   group of requirements has come. */
+function PlanRail({ plan, tally, onGroup }) {
+  const s = plan.student || {}
+  const required = requiredOf(plan)
+  const { credits } = tally
+  const secured = credits.done + credits.now
+  const spare = tally.total - required
+  const groups = plan.requirements.filter((g) => g.items.length || Number(g.credits))
+
+  return (
+    <Rail label="Degree details">
+      <RailSection title="Degree">
+        {s.program ? <RailProp label="Program" title={s.program}><span className="truncate">{s.program}</span></RailProp> : null}
+        {s.home ? <RailProp label="School" title={s.home}><span className="truncate">{s.home}</span></RailProp> : null}
+        {s.minor ? <RailProp label="Minor" title={s.minor}><span className="truncate">{s.minor}</span></RailProp> : null}
+        {s.standing ? <RailProp label="Standing">{s.standing}</RailProp> : null}
+        {s.graduation ? <RailProp label="Graduating">{s.graduation}</RailProp> : null}
+        {s.location ? <p className="rail__note sp-railnote">{s.location}</p> : null}
+      </RailSection>
+
+      <RailSection title="Credits">
+        <div className="rail__progress">
+          <span
+            className="sp-minring"
+            role="img"
+            aria-label={`${secured} of ${required} credits: ${credits.done} earned, ${credits.now} this term, ${credits.planned} planned`}
+          >
+            <Ring parts={[['done', credits.done], ['now', credits.now], ['planned', credits.planned]]} total={required} size={44} stroke={5} />
+          </span>
+          <div className="rail__progtext">
+            <span className="rail__big">{secured}<span className="sp-of"> / {required}</span></span>
+            <span className="rail__sub">earned and under way</span>
+          </div>
+        </div>
+        <div className="sp-railprops">
+          <RailProp label={<><i className="sp-key is-done" />Earned</>}>{credits.done}</RailProp>
+          <RailProp label={<><i className="sp-key is-now" />This term</>}>{credits.now}</RailProp>
+          <RailProp label={<><i className="sp-key is-planned" />Planned</>}>{credits.planned}</RailProp>
+          <RailProp label={spare >= 0 ? 'To spare' : 'Short'} tone={spare < 0 ? 'late' : undefined}>{Math.abs(spare)}</RailProp>
+        </div>
+      </RailSection>
+
+      <RailGpa plan={plan} />
+
+      {groups.length ? (
+        <RailSection title={`Requirements · ${tally.met} of ${tally.all} met`}>
+          {groups.map((g) => {
+            const gs = tally.groups.get(g.id)
+            const byCredits = !g.items.length
+            const have = byCredits ? gs.cr.done + gs.cr.now : gs.met
+            const need = byCredits ? gs.target : gs.all
+            return (
+              <button key={g.id} type="button" className="sp-railreq" onClick={() => onGroup(g.id)}>
+                <span className="sp-railreq__top">
+                  <span className="sp-railreq__name truncate">{g.group || 'Untitled'}</span>
+                  <span className="sp-railreq__n">{have}<span className="sp-of">/{need}{byCredits ? ' cr' : ''}</span></span>
+                </span>
+                <Tiles units={unitsOf(g, gs, tally)} />
+              </button>
+            )
+          })}
+        </RailSection>
+      ) : null}
+    </Rail>
+  )
+}
+
+/* The GPA in the rail: the overall figure, and a small line of it term by
+   term with each term's own GPA dashed under it. Hover reads a term out. */
+function RailGpa({ plan }) {
+  const series = useMemo(() => gpaSeries(plan), [plan])
+  const boxRef = useRef(null)
+  const W = useWidth(boxRef)
+  const [hover, setHover] = useState(null)
+  const last = series[series.length - 1]
+  const prev = series[series.length - 2]
+  if (!last) {
+    return (
+      <RailSection title="GPA">
+        <p className="rail__note">Nothing graded yet. Mark a term done and give its courses grades.</p>
+      </RailSection>
+    )
+  }
+  const H = 64
+  const lo = Math.min(2, Math.floor(Math.min(...series.map((p) => p.term)) * 2) / 2)
+  const hi = 4
+  const x = (i) => 4 + (series.length > 1 ? (i / (series.length - 1)) * (W - 8) : (W - 8) / 2)
+  const y = (v) => 4 + (1 - (v - lo) / (hi - lo)) * (H - 8)
+  const path = (key) => series.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join(' ')
+  const shown = hover != null ? series[hover] : last
+  const pick = (clientX) => {
+    const box = boxRef.current?.getBoundingClientRect()
+    if (!box) return
+    const f = (clientX - box.left) / box.width
+    setHover(Math.max(0, Math.min(series.length - 1, Math.round(f * (series.length - 1)))))
+  }
+
+  return (
+    <RailSection title="GPA">
+      <div className="sp-railgpa">
+        <span className="rail__big">{last.cum.toFixed(3)}</span>
+        {prev ? (
+          <span className={cx('sp-railgpa__delta', last.cum >= prev.cum ? 'is-up' : 'is-down')}>
+            {last.cum >= prev.cum ? '▲' : '▼'} {Math.abs(last.cum - prev.cum).toFixed(3)}
+          </span>
+        ) : null}
+      </div>
+      <div className="railbars__read sp-railgpa__read">
+        <span className="railbars__when">{shown.label}</span>
+        <span className="railbars__total">term {shown.term.toFixed(2)} · overall {shown.cum.toFixed(2)}</span>
+      </div>
+      <div
+        className="sp-railgpa__plot"
+        ref={boxRef}
+        onMouseMove={(e) => pick(e.clientX)}
+        onMouseLeave={() => setHover(null)}
+        onClick={(e) => pick(e.clientX)}
+        role="img"
+        aria-label={series.map((p) => `${p.label}: term ${p.term.toFixed(2)}, overall ${p.cum.toFixed(2)}`).join('; ')}
+      >
+        {W ? (
+          <svg width={W} height={H} aria-hidden="true">
+            <path className="sp-gpa__line is-term" d={path('term')} />
+            <path className="sp-gpa__line is-cum" d={path('cum')} />
+            {series.map((p, i) => (
+              <circle key={p.id} className={cx('sp-railgpa__dot', i === (hover ?? series.length - 1) && 'is-hot')} cx={x(i)} cy={y(p.cum)} r={i === (hover ?? series.length - 1) ? 3.5 : 2.5} />
+            ))}
+          </svg>
+        ) : null}
+      </div>
+    </RailSection>
+  )
+}
+
+/* A term's GPA, from its graded courses. */
+function termGpa(t) {
+  let pts = 0
+  let graded = 0
+  for (const c of t.courses) {
+    if (c.noCredit || !(c.grade in POINTS)) continue
+    pts += POINTS[c.grade] * (Number(c.cr) || 0)
+    graded += Number(c.cr) || 0
+  }
+  return t.status === 'done' && graded ? pts / graded : null
+}
+
+/* A course's or a term's status, as Linear rings an issue: a tick in a
+   filled circle when done, half full when under way, dashed while planned. */
+function StatusIcon({ phase }) {
+  if (phase === 'done') {
+    return (
+      <svg className="sp-st is-done" viewBox="0 0 14 14" aria-hidden="true">
+        <circle cx="7" cy="7" r="6" />
+        <path d="M4.3 7.2 6.2 9l3.5-3.8" />
+      </svg>
+    )
+  }
+  if (phase === 'now') {
+    return (
+      <svg className="sp-st is-now" viewBox="0 0 14 14" aria-hidden="true">
+        <circle cx="7" cy="7" r="5.5" />
+        <path d="M7 3.5a3.5 3.5 0 0 1 0 7z" />
+      </svg>
+    )
+  }
+  return (
+    <svg className="sp-st is-planned" viewBox="0 0 14 14" aria-hidden="true">
+      <circle cx="7" cy="7" r="5.5" />
+    </svg>
+  )
+}
+
+/* Every term as a group of rows, Linear's grouped list: a header line with
+   its credits and where the degree stands after it, then one course a row.
+   Finished terms start folded to their header. */
+function TermList({ plan, tally, onEdit }) {
+  const required = requiredOf(plan)
+  const names = useMemo(() => reqNames(plan), [plan])
+  const rows = useMemo(() => {
+    let running = 0
+    return plan.terms.map((t) => {
+      const cr = tally.termCr.get(t.id) || 0
+      running += cr
+      return { ...t, cr, running, gpa: termGpa(t) }
+    })
+  }, [plan.terms, tally])
+  const [open, setOpen] = useState(() => new Set(plan.terms.filter((t) => t.status !== 'done').map((t) => t.id)))
+  const toggle = (id) => setOpen((s) => {
+    const n = new Set(s)
+    if (n.has(id)) n.delete(id)
+    else n.add(id)
+    return n
+  })
+
+  if (!rows.length) {
+    return <EmptyState lead="No terms yet." hint="Add each semester and the courses in it." action={<Pill onClick={onEdit}>Edit plan</Pill>} />
+  }
+
+  return (
+    <div className="splist">
+      {rows.map((t) => {
+        const ph = phaseOf(t)
+        const isOpen = open.has(t.id)
+        return (
+          <section key={t.id} className={cx('splist__group', `is-${ph}`, isOpen && 'is-open')}>
+            <button type="button" className="splist__head" aria-expanded={isOpen} onClick={() => toggle(t.id)}>
+              <ChevronDown className="splist__chev" size={14} strokeWidth={1.75} aria-hidden="true" />
+              <StatusIcon phase={ph} />
+              <span className="splist__label">{t.label || 'Untitled term'}</span>
+              {ph === 'now' ? <span className="splist__now">Now</span> : null}
+              <span className="splist__meta">
+                {[t.campus, `${t.courses.length} ${t.courses.length === 1 ? 'course' : 'courses'}`, `${t.cr} cr`].filter(Boolean).join(' · ')}
+              </span>
+              {t.gpa != null ? <span className={cx('splist__gpa', gradeBandOfGpa(t.gpa))}>{t.gpa.toFixed(2)}</span> : null}
+              <span className="splist__run" title={`${t.running} of ${required} credits after ${t.label}`}>
+                <span className="splist__runbar"><i style={{ width: `${Math.min(100, (t.running / required) * 100)}%` }} /></span>
+                <span className="splist__runn">{t.running}<span className="sp-of">/{required}</span></span>
+              </span>
+            </button>
+            {isOpen ? (
+              <ul className="splist__rows">
+                {t.courses.map((c) => {
+                  const counts = c.reqs.map((id) => names.get(id)).filter(Boolean)
+                  const tags = counts.length ? counts : c.counts ? [c.counts] : []
+                  return (
+                    <li
+                      key={c.id}
+                      className={cx('splist__row', c.tbd && 'is-tbd', !creditOf(c) && 'is-void')}
+                      title={[c.code, `${c.cr} cr`, tags.length ? `counts toward ${tags.join(', ')}` : null].filter(Boolean).join(' · ')}
+                    >
+                      <StatusIcon phase={ph} />
+                      <span className="splist__title truncate">{c.title || c.code || 'Untitled course'}</span>
+                      {c.code ? <span className="splist__code">{c.code}</span> : null}
+                      <span className="splist__tags">
+                        {tags.slice(0, 2).map((name) => <span key={name} className="splist__tag truncate">{name}</span>)}
+                        {tags.length > 2 ? <span className="splist__tag">+{tags.length - 2}</span> : null}
+                      </span>
+                      {c.grade ? <span className={cx('splist__grade', gradeBand(c.grade))}>{c.grade}</span> : <span className="splist__grade is-none" />}
+                      <span className="splist__cr">{c.cr} cr</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : null}
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
+const gradeBandOfGpa = (g) => (g >= 3.5 ? 'is-a' : g < 2.5 ? 'is-c' : null)
+
+/* Every requirement, grouped: a header line with the group's blocks and
+   count, then one requirement a row with what meets it. */
+function ReqList({ plan, tally, focus, onEdit }) {
+  const groups = plan.requirements.filter((g) => g.items.length || Number(g.credits))
+  const refs = useRef(new Map())
+  useEffect(() => {
+    if (!focus) return
+    refs.current.get(focus)?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [focus])
+
+  if (!groups.length) {
+    return <EmptyState lead="No requirements yet." hint="Add your core, major and minor requirements, then mark which courses count toward each." action={<Pill onClick={onEdit}>Edit plan</Pill>} />
+  }
+
+  return (
+    <div className="splist">
+      {groups.map((g) => {
+        const gs = tally.groups.get(g.id)
+        const byCredits = !g.items.length
+        return (
+          <section key={g.id} className={cx('splist__group is-open', focus === g.id && 'is-focus')} ref={(el) => { if (el) refs.current.set(g.id, el) }}>
+            <div className="splist__head is-static">
+              <span className="splist__label">{g.group || 'Untitled'}</span>
+              <span className="splist__meta">
+                {byCredits ? `${gs.cr.done + gs.cr.now} of ${gs.target} credits` : `${gs.met} of ${gs.all} met`}
+              </span>
+              <Tiles units={unitsOf(g, gs, tally)} />
+            </div>
+            <ul className="splist__rows">
+              {g.items.map((it) => {
+                const st = tally.items.get(it.id)
+                const by = [byText(st.courses), it.met && !st.courses.length && !it.note ? 'met' : '', it.note].filter(Boolean).join(' — ')
+                const phase = st.status === 'done' ? 'done' : st.status === 'progress' ? 'now' : st.status === 'planned' ? 'planned' : 'todo'
+                return (
+                  <li key={it.id} className={cx('splist__row', `is-${st.status}`)} title={STATUS_LABEL[st.status]}>
+                    {phase === 'todo' ? <svg className="sp-st is-todo" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" /></svg> : <StatusIcon phase={phase} />}
+                    <span className="splist__title truncate">{it.name || 'untitled'}</span>
+                    {st.need > 1 ? <span className="splist__code">{st.have}/{st.need}</span> : null}
+                    <span className="splist__by truncate">{by || STATUS_LABEL[st.status]}</span>
+                  </li>
+                )
+              })}
+              {byCredits ? (
+                <li className="splist__row is-credits">
+                  <span className="splist__by">{gs.cr.done} done · {gs.cr.now} this term · {gs.cr.planned} planned</span>
+                </li>
+              ) : null}
+            </ul>
+          </section>
+        )
+      })}
     </div>
   )
 }
@@ -463,52 +844,6 @@ function Ring({ parts, total, size = 148, stroke = 9 }) {
         ))}
       </g>
     </svg>
-  )
-}
-
-function Progress({ plan, tally, right, error }) {
-  const s = plan.student || {}
-  const required = requiredOf(plan)
-  const { credits } = tally
-  const secured = credits.done + credits.now
-  const spare = tally.total - required
-
-  return (
-    <Card className="span-4 sp-progress" aria-label="Degree progress">
-      <CardHead
-        title="Degree progress"
-        subtitle={[s.program, s.home].filter(Boolean).join(' · ') || 'Your degree'}
-        right={right}
-      />
-      <div className="card__body">
-        <div className="sp-ring">
-          <div className="sp-ring__dial" role="img" aria-label={`${secured} of ${required} credits: ${credits.done} earned, ${credits.now} this term, ${credits.planned} planned`}>
-            <Ring parts={[['done', credits.done], ['now', credits.now], ['planned', credits.planned]]} total={required} />
-            <div className="sp-ring__center">
-              <span className="sp-ring__value">{secured}</span>
-              <span className="sp-ring__unit">of {required} cr</span>
-            </div>
-          </div>
-          <dl className="sp-ring__legend">
-            <div><dt><i className="sp-key is-done" />earned</dt><dd>{credits.done}</dd></div>
-            <div><dt><i className="sp-key is-now" />this term</dt><dd>{credits.now}</dd></div>
-            <div><dt><i className="sp-key is-planned" />planned</dt><dd>{credits.planned}</dd></div>
-            <div className="sp-ring__spare">
-              <dt>{spare >= 0 ? 'to spare' : 'short'}</dt>
-              <dd className={spare < 0 ? 'is-short' : undefined}>{Math.abs(spare)}</dd>
-            </div>
-          </dl>
-        </div>
-
-        <dl className="sp-facts">
-          {s.graduation ? (<><dt>graduating</dt><dd>{s.graduation}</dd></>) : null}
-          {s.standing ? (<><dt>standing</dt><dd>{s.standing}</dd></>) : null}
-          {s.minor ? (<><dt>minor</dt><dd>{s.minor}</dd></>) : null}
-          {s.location ? (<><dt>now</dt><dd>{s.location}</dd></>) : null}
-        </dl>
-        {error ? <p className="sp-error">{error}</p> : null}
-      </div>
-    </Card>
   )
 }
 
@@ -554,101 +889,6 @@ function useWidth(ref) {
     return () => ro.disconnect()
   }, [ref])
   return w
-}
-
-function GpaCard({ plan, className }) {
-  const series = useMemo(() => gpaSeries(plan), [plan])
-  const boxRef = useRef(null)
-  const W = useWidth(boxRef)
-  const [hover, setHover] = useState(null)
-
-  const last = series[series.length - 1]
-  const prev = series[series.length - 2]
-  const H = 236
-  const pad = { l: 30, r: 44, t: 12, b: 24 }
-  const lo = series.length ? Math.min(2, Math.floor(Math.min(...series.map((p) => p.term)) * 2) / 2) : 2
-  const hi = 4
-  const x = (i) => pad.l + (series.length > 1 ? (i / (series.length - 1)) * (W - pad.l - pad.r) : (W - pad.l - pad.r) / 2)
-  const y = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b)
-  const ticks = []
-  for (let v = lo; v <= hi + 1e-9; v += 0.5) ticks.push(v)
-  const path = (key) => series.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join(' ')
-  const h = hover != null ? series[hover] : null
-
-  return (
-    <Card className={className} aria-label="GPA by term">
-      <CardHead
-        title="GPA"
-        subtitle={last ? `${series.length} graded terms` : 'No graded terms yet'}
-        right={
-          series.length > 1 ? (
-            <span className="sp-legend sp-legend--keep micro">
-              <span><i className="sp-key is-cum" />overall</span>
-              <span><i className="sp-key is-term" />each term</span>
-            </span>
-          ) : null
-        }
-      />
-      <div className="card__body">
-        {!last ? (
-          <EmptyState lead="Nothing graded yet." hint="Mark a term Done and give its courses grades." />
-        ) : (
-          <>
-            <div className="sp-gpa__head">
-              <span className="sp-gpa__value">{last.cum.toFixed(3)}</span>
-              <span className="sp-gpa__sub micro">
-                overall
-                {prev ? <> · {last.cum >= prev.cum ? '▲' : '▼'} {Math.abs(last.cum - prev.cum).toFixed(3)} since {prev.label}</> : null}
-              </span>
-            </div>
-            <div className="sp-gpa__chart" ref={boxRef} onMouseLeave={() => setHover(null)}>
-              {W ? (
-                <svg width={W} height={H} role="img" aria-label={series.map((p) => `${p.label}: term ${p.term.toFixed(2)}, overall ${p.cum.toFixed(2)}`).join('; ')}>
-                  {ticks.map((v) => (
-                    <g key={v} className="sp-gpa__grid">
-                      <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} />
-                      <text x={pad.l - 8} y={y(v)} dy="0.32em" textAnchor="end">{v.toFixed(1)}</text>
-                    </g>
-                  ))}
-                  {h ? <line className="sp-gpa__cross" x1={x(hover)} x2={x(hover)} y1={pad.t} y2={H - pad.b} /> : null}
-                  <path className="sp-gpa__line is-term" d={path('term')} />
-                  <path className="sp-gpa__line is-cum" d={path('cum')} />
-                  {series.map((p, i) => (
-                    <g key={p.id}>
-                      <circle className="sp-gpa__dot is-term" cx={x(i)} cy={y(p.term)} r={hover === i ? 5 : 4} />
-                      <circle className="sp-gpa__dot is-cum" cx={x(i)} cy={y(p.cum)} r={hover === i ? 5 : 4} />
-                      <text className="sp-gpa__x" x={x(i)} y={H - 6} textAnchor="middle">{p.short}</text>
-                      <rect
-                        className="sp-gpa__hit"
-                        x={x(i) - (W - pad.l - pad.r) / Math.max(1, series.length - 1) / 2}
-                        y={0}
-                        width={(W - pad.l - pad.r) / Math.max(1, series.length - 1)}
-                        height={H}
-                        onMouseEnter={() => setHover(i)}
-                        onClick={() => setHover(i)}
-                      />
-                    </g>
-                  ))}
-                  <text className="sp-gpa__end" x={x(series.length - 1) + 10} y={y(last.cum)} dy="0.32em">{last.cum.toFixed(2)}</text>
-                </svg>
-              ) : null}
-              {h ? (
-                <div
-                  className={cx('sp-gpa__tip', hover > series.length / 2 && 'is-left')}
-                  style={{ left: x(hover), top: Math.min(y(h.term), y(h.cum)) }}
-                >
-                  <span className="sp-gpa__tip-title">{h.label}</span>
-                  <span><i className="sp-key is-term" />term <b>{h.term.toFixed(2)}</b></span>
-                  <span><i className="sp-key is-cum" />overall <b>{h.cum.toFixed(3)}</b></span>
-                  <span className="dim">{h.cr} graded credits</span>
-                </div>
-              ) : null}
-            </div>
-          </>
-        )}
-      </div>
-    </Card>
-  )
 }
 
 /* --------------------------------------------------------------------------
@@ -698,101 +938,6 @@ function Tiles({ units }) {
   )
 }
 
-/* One line per group, and under it only what is still left to do; the full
-   list, with which course meets each requirement, opens on a click. */
-function Requirements({ plan, tally, onEdit }) {
-  const [open, setOpen] = useState(() => new Set())
-  const toggle = (id) => setOpen((s) => {
-    const n = new Set(s)
-    if (n.has(id)) n.delete(id)
-    else n.add(id)
-    return n
-  })
-  const groups = plan.requirements.filter((g) => g.items.length || Number(g.credits))
-
-  return (
-    <Card className="span-8" aria-label="Requirements">
-      <CardHead
-        title="Requirements"
-        subtitle={tally.all ? `${tally.met} of ${tally.all} met` : 'None yet'}
-        right={
-          <span className="sp-legend micro">
-            <span><Mark status="done" /> met</span>
-            <span><Mark status="progress" /> now</span>
-            <span><Mark status="planned" /> planned</span>
-          </span>
-        }
-      />
-      <div className="card__body">
-        {!groups.length ? (
-          <EmptyState lead="No requirements yet." hint="Add your core, major and minor requirements, then mark which courses count toward each." action={<Pill onClick={onEdit}>Edit plan</Pill>} />
-        ) : (
-          <div className="sp-groups">
-            {groups.map((g) => {
-              const gs = tally.groups.get(g.id)
-              const isOpen = open.has(g.id)
-              const byCredits = !g.items.length
-              const left = g.items.filter((it) => tally.items.get(it.id).status !== 'done')
-
-              return (
-                <section key={g.id} className={cx('sp-group', isOpen && 'is-open')}>
-                  <button type="button" className="sp-group__head" aria-expanded={isOpen} onClick={() => toggle(g.id)}>
-                    <span className="sp-group__name">{g.group || 'Untitled'}</span>
-                    <Tiles units={unitsOf(g, gs, tally)} />
-                    <span className="sp-group__count">
-                      {byCredits ? `${gs.cr.done + gs.cr.now} / ${gs.target} cr` : `${gs.met} / ${gs.all}`}
-                    </span>
-                    <ChevronDown className="sp-group__chev" size={14} strokeWidth={1.6} aria-hidden="true" />
-                  </button>
-
-                  {isOpen ? (
-                    <ul className="sp-reqs__list sp-group__detail">
-                      {g.items.map((it) => {
-                        const st = tally.items.get(it.id)
-                        const by = [byText(st.courses), it.met && !st.courses.length && !it.note ? 'met' : '', it.note].filter(Boolean).join(' — ')
-                        return (
-                          <li key={it.id} className={cx('sp-req', `is-${st.status}`)} title={STATUS_LABEL[st.status]}>
-                            <Mark status={st.status} />
-                            <span className="sp-req__text">
-                              <span className="sp-req__name">
-                                {it.name || 'untitled'}
-                                {st.need > 1 ? <span className="sp-req__count"> {st.have}/{st.need}</span> : null}
-                              </span>
-                              {by ? <span className="sp-req__by">{by}</span> : null}
-                            </span>
-                          </li>
-                        )
-                      })}
-                      {byCredits ? (
-                        <li className="sp-req__by">{gs.cr.done} done · {gs.cr.now} now · {gs.cr.planned} planned</li>
-                      ) : null}
-                    </ul>
-                  ) : byCredits ? null : left.length ? (
-                    <ul className="sp-left">
-                      {left.map((it) => {
-                        const st = tally.items.get(it.id)
-                        return (
-                          <li key={it.id} className={cx('sp-left__item', `is-${st.status}`)} title={byText(st.courses) || STATUS_LABEL[st.status]}>
-                            <Mark status={st.status} />
-                            {it.name || 'untitled'}
-                            {st.need > 1 ? <span className="sp-left__n">{st.have}/{st.need}</span> : null}
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  ) : (
-                    <p className="sp-left__done micro">All met</p>
-                  )}
-                </section>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </Card>
-  )
-}
-
 /* --------------------------------------------------------------------------
    every term, side by side
    -------------------------------------------------------------------------- */
@@ -815,89 +960,6 @@ function reqNames(plan) {
     }
   }
   return names
-}
-
-function Terms({ plan, tally, onEdit }) {
-  const required = requiredOf(plan)
-  const names = useMemo(() => reqNames(plan), [plan])
-  const rows = useMemo(() => {
-    let running = 0
-    return plan.terms.map((t) => {
-      const cr = tally.termCr.get(t.id) || 0
-      running += cr
-      let pts = 0
-      let graded = 0
-      for (const c of t.courses) {
-        if (c.noCredit || !(c.grade in POINTS)) continue
-        pts += POINTS[c.grade] * (Number(c.cr) || 0)
-        graded += Number(c.cr) || 0
-      }
-      return { ...t, cr, running, gpa: t.status === 'done' && graded ? pts / graded : null }
-    })
-  }, [plan.terms, tally])
-
-  const railRef = useRef(null)
-  /* The current term in view on a narrow screen, where the row scrolls. */
-  useEffect(() => {
-    const rail = railRef.current
-    const cur = rail?.querySelector('.sp-term.is-current')
-    if (!rail || !cur || rail.scrollWidth <= rail.clientWidth) return
-    rail.scrollLeft = cur.offsetLeft - 8
-  }, [rows])
-
-  return (
-    <Card className="span-12" aria-label="Terms">
-      <CardHead
-        title="Terms"
-        subtitle={rows.length ? `${rows.length} semesters · ${rows[rows.length - 1].running} credits by the end` : 'None yet'}
-      />
-      <div className="card__body">
-        {!rows.length ? (
-          <EmptyState lead="No terms yet." hint="Add each semester and the courses in it." action={<Pill onClick={onEdit}>Edit plan</Pill>} />
-        ) : (
-          <div className="sp-terms" ref={railRef}>
-            {rows.map((t) => (
-              <section key={t.id} className={cx('sp-term', `is-${t.status}`)} aria-label={t.label}>
-                <div className="sp-term__rail" aria-hidden="true"><span className="sp-term__node" /></div>
-                <header className="sp-term__head">
-                  <span className="sp-term__label">{t.label || 'Untitled term'}</span>
-                  {t.status === 'current' ? <span className="sp-term__now">now</span> : null}
-                </header>
-                <div className="sp-term__meta">
-                  {[t.campus?.toLowerCase(), `${t.cr} cr`, t.gpa != null ? `gpa ${t.gpa.toFixed(2)}` : null].filter(Boolean).join(' · ')}
-                </div>
-                <ul className="sp-term__courses">
-                  {/* The name and the grade (or credits, ahead of a grade);
-                      the code and what it counts toward are in the tooltip. */}
-                  {t.courses.map((c) => {
-                    const counts = c.reqs.map((id) => names.get(id)).filter(Boolean).join(', ') || c.counts
-                    return (
-                      <li
-                        key={c.id}
-                        className={cx('sp-course', c.tbd && 'is-tbd', !creditOf(c) && 'is-void')}
-                        title={[c.code, `${c.cr} cr`, counts && `counts toward ${counts}`].filter(Boolean).join(' · ')}
-                      >
-                        <span className="sp-course__title">{c.title || c.code || 'Untitled course'}</span>
-                        {c.grade ? (
-                          <span className={cx('sp-course__grade', gradeBand(c.grade))}>{c.grade}</span>
-                        ) : (
-                          <span className="sp-course__cr">{c.cr}</span>
-                        )}
-                      </li>
-                    )
-                  })}
-                </ul>
-                <footer className="sp-term__foot">
-                  <span className="micro">{t.running}<span className="dim"> / {required}</span></span>
-                  <Meter value={Math.min(1, t.running / required)} label={`${t.running} of ${required} credits after ${t.label}`} />
-                </footer>
-              </section>
-            ))}
-          </div>
-        )}
-      </div>
-    </Card>
-  )
 }
 
 /* --------------------------------------------------------------------------

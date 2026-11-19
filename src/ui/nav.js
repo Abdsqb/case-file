@@ -5,7 +5,7 @@
  * and these icons, so a screen added here turns up in all three.
  */
 
-import { CalendarDays, ChartColumn, Folder, LayoutGrid, ListTodo, NotebookPen, Route, SlidersHorizontal } from 'lucide-react';
+import { CalendarDays, ChartColumn, Folder, GraduationCap, LayoutGrid, ListTodo, NotebookPen, Route, SlidersHorizontal } from 'lucide-react';
 
 /* The screens, in the order the sidebar lists them. `short` is the phone's
    tab label, where a whole word does not fit. */
@@ -14,6 +14,7 @@ export const NAV = [
   { id: 'cases', label: 'Case files', short: 'Cases' },
   { id: 'reporting', label: 'Reporting', short: 'Reports' },
   { id: 'calendar', label: 'Calendar', short: 'Calendar' },
+  { id: 'studyplan', label: 'Study plan', short: 'Degree' },
   { id: 'plan', label: 'Plan', short: 'Plan' },
   { id: 'settings', label: 'Settings', short: 'Settings' },
 ];
@@ -23,6 +24,7 @@ export const ICONS = {
   cases: Folder,
   reporting: ChartColumn,
   calendar: CalendarDays,
+  studyplan: GraduationCap,
   plan: Route,
   settings: SlidersHorizontal,
   today: ListTodo,

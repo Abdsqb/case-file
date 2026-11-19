@@ -882,14 +882,15 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
 }
 .dash__line { max-width: 44ch; font-size: 13.5px; line-height: 1.55; color: var(--text-muted); }
 
-/* The clerk's read: a quiet block of its own, the accent tick at its edge. */
+/* The clerk's read: no box (the user took the border off), just the accent
+   tick at its edge. */
 .dash__read {
   margin: 0;
   padding: 12px 14px 12px 16px;
   gap: 8px;
-  background: rgba(var(--ink-rgb), 0.02);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: none;
+  border: 0;
+  border-radius: 0;
 }
 .dash__read::before { left: -1px; top: 14px; height: 16px; background: var(--accent); }
 .dash__readtext { max-width: none; font-size: 13.5px; line-height: 1.6; color: var(--text-2); }

@@ -2057,7 +2057,7 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
 .plan-add { text-align: center; }
 .plan-side {
   position: absolute;
-  top: 27px;
+  top: 21px;
   z-index: 3;
   display: grid;
   place-items: center;
@@ -2102,3 +2102,19 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
 }
 .planboard__port.is-moving .planboard__stage { will-change: transform; }
 .planboard__port.is-moving .plan-grid { pointer-events: none; }
+
+/* A card is one box now: the title, growing as it is written in. */
+.plan-card { min-height: 0; }
+.plan-card__head { align-items: flex-start; padding: 8px 6px 8px 12px; border-bottom: 0; }
+.plan-card__n { padding-top: 6px; }
+.plan-card__head .menu-trigger,
+.plan-card__head > :last-child { flex: none; }
+textarea.plan-card__title {
+  display: block;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+textarea.plan-card__title:focus { outline: none; box-shadow: none; }

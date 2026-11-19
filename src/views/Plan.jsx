@@ -10,20 +10,20 @@
  *   data = { chains: [{ id, from: cardId | null, side?: 'left' | 'right',
  *                       cards: [{ id, title, body }] }] }
  *
- * A card is a title and a body written in the same live markdown as the notes
- * pad. The canvas pans (drag the background, or scroll) and zooms (pinch, or
+ * A card is one box of plain text that grows as it is written in (the user
+ * found a title and a separate body one box too many). Older cards may still
+ * carry a `body`: it is shown in the same box under the title, and folded into
+ * the title the first time that card is edited.
+ * The canvas pans (drag the background, or scroll) and zooms (pinch, or
  * Ctrl + scroll, or the buttons); where you left it is remembered per board.
  * Boards are saved whole, a moment after the last change.
  */
 
-import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Card, EmptyState, Field, IconMenu, Pill } from '../ui/primitives.jsx'
 import { SegmentIsland } from '../ui/CaseIslands.jsx'
-import ChatMarkdown from '../ui/ChatMarkdown.jsx'
 import { createBoard, deleteBoard, getBoards, orderBoards, saveBoard } from '../lib/api.js'
-
-const LiveMarkdown = lazy(() => import('../ui/LiveMarkdown.jsx'))
 
 function cx(...parts) {
   return parts.filter(Boolean).join(' ')
@@ -35,7 +35,7 @@ const blankCard = () => ({ id: uid(), title: '', body: '' })
 const CARD_W = 260
 const GAP_X = 72
 const GAP_Y = 52
-const ANCHOR = 27          // px down a card where arrows meet it: its title line
+const ANCHOR = 21          // px down a card where arrows meet it: its first line
 const SAVE_AFTER_MS = 600
 const MIN_K = 0.3
 const MAX_K = 2
@@ -444,8 +444,7 @@ function Board({ board, edit }) {
   const layout = useMemo(() => layoutOf(chains), [chains])
   const change = useCallback((fn) => edit(board.id, fn), [edit, board.id])
 
-  /* Which card's body is open for writing, and which card was just made. */
-  const [writing, setWriting] = useState(null)
+  /* Which card was just made. */
   const [fresh, setFresh] = useState(null)
 
   /* ---- the view: pan and zoom ---------------------------------------- */
@@ -535,7 +534,6 @@ function Board({ board, edit }) {
     const port = portRef.current
     if (!port) return undefined
     const onWheel = (e) => {
-      if (e.target.closest?.('.plan-card.is-writing .cm-scroller')) return
       e.preventDefault()
       const r = port.getBoundingClientRect()
       if (e.ctrlKey || e.metaKey) {
@@ -677,9 +675,13 @@ function Board({ board, edit }) {
     setDoomed(null)
     change((d) => removeCard(d, card.id))
   }
-  const setField = (cardId, key, value) => change((d) => {
+  /* The card's one box: everything typed is its title, and an old body,
+     shown in the box under it, becomes part of it here. */
+  const setText = (cardId, value) => change((d) => {
     const at = findCard(d, cardId)
-    if (at) at.ch.cards[at.i][key] = value
+    if (!at) return
+    at.ch.cards[at.i].title = value
+    at.ch.cards[at.i].body = ''
   })
 
   /* ---- the arrows ------------------------------------------------------ */
@@ -776,12 +778,8 @@ function Board({ board, edit }) {
                 side={ch.side === 'left' ? 'left' : 'right'}
                 first={i === 0}
                 last={i === ch.cards.length - 1}
-                writing={writing === c.id}
                 fresh={fresh === c.id}
-                onTitle={(v) => setField(c.id, 'title', v)}
-                onBody={(v) => setField(c.id, 'body', v)}
-                onWrite={() => setWriting(c.id)}
-                onDoneWriting={() => setWriting((w) => (w === c.id ? null : w))}
+                onText={(v) => setText(c.id, v)}
                 onAddAfter={() => insertAt(ch.id, i + 1)}
                 onBranch={(side) => branch(c.id, side)}
                 onMove={(dir) => move(c.id, dir)}
@@ -848,13 +846,9 @@ function Board({ board, edit }) {
    a card
    -------------------------------------------------------------------------- */
 
-const CardMarkdown = memo(function CardMarkdown({ text }) {
-  return <ChatMarkdown className="chat__text--md plan-card__md" text={text} />
-})
-
 function PlanCard({
-  card, place, number, branchCard, side, first, last, writing, fresh,
-  onTitle, onBody, onWrite, onDoneWriting, onAddAfter, onBranch, onMove, onDelete,
+  card, place, number, branchCard, side, first, last, fresh,
+  onText, onAddAfter, onBranch, onMove, onDelete,
   confirming, onKeep,
 }) {
   /* A new card takes the cursor without the browser scrolling the canvas to
@@ -864,22 +858,31 @@ function PlanCard({
     if (fresh) titleRef.current?.focus({ preventScroll: true })
   }, [fresh])
 
+  const text = card.body?.trim() ? `${card.title}\n${card.body}` : card.title
+  /* As tall as its words: a box that grows, never one that scrolls. */
+  useLayoutEffect(() => {
+    const el = titleRef.current
+    if (!el) return
+    el.style.height = '0px'
+    el.style.height = `${el.scrollHeight}px`
+  }, [text])
+
   return (
     <article
       data-at={card.id}
-      className={cx('plan-card', writing && 'is-writing', branchCard && 'is-branch')}
+      className={cx('plan-card', branchCard && 'is-branch')}
       style={{ gridColumn: place.col + 1, gridRow: place.row + 1 }}
     >
       <header className="plan-card__head">
         {number ? <span className="plan-card__n">{number}</span> : <span className="plan-card__n is-branch" aria-hidden="true">{side === 'left' ? '↲' : '↳'}</span>}
-        <input
+        <textarea
           className="plan-card__title"
-          value={card.title}
+          value={text}
+          rows={1}
           placeholder="Step"
-          aria-label="Step title"
+          aria-label="Step"
           ref={titleRef}
-          onChange={(e) => onTitle(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onWrite() } }}
+          onChange={(e) => onText(e.target.value)}
         />
         <IconMenu
           label="Card options"
@@ -893,24 +896,6 @@ function PlanCard({
           ]}
         />
       </header>
-      <div
-        className="plan-card__body"
-        onClick={writing ? undefined : onWrite}
-        onKeyDown={writing ? undefined : (e) => { if (e.key === 'Enter') onWrite() }}
-        role={writing ? undefined : 'button'}
-        tabIndex={writing ? undefined : 0}
-        aria-label={writing ? undefined : 'Write in this step'}
-      >
-        {writing ? (
-          <Suspense fallback={<div className="plan-card__hint">…</div>}>
-            <LiveMarkdown className="plan-card__editor" value={card.body} onChange={onBody} onBlur={onDoneWriting} autoFocus />
-          </Suspense>
-        ) : card.body.trim() ? (
-          <CardMarkdown text={card.body} />
-        ) : (
-          <span className="plan-card__hint">Write…</span>
-        )}
-      </div>
       <button
         type="button"
         className="plan-side is-left"

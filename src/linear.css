@@ -1727,6 +1727,15 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
 .railbars.is-late .railbars__bar { fill: rgba(235, 87, 87, 0.45); }
 .railbars.is-late .railbars__bar.is-hot { fill: var(--red); }
 .railbars__cursor { stroke: rgba(var(--ink-rgb), 0.2); stroke-dasharray: 2 2; }
+/* The rail's line: 2px, a wash under it fading to nothing, a dot on the day. */
+.railline { --line: rgba(var(--ink-rgb), 0.7); }
+.railline.is-done { --line: var(--accent); }
+.railline.is-late { --line: var(--red); }
+.railline__line { fill: none; stroke: var(--line); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.railline__wash-top { stop-color: var(--line); stop-opacity: 0.22; }
+.railline__wash-foot { stop-color: var(--line); stop-opacity: 0; }
+.railline__dot { fill: var(--line); stroke: var(--page); stroke-width: 2; }
+.railline .railbars__plot svg { overflow: visible; }
 
 /* The pagebar's button that hides and shows it, at the right edge, over the
    rail it works. */

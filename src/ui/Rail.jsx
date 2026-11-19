@@ -11,7 +11,8 @@
  * Narrower, it drops under the page and its sections tile.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { monotonePath } from './charts.jsx'
 
 const cx = (...c) => c.filter(Boolean).join(' ')
 
@@ -114,13 +115,14 @@ const dayLabel = (daysAgo, now) => {
 }
 
 /**
- * A day-by-day column chart sized for the rail: one series, oldest on the
- * left and today on the right, rounded tops on a baseline, and a readout of
- * whichever day the pointer (or a tap) is on. No legend — the section's
- * heading names it.
+ * A day-by-day line chart sized for the rail: one series, oldest on the left
+ * and today on the right, a smooth line with a soft wash under it, a dot on
+ * today (or on whichever day the pointer or a tap is on) and a readout of
+ * that day above. No legend: the section's heading names it.
  */
-export function RailBars({ data, now, tone, height: tall = 64, unit = 'entries', label }) {
+export function RailLine({ data, now, tone, height: tall = 64, unit = 'entries', label }) {
   const ref = useRef(null)
+  const gid = useId().replace(/:/g, '')
   const [w, setW] = useState(0)
   const [hot, setHot] = useState(null)
   useEffect(() => {
@@ -138,21 +140,25 @@ export function RailBars({ data, now, tone, height: tall = 64, unit = 'entries',
   /* Nothing in the window: a baseline and a line saying so, not a tall
      empty box. */
   const height = total ? tall : 10
-  const slot = n ? w / n : 0
-  const gap = slot > 8 ? 2 : 1
-  const bw = Math.max(1, slot - gap)
-  const r = Math.min(2, bw / 2)
+  const inset = 4
+  const x = (k) => (n <= 1 ? w / 2 : inset + (k / (n - 1)) * (w - inset * 2))
+  const y = (v) => 5 + (1 - v / max) * (height - 6)
   const i = hot ?? n - 1
   const shown = n ? values[i] : 0
 
   const pick = (clientX) => {
     const box = ref.current?.getBoundingClientRect()
     if (!box || !n) return
-    setHot(Math.max(0, Math.min(n - 1, Math.floor(((clientX - box.left) / box.width) * n))))
+    const at = ((clientX - box.left - inset) / Math.max(1, box.width - inset * 2)) * (n - 1)
+    setHot(Math.max(0, Math.min(n - 1, Math.round(at))))
   }
 
+  const pts = values.map((v, k) => [x(k), y(v)])
+  const line = total && w ? monotonePath(pts) : ''
+  const area = line ? `${line}L${x(n - 1)},${height}L${x(0)},${height}Z` : ''
+
   return (
-    <div className={cx('railbars', tone && `is-${tone}`)}>
+    <div className={cx('railline', tone && `is-${tone}`)}>
       <div className="railbars__read" aria-live="polite">
         {total ? (
           <>
@@ -175,23 +181,19 @@ export function RailBars({ data, now, tone, height: tall = 64, unit = 'entries',
       >
         {w ? (
           <svg width={w} height={height} aria-hidden="true">
+            <defs>
+              <linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" className="railline__wash-top" />
+                <stop offset="1" className="railline__wash-foot" />
+              </linearGradient>
+            </defs>
             <line className="railbars__base" x1={0} x2={w} y1={height - 0.5} y2={height - 0.5} />
-            {values.map((v, k) => {
-              if (!v) return null
-              const h = Math.max(2, (v / max) * (height - 4))
-              const x = k * slot + gap / 2
-              const y = height - h
-              return (
-                <path
-                  key={k}
-                  className={cx('railbars__bar', k === i && 'is-hot')}
-                  d={`M${x},${height} V${y + r} Q${x},${y} ${x + r},${y} H${x + bw - r} Q${x + bw},${y} ${x + bw},${y + r} V${height} Z`}
-                />
-              )
-            })}
+            {area ? <path className="railline__area" d={area} fill={`url(#${gid})`} /> : null}
+            {line ? <path className="railline__line" d={line} /> : null}
             {hot !== null ? (
-              <line className="railbars__cursor" x1={hot * slot + slot / 2} x2={hot * slot + slot / 2} y1={0} y2={height} />
+              <line className="railbars__cursor" x1={x(hot)} x2={x(hot)} y1={0} y2={height} />
             ) : null}
+            {total && n ? <circle className="railline__dot" cx={x(i)} cy={y(values[i])} r={3.5} /> : null}
           </svg>
         ) : null}
       </div>

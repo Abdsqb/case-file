@@ -16,7 +16,7 @@ import { DotMatrix } from '../ui/charts.jsx'
 import CaseFlow from '../ui/CaseFlow.jsx'
 import { CaseTabsIsland, FolderIsland, SegmentIsland } from '../ui/CaseIslands.jsx'
 import FlowFullscreen from '../ui/FlowFullscreen.jsx'
-import { Rail, RailBars, RailProp, RailRing, RailSection, RailSeg, WithRail } from '../ui/Rail.jsx'
+import { Rail, RailLine, RailProp, RailRing, RailSection, RailSeg, WithRail } from '../ui/Rail.jsx'
 import { caseColor } from '../ui/nav.js'
 import { buildGraph } from '../lib/graph.js'
 import api from '../lib/api.js'
@@ -1489,11 +1489,11 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
       <RailSection title="Activity · 30 days">
         <div className="rail__chart">
           <span className="rail__chartlabel">Logged</span>
-          <RailBars data={series.opened} now={now} label={`Entries logged per day in ${caseName}, last 30 days`} />
+          <RailLine data={series.opened} now={now} label={`Entries logged per day in ${caseName}, last 30 days`} />
         </div>
         <div className="rail__chart">
           <span className="rail__chartlabel">Overdue</span>
-          <RailBars data={series.overdue} now={now} tone="late" label={`Entries overdue each day in ${caseName}, last 30 days`} />
+          <RailLine data={series.overdue} now={now} tone="late" label={`Entries overdue each day in ${caseName}, last 30 days`} />
         </div>
       </RailSection>
 

@@ -8,7 +8,7 @@ import {
   Meter,
 } from '../ui/primitives.jsx'
 import { TimelineDots } from '../ui/charts.jsx'
-import { Rail, RailBars, RailProp, RailRing, RailSection, RailSeg, WithRail } from '../ui/Rail.jsx'
+import { Rail, RailLine, RailProp, RailRing, RailSection, RailSeg, WithRail } from '../ui/Rail.jsx'
 import CaseFlow from '../ui/CaseFlow.jsx'
 import ClerkChat from '../ui/ClerkChat.jsx'
 import useDeck from '../ui/useDeck.js'
@@ -445,15 +445,15 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
       >
         <div className="rail__chart">
           <span className="rail__chartlabel">Logged</span>
-          <RailBars data={series.opened} now={now} label={`Entries logged per day, last ${days} days`} />
+          <RailLine data={series.opened} now={now} label={`Entries logged per day, last ${days} days`} />
         </div>
         <div className="rail__chart">
           <span className="rail__chartlabel">Closed</span>
-          <RailBars data={series.closed} now={now} tone="done" label={`Entries closed per day, last ${days} days`} />
+          <RailLine data={series.closed} now={now} tone="done" label={`Entries closed per day, last ${days} days`} />
         </div>
         <div className="rail__chart">
           <span className="rail__chartlabel">Overdue</span>
-          <RailBars data={series.overdue} now={now} tone="late" label={`Entries overdue each day, last ${days} days`} />
+          <RailLine data={series.overdue} now={now} tone="late" label={`Entries overdue each day, last ${days} days`} />
         </div>
       </RailSection>
     </Rail>

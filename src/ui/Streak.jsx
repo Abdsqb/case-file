@@ -16,7 +16,7 @@ import { STANDBY_EVENT } from './Standby.jsx';
 import { usePhoneWidth } from './island.js';
 import { backdropById, readColours } from './backdrops.js';
 import {
-  KEY_ACCENT,
+  KEY_THEME,
   KEY_BACKDROP,
   KEY_BACKDROP_BLUR,
   KEY_SLAT_SHADE,
@@ -45,7 +45,7 @@ const DENSE = new Set(['reporting', 'settings', 'cases']);
 export default function Streak({ view }) {
   /* Read here so a change re-renders: the accent colours the shards, the
      rest pick the backdrop, its blur and Undertow's shade. */
-  useSetting(KEY_ACCENT, '');
+  useSetting(KEY_THEME, '');
   useSetting(KEY_BACKDROP, '');
   useSetting(KEY_BACKDROP_BLUR, '');
   useSetting(KEY_SLAT_SHADE, '');

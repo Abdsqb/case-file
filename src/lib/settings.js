@@ -22,6 +22,7 @@
  *   casefile.slatShade       'grey' (default) | 'dim' | 'dark' | 'deep' — Undertow's slats
  *   casefile.cardGlass       'on' (default) | 'off' — the glass behind each card
  *   casefile.corners         'on' (default) | 'off' — the bright marks at a card's corners
+ *   casefile.theme           JSON { preset, base, accent, contrast } — the colours (lib/theme.js)
  *
  * Other views read these with the exported `useSetting(key, fallback)` hook.
  * Every read is wrapped in try/catch: a corrupt value, a disabled storage
@@ -30,6 +31,7 @@
 
 import { useCallback, useSyncExternalStore } from 'react'
 import { BACKDROPS, DEFAULT_BACKDROP } from '../ui/backdrops.js'
+import { DEFAULT_THEME, generateTheme, normalizeTheme, THEME_VARS } from './theme.js'
 
 /* ------------------------------------------------------------------ *
  * storage
@@ -48,6 +50,7 @@ export const KEY_RADIUS = 'radius'
 export const KEY_CARD_GLASS = 'cardGlass'
 export const KEY_SLAT_SHADE = 'slatShade'
 export const KEY_CORNERS = 'corners'
+export const KEY_THEME = 'theme'
 
 /* Undertow's slats: the grey they were first drawn in, then three steps
    down toward the dark behind them. The glint is the crest's colour, kept a
@@ -292,12 +295,85 @@ export function readBackdrop() {
   return BACKDROPS.some((b) => b.id === raw) ? raw : DEFAULT_BACKDROP
 }
 
+/* The accent is part of the theme now; the attribute only ever came from
+   the old picker, so it comes off. */
 export function applyAccentPreference() {
   if (typeof document === 'undefined') return
-  const accent = readAccent()
+  document.documentElement.removeAttribute('data-accent')
+}
+
+/* ------------------------------------------------------------------ *
+ * theme — base, accent and contrast, generated into custom properties on
+ * <html> (lib/theme.js). The Linear preset stamps nothing: it is the
+ * stylesheet's own palette.
+ * ------------------------------------------------------------------ */
+
+/* An accent picked with the old swatches, carried into the theme the first
+   time it is read so nobody's colour is lost. */
+const OLD_ACCENTS = { violet: '#A98BFF', white: '#FAFAFA', red: '#FF5A6E', green: '#6EE7A0', turquoise: '#3EE0D0', ember: '#FF9248' }
+
+/** The stored theme, whole: { preset, base, accent, contrast }. */
+export function readTheme() {
+  const raw = readRaw(KEY_THEME)
+  if (raw === null) {
+    const old = OLD_ACCENTS[readRaw(KEY_ACCENT)]
+    if (old) return normalizeTheme({ preset: 'custom', base: DEFAULT_THEME.base, accent: old, contrast: DEFAULT_THEME.contrast })
+    return { ...DEFAULT_THEME }
+  }
+  return normalizeTheme(raw)
+}
+
+/** Store a theme; the default is stored as nothing. Drops the old accent. */
+export function writeTheme(theme) {
+  const t = normalizeTheme(theme)
+  if (readRaw(KEY_ACCENT) !== null) {
+    const s = store()
+    try { s?.removeItem(fullKey(KEY_ACCENT)) } catch { /* ignore */ }
+    memory.delete(fullKey(KEY_ACCENT))
+  }
+  writeSetting(KEY_THEME, t.preset === 'linear' ? null : JSON.stringify(t))
+}
+
+/* What is on <html> now, so a theme that has not changed is not restamped
+   (every stamp restyles the whole document). */
+let stamped = ''
+
+export function applyThemePreference(theme = readTheme()) {
+  if (typeof document === 'undefined') return
+  const t = normalizeTheme(theme)
+  const key = JSON.stringify(t)
+  if (key === stamped) return
+  stamped = key
   const root = document.documentElement
-  if (accent === DEFAULT_ACCENT) root.removeAttribute('data-accent')
-  else root.dataset.accent = accent
+  let light = false
+  let ground = null
+  if (t.preset === 'linear') {
+    for (const name of THEME_VARS) root.style.removeProperty(name)
+  } else {
+    const g = generateTheme(t)
+    light = g.light
+    ground = g.vars['--bg']
+    for (const [name, value] of Object.entries(g.vars)) root.style.setProperty(name, value)
+  }
+  root.dataset.theme = light ? 'light' : 'dark'
+  root.style.colorScheme = light ? 'light' : 'dark'
+  /* The phone's status bar, and the ground index.html paints before any of
+     this has loaded. */
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (meta) meta.setAttribute('content', ground || '#08090A')
+  try {
+    const s = store()
+    if (s) {
+      if (ground) s.setItem(fullKey('themeGround'), ground)
+      else s.removeItem(fullKey('themeGround'))
+    }
+  } catch { /* the pre-paint is a nicety */ }
+}
+
+/** Paint a theme without storing it — the editor's live preview. Passing
+    nothing puts the stored one back. */
+export function previewTheme(theme) {
+  applyThemePreference(theme || readTheme())
 }
 
 /* ------------------------------------------------------------------ *
@@ -353,6 +429,7 @@ export function applyCornersPreference() {
 export function applyPreferences() {
   applyMotionPreference()
   applyAccentPreference()
+  applyThemePreference()
   applyRadiusPreference()
   applyCardGlassPreference()
   applyCornersPreference()

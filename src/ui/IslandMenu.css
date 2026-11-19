@@ -16,7 +16,7 @@
   background: rgba(var(--panel-rgb), 0.66);
   backdrop-filter: var(--panel-blur);
   -webkit-backdrop-filter: var(--panel-blur);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(var(--ink-rgb), 0.05);
   box-shadow: 0 26px 60px -16px rgba(0, 0, 0, 0.78);
   color: var(--text);
   font-family: var(--font);
@@ -92,7 +92,7 @@
 }
 
 .island-menu__item:hover,
-.island-menu__item:focus-visible { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.island-menu__item:focus-visible { color: var(--text); background: rgba(var(--ink-rgb), 0.06); }
 .island-menu__item:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--accent-edge); }
 .island-menu__item.is-current { color: var(--text); }
 .island-menu__item.is-danger { color: var(--hot); }
@@ -149,7 +149,7 @@
   background: rgba(var(--panel-rgb), 0.5);
   backdrop-filter: var(--panel-blur);
   -webkit-backdrop-filter: var(--panel-blur);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(var(--ink-rgb), 0.04);
   box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.6);
   color: var(--text);
   font: inherit;
@@ -175,13 +175,13 @@
   background: rgba(var(--panel-rgb), 0.5);
   backdrop-filter: var(--panel-blur);
   -webkit-backdrop-filter: var(--panel-blur);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(var(--ink-rgb), 0.04);
   box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.6);
   color: var(--text);
   font-size: 13px;
   font-weight: 500;
 }
-.pillselect.island-select:hover { background: rgba(var(--panel-rgb), 0.62); border-color: rgba(255, 255, 255, 0.07); }
+.pillselect.island-select:hover { background: rgba(var(--panel-rgb), 0.62); border-color: rgba(var(--ink-rgb), 0.07); }
 .pillselect.island-select .pillselect__chev { color: var(--fg-dim); }
 .pillselect.island-select:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--accent-edge); }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { KEY_ACCENT, readAccent, useSetting } from '../lib/settings.js';
+import { KEY_THEME, useSetting } from '../lib/settings.js';
 
 /* ============================================================================
    IsoCase — the centrepiece.
@@ -855,9 +855,8 @@ export default function IsoCase({ entries = [], completion = 0, className = '', 
   const [ramp, setRamp] = useState(null);
   const rampRef = useRef(null);
   /* The ground and the ink carry the accent's hue, so a new accent is a new
-     ramp. Subscribed for the re-render; the id is what the effect keys on. */
-  useSetting(KEY_ACCENT, '');
-  const accentId = readAccent();
+     ramp. The stored theme is what the effect keys on. */
+  const accentId = useSetting(KEY_THEME, '');
   useLayoutEffect(() => {
     const next = buildRamp(svgRef.current);
     rampRef.current = next;

@@ -45,6 +45,14 @@
          over the network. Near enough every accent's own --bg to pass. -->
     <meta name="color-scheme" content="dark" />
     <style>html, body { background: #070807; }</style>
+    <!-- A chosen theme's ground, remembered by settings.js, so a light theme
+         does not open on a dark frame. -->
+    <script>
+      try {
+        var g = localStorage.getItem('casefile.themeGround');
+        if (g && /^#[0-9a-f]{6}$/i.test(g)) document.write('<style>html, body { background: ' + g + '; }</style>');
+      } catch (e) {}
+    </script>
   </head>
 
   <body>

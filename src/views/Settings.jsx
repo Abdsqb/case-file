@@ -29,14 +29,12 @@ import {
 import * as clerk from '../lib/clerk.js'
 import { globalStats } from '../lib/metrics.js'
 import { BACKDROPS, DEFAULT_BACKDROP, paintStill, readColours } from '../ui/backdrops.js'
+import ThemeEditor from './ThemeEditor.jsx'
 import {
-  ACCENTS,
   BLURS,
   RADII,
-  DEFAULT_ACCENT,
   DEFAULT_BLUR,
   DEFAULT_RADIUS,
-  KEY_ACCENT,
   KEY_BACKDROP,
   KEY_BACKDROP_BLUR,
   KEY_SLAT_SHADE,
@@ -49,15 +47,15 @@ import {
   KEY_CORNERS,
   KEY_REDUCED_MOTION,
   KEY_WEEK_START,
-  applyAccentPreference,
+  KEY_THEME,
   applyMotionPreference,
   applyPreferences,
   clearSettings,
-  readAccent,
   readBackdrop,
   readBackdropBlur,
   readRadius,
   readSetting,
+  readTheme,
   useSetting,
   writeSetting,
 } from '../lib/settings.js'
@@ -269,45 +267,6 @@ function SettingRow({ title, hint, children }) {
         {hint ? <span className="settings-row__hint">{hint}</span> : null}
       </div>
       {children}
-    </div>
-  )
-}
-
-/**
- * One swatch per accent, as a radio group: arrows move the choice, the way a
- * native radio set does, and each swatch is named for a screen reader since
- * its only visible content is the colour.
- */
-function AccentPicker({ value, onChange }) {
-  const refs = useRef([])
-  const index = Math.max(0, ACCENTS.findIndex((a) => a.id === value))
-
-  const onKeyDown = (e) => {
-    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key]
-    if (!step) return
-    e.preventDefault()
-    const next = (index + step + ACCENTS.length) % ACCENTS.length
-    onChange(ACCENTS[next].id)
-    refs.current[next]?.focus()
-  }
-
-  return (
-    <div className="accent-picker" role="radiogroup" aria-label="Accent colour" onKeyDown={onKeyDown}>
-      {ACCENTS.map((a, i) => (
-        <button
-          key={a.id}
-          ref={(el) => { refs.current[i] = el }}
-          type="button"
-          role="radio"
-          className="accent-swatch"
-          data-accent={a.id}
-          aria-checked={i === index}
-          aria-label={a.label}
-          title={a.label}
-          tabIndex={i === index ? 0 : -1}
-          onClick={() => onChange(a.id)}
-        />
-      ))}
     </div>
   )
 }
@@ -837,7 +796,9 @@ export function Settings({ projects, now }) {
   const reducedMotion = useSetting(KEY_REDUCED_MOTION, false)
   const parallax = useSetting(KEY_PARALLAX, true)
   const weekStart = useSetting(KEY_WEEK_START, 1)
-  const accent = useSetting(KEY_ACCENT, DEFAULT_ACCENT)
+  /* The backdrop tiles paint in the accent, so a new theme repaints them. */
+  useSetting(KEY_THEME, '')
+  const accent = readTheme().accent
   const [signInRequired, setSignInRequired] = useState(false)
   useEffect(() => {
     let alive = true
@@ -894,6 +855,8 @@ export function Settings({ projects, now }) {
       </div>
 
       <div className="bento">
+        <ThemeEditor />
+
         <Card className="span-7">
           <CardHead
             className="card__head"
@@ -902,16 +865,6 @@ export function Settings({ projects, now }) {
           />
           <div className="card__body">
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <SettingRow
-                title="Accent colour"
-                hint="Buttons, the active tab, finished work and the light behind the dashboard."
-              >
-                <AccentPicker
-                  value={accent}
-                  onChange={(next) => writeSetting(KEY_ACCENT, next === DEFAULT_ACCENT ? null : next)}
-                />
-              </SettingRow>
-
               <SettingRow
                 title="Corner radius"
                 hint="How round the corners of cards and windows are. Square is a hard corner; Rounder is the old look."
@@ -1189,7 +1142,7 @@ export function Settings({ projects, now }) {
 
               <SettingRow
                 title="Reset preferences"
-                hint="Forgets every setting above and returns to the defaults: violet accent, motion follows the system, parallax on, week starts Monday."
+                hint="Forgets every setting above and returns to the defaults: the Linear theme, motion follows the system, parallax on, week starts Monday."
               >
                 <ConfirmAction
                   label="Reset"

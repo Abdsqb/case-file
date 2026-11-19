@@ -7,7 +7,7 @@ import './mobile.css';
    component in Linear's language. Take this one line out and the app is in
    its earlier design again (git tag pre-linear-redesign has all of it). */
 import './linear.css';
-import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Menu, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { KEY_RAIL, useSetting, writeSetting } from './lib/settings.js';
 import { listProjects } from './lib/api';
 import Dashboard from './views/Dashboard';
@@ -303,7 +303,7 @@ export default function App() {
               title={railOn ? 'Hide details' : 'Show details'}
               aria-label={railOn ? 'Hide details' : 'Show details'}
             >
-              {railOn ? <PanelLeftClose aria-hidden="true" /> : <PanelLeftOpen aria-hidden="true" />}
+              {railOn ? <PanelRightClose aria-hidden="true" /> : <PanelRightOpen aria-hidden="true" />}
             </button>
           ) : null}
         </header>

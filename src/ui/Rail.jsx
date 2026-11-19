@@ -1,12 +1,12 @@
 /**
  * Rail.jsx — the details panel down the side of a page, as Linear has one on
  * a project: the work in the middle, and everything measured about it in one
- * quiet column at the side (the left, here, by choice) — its properties, its progress, its graphs — all
+ * quiet column at the side (the right, as Linear has it) — its properties, its progress, its graphs — all
  * on show at once rather than paged behind tabs.
  *
  *   <WithRail rail={<Rail label="…">…sections…</Rail>}>…the page…</WithRail>
  *
- * On a wide screen the rail is fixed to the page's left edge and scrolls on
+ * On a wide screen the rail is fixed to the page's right edge and scrolls on
  * its own; the pagebar's panel button hides it (settings: casefile.rail).
  * Narrower, it drops under the page and its sections tile.
  */

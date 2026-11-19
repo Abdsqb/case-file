@@ -1629,8 +1629,8 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
 
 /* --------------------------------------------------------------------------
    16. THE RAIL
-   A details panel in Linear's manner, down the LEFT edge of the page (the
-   user's choice), from under the pagebar to the foot, with a hairline down
+   A details panel in Linear's manner, down the RIGHT edge of the page (the
+   user moved it there from the left), from under the pagebar to the foot, with a hairline down
    its inner side. It scrolls on
    its own; the page beside it scrolls with the window. Narrower than a
    laptop it drops under the page and its sections tile.
@@ -1640,23 +1640,23 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
 
 .withrail {
   display: grid;
-  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--rail-w);
   align-items: start;
   /* Out to the page's edges, so the rail meets the pagebar and the panel's
-     left side; the main column puts the shell's padding back. */
-  margin: -20px 0 -40px calc(-1 * var(--shell-x));
+     right side; the main column puts the shell's padding back. */
+  margin: -20px calc(-1 * var(--shell-x)) -40px 0;
 }
-.withrail__main { grid-column: 2; grid-row: 1; min-width: 0; padding: 20px 0 40px var(--shell-x); }
+.withrail__main { grid-column: 1; grid-row: 1; min-width: 0; padding: 20px var(--shell-x) 40px 0; }
 
 .rail {
   position: sticky;
   top: 46px;
   height: calc(100vh - 64px);
   height: calc(100dvh - 64px);
-  grid-column: 1;
+  grid-column: 2;
   grid-row: 1;
   min-width: 0;
-  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -1770,20 +1770,20 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
 .railbars.is-late .railbars__bar.is-hot { fill: var(--red); }
 .railbars__cursor { stroke: rgba(var(--ink-rgb), 0.2); stroke-dasharray: 2 2; }
 
-/* The pagebar's button that hides and shows it, at the left edge, over the
+/* The pagebar's button that hides and shows it, at the right edge, over the
    rail it works. */
 .pagebar__rail {
   display: inline-grid;
   place-items: center;
   width: 28px;
   height: 28px;
-  margin-left: -6px;
+  margin: 0 -6px 0 auto;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  order: -1;
+  order: 99;
 }
 .pagebar__rail:hover { background: var(--hover); color: var(--text); }
 .pagebar__rail[aria-pressed='true'] { color: var(--text); }

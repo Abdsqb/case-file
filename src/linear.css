@@ -1612,6 +1612,9 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
    is only a breath under anything that floats.
    -------------------------------------------------------------------------- */
 
+:root[data-theme='light'] :is(.flowcard, .dash__card) {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
 :root[data-theme='light'] .flow__node {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06) !important;
 }
@@ -1620,4 +1623,232 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
 }
 :root[data-theme='light'] :is(.notes, .todo, .island-menu, .menu-pop, .datepop, .island-menu__panel, .pillselect__menu) {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 12px 32px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* --------------------------------------------------------------------------
+   16. THE RAIL
+   A details panel in Linear's manner, down the LEFT edge of the page (the
+   user's choice), from under the pagebar to the foot, with a hairline down
+   its inner side. It scrolls on
+   its own; the page beside it scrolls with the window. Narrower than a
+   laptop it drops under the page and its sections tile.
+   -------------------------------------------------------------------------- */
+
+:root { --rail-w: 300px; }
+
+.withrail {
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  align-items: start;
+  /* Out to the page's edges, so the rail meets the pagebar and the panel's
+     left side; the main column puts the shell's padding back. */
+  margin: -20px 0 -40px calc(-1 * var(--shell-x));
+}
+.withrail__main { grid-column: 2; grid-row: 1; min-width: 0; padding: 20px 0 40px var(--shell-x); }
+
+.rail {
+  position: sticky;
+  top: 46px;
+  height: calc(100vh - 64px);
+  height: calc(100dvh - 64px);
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.rail::-webkit-scrollbar { display: none; }
+.rail__inner { padding: 4px 0 24px; }
+
+.rail__sec { padding: 14px 18px 16px; border-bottom: 1px solid var(--line-soft); }
+.rail__sec:last-child { border-bottom: 0; }
+.rail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+  margin-bottom: 8px;
+}
+.rail__title { margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0; color: var(--text-muted); }
+.rail__right { display: flex; align-items: center; gap: 6px; min-width: 0; }
+
+/* A property: name left, value right, a full-width row to hover. */
+.rail__prop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: calc(100% + 16px);
+  min-height: 30px;
+  margin: 0 -8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--text-2);
+}
+.rail__prop.is-action { cursor: pointer; }
+.rail__prop.is-action:hover { background: var(--hover); }
+.rail__key { min-width: 0; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rail__val {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-weight: 500;
+  color: var(--text);
+  font-feature-settings: 'tnum' 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rail__val.is-late { color: var(--red); }
+.rail__val.is-soon { color: var(--amber); }
+.rail__val.is-done { color: var(--accent); }
+.rail__dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--dot, var(--accent)); }
+
+.rail__seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(var(--ink-rgb), 0.03);
+}
+.rail__segitem {
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rail__segitem:hover { color: var(--text); }
+.rail__segitem.is-on { color: var(--text); background: rgba(var(--ink-rgb), 0.09); }
+.rail__segitem:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--accent-edge); }
+
+.rail__progress { display: flex; align-items: center; gap: 12px; }
+.rail__ring { flex: none; }
+.rail__ringtrack { fill: none; stroke: rgba(var(--ink-rgb), 0.1); stroke-width: 4; }
+.rail__ringfill { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; transition: stroke-dasharray 300ms ease; }
+.rail__progtext { display: flex; flex-direction: column; min-width: 0; }
+.rail__big { font-size: 20px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; color: var(--text); font-feature-settings: 'tnum' 1; }
+.rail__sub { font-size: 12px; color: var(--text-muted); }
+.rail__timeline { margin-top: 14px; }
+.rail__note { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+.rail__note + .rail__meta { margin-top: 8px; }
+.rail__meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--text-faint); }
+
+.rail__chart + .rail__chart { margin-top: 16px; }
+.rail__chartlabel { display: block; margin-bottom: 2px; font-size: 12px; font-weight: 500; color: var(--text-2); }
+
+/* The rail's day chart: grey bars, the hovered day in full ink, and the
+   readout above it saying which day that is. */
+.railbars__read { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; font-size: 12px; color: var(--text-muted); }
+.railbars__num { font-size: 13px; font-weight: 600; color: var(--text); font-feature-settings: 'tnum' 1; }
+.railbars__total { margin-left: auto; color: var(--text-faint); font-feature-settings: 'tnum' 1; }
+.railbars__plot { cursor: crosshair; touch-action: pan-y; }
+.railbars__plot svg { display: block; }
+.railbars__base { stroke: var(--border); }
+.railbars__bar { fill: rgba(var(--ink-rgb), 0.26); }
+.railbars__bar.is-hot { fill: var(--text); }
+.railbars.is-done .railbars__bar { fill: rgba(var(--accent-rgb), 0.5); }
+.railbars.is-done .railbars__bar.is-hot { fill: var(--accent); }
+.railbars.is-late .railbars__bar { fill: rgba(235, 87, 87, 0.45); }
+.railbars.is-late .railbars__bar.is-hot { fill: var(--red); }
+.railbars__cursor { stroke: rgba(var(--ink-rgb), 0.2); stroke-dasharray: 2 2; }
+
+/* The pagebar's button that hides and shows it, at the left edge, over the
+   rail it works. */
+.pagebar__rail {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  order: -1;
+}
+.pagebar__rail:hover { background: var(--hover); color: var(--text); }
+.pagebar__rail[aria-pressed='true'] { color: var(--text); }
+.pagebar__rail svg { width: 16px; height: 16px; stroke-width: 1.75; }
+
+:root[data-rail='off'] .withrail { grid-template-columns: minmax(0, 1fr); }
+:root[data-rail='off'] .withrail__main { grid-column: 1; }
+:root[data-rail='off'] .rail { display: none; }
+
+/* Not the width for a side panel: it goes under the page, its sections
+   tiled two or three across, and it is always shown. */
+@media (max-width: 1180px) {
+  .withrail,
+  :root[data-rail='off'] .withrail { display: block; margin: 0; }
+  .withrail__main { padding: 0; }
+  .rail,
+  :root[data-rail='off'] .rail {
+    display: block;
+    position: static;
+    height: auto;
+    margin-top: 20px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card-bg);
+  }
+  .rail__inner {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    padding: 0;
+  }
+  /* Hairlines on each tile's right and foot; the card's own edge clips the
+     outer ones, and an unfilled last row stays plain. */
+  .rail__sec { border-bottom: 0; box-shadow: 1px 0 0 var(--line-soft), 0 1px 0 var(--line-soft); }
+  .pagebar__rail { display: none; }
+}
+
+/* The entries card, measured by itself: beside the rail it can be narrower
+   than a phone, and a row's pills and actions side by side would leave the
+   title no room. Under 640px of card the row does what it does on a phone:
+   the title gets the line, and the rest folds out under it. */
+.casecard { container: entries / inline-size; }
+@container entries (max-width: 640px) {
+  .entry { flex-wrap: wrap; row-gap: 10px; }
+  .entry__main { flex: 1 1 calc(100% - 28px); }
+  .entry > .entry__actions { margin-left: 16px; flex-wrap: wrap; }
+  .entry--case { row-gap: 0; }
+  .entry__more {
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 380ms cubic-bezier(0.22, 1, 0.3, 1);
+  }
+  .entry.is-expanded .entry__more,
+  .entry.is-open .entry__more,
+  .entry:hover .entry__more,
+  .entry:has(:focus-visible) .entry__more { grid-template-rows: 1fr; }
+  .entry__moreinner {
+    min-height: 0;
+    overflow: hidden;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-left: 16px;
+  }
+  .entry__more .entry__cluster { padding-top: 12px; flex-wrap: wrap; }
+  .entry__more .entry__actions { padding-bottom: 1px; flex-wrap: wrap; }
+  .entry__more .entry__cluster,
+  .entry__more .entry__actions { transform: translateY(-6px); }
 }

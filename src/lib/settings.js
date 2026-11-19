@@ -51,6 +51,7 @@ export const KEY_CARD_GLASS = 'cardGlass'
 export const KEY_SLAT_SHADE = 'slatShade'
 export const KEY_CORNERS = 'corners'
 export const KEY_THEME = 'theme'
+export const KEY_RAIL = 'rail'
 
 /* Undertow's slats: the grey they were first drawn in, then three steps
    down toward the dark behind them. The glint is the crest's colour, kept a
@@ -414,6 +415,16 @@ export function applyBackdropAttr() {
   document.documentElement.dataset.backdrop = readBackdrop()
 }
 
+/* The details rail down the right of a page — shown unless it was hidden,
+   <html data-rail="off"> (linear.css). */
+export function applyRailPreference() {
+  if (typeof document === 'undefined') return
+  const on = coerce(readRaw(KEY_RAIL), true)
+  const root = document.documentElement
+  if (on) root.removeAttribute('data-rail')
+  else root.dataset.rail = 'off'
+}
+
 export function applyCornersPreference() {
   if (typeof document === 'undefined') return
   const on = coerce(readRaw(KEY_CORNERS), false)   // off by default: Linear has none
@@ -433,6 +444,7 @@ export function applyPreferences() {
   applyRadiusPreference()
   applyCardGlassPreference()
   applyCornersPreference()
+  applyRailPreference()
   applyBackdropAttr()
 }
 

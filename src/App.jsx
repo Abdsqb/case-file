@@ -7,7 +7,8 @@ import './mobile.css';
    component in Linear's language. Take this one line out and the app is in
    its earlier design again (git tag pre-linear-redesign has all of it). */
 import './linear.css';
-import { Menu } from 'lucide-react';
+import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { KEY_RAIL, useSetting, writeSetting } from './lib/settings.js';
 import { listProjects } from './lib/api';
 import Dashboard from './views/Dashboard';
 import NotesDrawer, { OPEN_NOTES } from './ui/NotesDrawer.jsx';
@@ -92,6 +93,9 @@ const BUILD_MS = 2300;
  * opacity 0 forever. Gating on a class that gets removed means the failure mode
  * is a screen that appears instantly, never a blank one.
  */
+/* The screens with a details rail down their left side (ui/Rail.jsx). */
+const RAIL_VIEWS = new Set(['dashboard', 'cases']);
+
 function BuildStage({ stamp, children }) {
   const [building, setBuilding] = useState(true);
 
@@ -116,6 +120,8 @@ export default function App() {
   /* The sidebar as a drawer, on a phone. */
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+  /* The details rail, on the screens that have one. */
+  const railOn = useSetting(KEY_RAIL, true);
   // The view lives in the hash so sections are linkable and the browser's back
   // button works. Anything unrecognised falls back to the dashboard.
   const [view, setView] = useState(() => readHash());
@@ -282,6 +288,18 @@ export default function App() {
               <span className="pagebar__dot" aria-hidden="true" />
               {standing.text}
             </span>
+          ) : null}
+          {RAIL_VIEWS.has(view) ? (
+            <button
+              type="button"
+              className="pagebar__rail"
+              aria-pressed={railOn}
+              onClick={() => writeSetting(KEY_RAIL, railOn ? false : null)}
+              title={railOn ? 'Hide details' : 'Show details'}
+              aria-label={railOn ? 'Hide details' : 'Show details'}
+            >
+              {railOn ? <PanelLeftClose aria-hidden="true" /> : <PanelLeftOpen aria-hidden="true" />}
+            </button>
           ) : null}
         </header>
 

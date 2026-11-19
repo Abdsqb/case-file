@@ -6,13 +6,9 @@ import {
   EmptyState,
   IconMenu,
   Meter,
-  Metric,
-  Pill,
-  PillSelect,
-  Toggle,
-  Trend,
 } from '../ui/primitives.jsx'
-import { MiniBars, TimelineDots, WeekTable } from '../ui/charts.jsx'
+import { TimelineDots } from '../ui/charts.jsx'
+import { Rail, RailBars, RailProp, RailRing, RailSection, RailSeg, WithRail } from '../ui/Rail.jsx'
 import CaseFlow from '../ui/CaseFlow.jsx'
 import ClerkChat from '../ui/ClerkChat.jsx'
 import useDeck from '../ui/useDeck.js'
@@ -27,10 +23,7 @@ import {
   dayDiff,
   flattenEntries,
   globalStats,
-  rangeOf,
   recommendations,
-  statusTone,
-  weekRows,
 } from '../lib/metrics.js'
 
 /* ============================================================================
@@ -92,18 +85,8 @@ function TypedBrief({ work, news }) {
   )
 }
 
-/* The window offered by the "Change module" pill and the sub-panel menus.
-   Capped at 45 days: the three sub-panels are ~130px wide, and MiniBars holds
-   its bars at a true 2px, so past ~45 buckets the texture fuses into a slab. */
+/* The windows the rail's Activity graphs can show, in days. */
 const WINDOWS = [14, 30, 45]
-
-/* Direction glyph for a daily series. Deliberately the same rule weekRows()
-   uses for its own `dir` — last bucket against the one before it — so the
-   arrows on this screen all mean the same thing. */
-function seriesDir(series) {
-  if (!Array.isArray(series) || series.length < 2) return 'up'
-  return series[series.length - 1] >= series[series.length - 2] ? 'up' : 'down'
-}
 
 /* Open entries whose due date lands `from`..`to` calendar days from now.
    dayDiff comes from metrics.js — this is a filter, not a second clock. */
@@ -121,79 +104,6 @@ const TRACK_WINDOWS = {
   today: { label: 'Due today', from: 0, to: 0 },
   tomorrow: { label: 'Due tomorrow', from: 1, to: 1 },
   week: { label: 'Due this week', from: 0, to: 6 },
-}
-
-/* The Settings view writes `casefile.weekStart` and fires 'casefile:settings',
-   the same channel IsoCase listens on for its motion overrides. Absent means
-   Monday. Reads are guarded so private mode cannot break the dashboard. */
-function readWeekStart() {
-  if (typeof window === 'undefined') return 1
-  try {
-    const v = window.localStorage.getItem('casefile.weekStart')
-    return v === '0' || v === 'sun' || v === 'sunday' ? 0 : 1
-  } catch {
-    return 1
-  }
-}
-
-function useWeekStart() {
-  const [weekStart, setWeekStart] = useState(readWeekStart)
-
-  useEffect(() => {
-    const sync = () => setWeekStart(readWeekStart())
-    window.addEventListener('storage', sync)
-    window.addEventListener('casefile:settings', sync)
-    sync()
-    return () => {
-      window.removeEventListener('storage', sync)
-      window.removeEventListener('casefile:settings', sync)
-    }
-  }, [])
-
-  return weekStart
-}
-
-/* --------------------------------------------------------------------------
-   Total workload — three sub-panels, each its own label + trend + menu above
-   its own MiniBars, with the range below the chart and a unit caption under
-   that. The spacer pins the range to the bottom so all three read on one line
-   however tall the bento row grows.
-   -------------------------------------------------------------------------- */
-
-function WorkloadPanel({ label, series, days, onWindow }) {
-  const range = rangeOf(series)
-
-  return (
-    <div className="subpanel">
-      <div className="subpanel__head">
-        <span className="subpanel__label">
-          {label}
-          <Trend dir={seriesDir(series)} />
-        </span>
-        <IconMenu
-          label={`${label} options`}
-          items={WINDOWS.map((n) => ({
-            key: `w${n}`,
-            label: `Last ${n} days`,
-            disabled: n === days,
-            onClick: () => onWindow(n),
-          }))}
-        />
-      </div>
-
-      <div className="chart">
-        <MiniBars
-          data={series}
-          height={92}
-          label={`${label}, last ${days} days — ${range.label} per day`}
-        />
-      </div>
-
-      <div className="spacer" />
-
-      <Metric value={range.label} sub="entries per day" />
-    </div>
-  )
 }
 
 /* --------------------------------------------------------------------------
@@ -235,13 +145,9 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
     [projects]
   )
 
-  const weekStart = useWeekStart()
-
   const [days, setDays] = useState(30)
   const [urgentOnly, setUrgentOnly] = useState(false)
   const [focus, setFocus] = useState(false)
-  const [reportMode, setReportMode] = useState('week')
-  const [trackKey, setTrackKey] = useState('tomorrow')
   const [rateScope, setRateScope] = useState('all')
 
   /* ---- the clerk -------------------------------------------------------
@@ -282,8 +188,6 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
   const stats = useMemo(() => globalStats(cases, now), [cases, now])
   const entries = useMemo(() => flattenEntries(cases), [cases])
   const series = useMemo(() => dailySeries(cases, now, days), [cases, now, days])
-  const monthSeries = useMemo(() => dailySeries(cases, now, 30), [cases, now])
-  const rows = useMemo(() => weekRows(cases, now, weekStart), [cases, now, weekStart])
   const timeline = useMemo(() => completionTimeline(cases, now), [cases, now])
   const tips = useMemo(() => recommendations(cases, now), [cases, now])
 
@@ -309,14 +213,8 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
     ? tips.filter((t) => t.meta === 'Today recommendation')
     : tips
 
-  const track = TRACK_WINDOWS[trackKey] || TRACK_WINDOWS.tomorrow
-  const trackCount = dueBetween(entries, now, track.from, track.to)
 
   const rateStats = rateScope === 'case' && activeCase ? active : stats
-  const rateLabel =
-    rateScope === 'case' && activeCase
-      ? activeCase.name
-      : `All cases · ${stats.total} logged`
   const ratePct = Math.round(rateStats.completion * 100)
 
   /* the status word next to the structure card's title */
@@ -431,45 +329,6 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
           </div>
         </Card>
       ) },
-    { key: 'workload', label: 'Total workload', tab: 'Workload', node: (
-        <Card className="dash__card" aria-label="Total workload">
-          <CardHead
-            title="Total workload"
-            subtitle={`Last ${days} days`}
-            right={
-              <Pill
-                onClick={() =>
-                  setDays((d) => WINDOWS[(WINDOWS.indexOf(d) + 1) % WINDOWS.length])
-                }
-              >
-                Change module
-              </Pill>
-            }
-          />
-          <div className="card__body">
-            <div className="subpanels subpanels--3 grow">
-              <WorkloadPanel
-                label="Opened"
-                series={series.opened}
-                days={days}
-                onWindow={setDays}
-              />
-              <WorkloadPanel
-                label="Closed"
-                series={series.closed}
-                days={days}
-                onWindow={setDays}
-              />
-              <WorkloadPanel
-                label="Overdue"
-                series={series.overdue}
-                days={days}
-                onWindow={setDays}
-              />
-            </div>
-          </div>
-        </Card>
-      ) },
     { key: 'tips', label: 'Recommendations', tab: 'Tips', node: (
         <Card className="dash__card" aria-label="Recommendations">
           <CardHead
@@ -511,94 +370,7 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
           </div>
         </Card>
       ) },
-    { key: 'tracking', label: 'Tracking', tab: 'Tracking', node: (
-        <Card className="dash__card" aria-label="Tracking">
-          <CardHead
-            title="Tracking"
-            subtitle={track.label}
-            right={
-              <IconMenu
-                label="Tracking window"
-                items={Object.keys(TRACK_WINDOWS).map((key) => ({
-                  key,
-                  label: TRACK_WINDOWS[key].label,
-                  disabled: key === trackKey,
-                  onClick: () => setTrackKey(key),
-                }))}
-              />
-            }
-          />
-          <div className="card__body card__body--center">
-            <Metric
-              value={trackCount}
-              unit="entries"
-              sub={`${stats.open} open in total`}
-            />
-          </div>
-        </Card>
-      ) },
-    { key: 'report', label: 'Detailed report', tab: 'Report', node: (
-        <Card className="dash__card" aria-label="Detailed report">
-          <CardHead
-            title="Detailed report"
-            subtitle="Entries logged per day"
-            right={
-              <PillSelect
-                label="Report range"
-                value={reportMode}
-                onChange={setReportMode}
-                options={[
-                  { value: 'week', label: 'Week' },
-                  { value: 'month', label: 'Month' },
-                ]}
-              />
-            }
-          />
-          <div className="card__body card__body--center">
-            {reportMode === 'week' ? (
-              <WeekTable rows={rows} />
-            ) : (
-              <div className="col col--tight">
-                <div className="chart">
-                  <MiniBars
-                    data={monthSeries.opened}
-                    height={92}
-                    label={`Entries logged per day, last 30 days — ${rangeOf(monthSeries.opened).label}`}
-                  />
-                </div>
-                <div className="row row--between micro">
-                  <span>30 days ago</span>
-                  <span>{rangeOf(monthSeries.opened).label} per day</span>
-                  <span>Today</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </Card>
-      ) },
-    { key: 'rate', label: 'Completion rate', tab: 'Rate', node: (
-        <Card className="dash__card" aria-label="Completion rate">
-          <CardHead
-            title="Completion rate"
-            right={
-              <Pill
-                onClick={() => setRateScope((s) => (s === 'all' ? 'case' : 'all'))}
-                disabled={!activeCase}
-              >
-                Change
-              </Pill>
-            }
-          />
-          <div className="card__body card__body--center">
-            <div className="row row--between row--wrap" style={{ gap: '24px' }}>
-              <Metric value={`${ratePct}%`} sub={rateLabel} />
-              <div className="grow" style={{ minWidth: '200px' }}>
-                <TimelineDots points={timeline} />
-              </div>
-            </div>
-          </div>
-        </Card>
-      ) },
+
   ]
 
   /* One card on screen at a time, and the wheel is how you get to the next
@@ -608,7 +380,87 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
      decks that feel like different apps. */
   const { index, frameRef, stackRef, goTo, onKeyDown } = useDeck(slides.length)
 
+  /* ---- the rail ----------------------------------------------------------
+     Everything measured, at once, down the right — what used to be four of
+     the deck's cards, each a tab away. */
+  const dueRows = Object.entries(TRACK_WINDOWS).map(([key, w]) => ({
+    key,
+    label: w.label.replace(/^Due (\w)/, (_, c) => c.toUpperCase()),
+    n: dueBetween(entries, now, w.from, w.to),
+  }))
+  const caseScoped = rateScope === 'case' && activeCase
+
+  const rail = (
+    <Rail label="Dashboard details">
+      <RailSection
+        title="Progress"
+        right={
+          <RailSeg
+            label="Progress of"
+            value={caseScoped ? 'case' : 'all'}
+            onChange={(v) => setRateScope(v)}
+            options={[
+              { value: 'all', label: 'All' },
+              ...(activeCase ? [{ value: 'case', label: 'This case' }] : []),
+            ]}
+          />
+        }
+      >
+        <div className="rail__progress">
+          <RailRing value={rateStats.completion} />
+          <div className="rail__progtext">
+            <span className="rail__big">{ratePct}%</span>
+            <span className="rail__sub truncate">
+              {rateStats.done} of {rateStats.total} closed{caseScoped ? ` · ${activeCase.name}` : ''}
+            </span>
+          </div>
+        </div>
+        {timeline.length ? <TimelineDots points={timeline} className="rail__timeline" /> : null}
+      </RailSection>
+
+      <RailSection title="Status">
+        <RailProp label="Open">{stats.open}</RailProp>
+        <RailProp label="Overdue" tone={stats.overdue ? 'late' : undefined}>{stats.overdue}</RailProp>
+        <RailProp label="Due soon" tone={stats.dueSoon ? 'soon' : undefined}>{stats.dueSoon}</RailProp>
+        <RailProp label="Closed">{stats.done}</RailProp>
+        <RailProp label="Cases">{cases.length}</RailProp>
+      </RailSection>
+
+      <RailSection title="Due">
+        {dueRows.map((r) => (
+          <RailProp key={r.key} label={r.label}>{r.n}</RailProp>
+        ))}
+      </RailSection>
+
+      <RailSection
+        title="Activity"
+        right={
+          <RailSeg
+            label="Activity window"
+            value={days}
+            onChange={setDays}
+            options={WINDOWS.map((n) => ({ value: n, label: `${n}d` }))}
+          />
+        }
+      >
+        <div className="rail__chart">
+          <span className="rail__chartlabel">Logged</span>
+          <RailBars data={series.opened} now={now} label={`Entries logged per day, last ${days} days`} />
+        </div>
+        <div className="rail__chart">
+          <span className="rail__chartlabel">Closed</span>
+          <RailBars data={series.closed} now={now} tone="done" label={`Entries closed per day, last ${days} days`} />
+        </div>
+        <div className="rail__chart">
+          <span className="rail__chartlabel">Overdue</span>
+          <RailBars data={series.overdue} now={now} tone="late" label={`Entries overdue each day, last ${days} days`} />
+        </div>
+      </RailSection>
+    </Rail>
+  )
+
   return (
+    <WithRail rail={rail}>
     <div className="dash">
       {/* ---- left: who is reading, and what they need to know -------------- */}
       <aside className="dash__brief">
@@ -730,5 +582,6 @@ export default function Dashboard({ projects, now, activeCaseId, onSelectCase, o
         </nav>
       </section>
     </div>
+    </WithRail>
   )
 }

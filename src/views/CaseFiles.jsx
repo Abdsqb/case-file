@@ -8,17 +8,16 @@ import {
   EmptyState,
   Field,
   IconMenu,
-  Metric,
   Meter,
   Pill,
   PillSelect,
-  Trend,
 } from '../ui/primitives.jsx'
-import { DotMatrix, MiniBars } from '../ui/charts.jsx'
+import { DotMatrix } from '../ui/charts.jsx'
 import CaseFlow from '../ui/CaseFlow.jsx'
 import { CaseTabsIsland, FolderIsland, SegmentIsland } from '../ui/CaseIslands.jsx'
 import FlowFullscreen from '../ui/FlowFullscreen.jsx'
-import useDeck from '../ui/useDeck.js'
+import { Rail, RailBars, RailProp, RailRing, RailSection, RailSeg, WithRail } from '../ui/Rail.jsx'
+import { caseColor } from '../ui/nav.js'
 import { buildGraph } from '../lib/graph.js'
 import api from '../lib/api.js'
 import { applyWalk, siblingWalk } from '../lib/reorder.js'
@@ -30,7 +29,6 @@ import {
   dailySeries,
   dayDiff,
   flattenEntries,
-  rangeOf,
   recommendations,
   statusTone,
   urgencyTone,
@@ -909,21 +907,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
   const stats = useMemo(() => caseStats(activeCase, now), [activeCase, now])
   const series = useMemo(() => dailySeries(scope, now, 30), [scope, now])
   const matrixSeries = useMemo(() => dailySeries(scope, now, matrixDays), [scope, now, matrixDays])
-  const openedRange = useMemo(() => rangeOf(series.opened), [series])
   const flat = useMemo(() => flattenEntries(scope), [scope])
-
-  const subDir = useMemo(() => {
-    let recent = 0
-    let prior = 0
-    for (const e of flat) {
-      if (!e.isSub) continue
-      const age = dayDiff(now, e.createdAt)
-      if (!Number.isFinite(age)) continue
-      if (age < 7) recent += 1
-      else if (age < 14) prior += 1
-    }
-    return recent >= prior ? 'up' : 'down'
-  }, [flat, now])
 
   const tip = useMemo(() => {
     const tips = recommendations(scope, now)
@@ -1450,11 +1434,6 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
       ? 'nothing scheduled'
       : `next due ${shortDate(stats.nextDue)}`
 
-  const filterMenu = (target) => [
-    { key: 'only', label: `Show ${target} only`, onClick: () => setFilter(target) },
-    { key: 'all', label: 'Show everything', onClick: () => setFilter('all') },
-  ]
-
   const sortMenu = SORTS.map((s) => ({
     key: s.value,
     label: s.label,
@@ -1462,214 +1441,101 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
     onClick: () => setSort(s.value),
   }))
 
-  /* THE READINGS.
+  /* THE RAIL.
      ======================================================================
-     Seven measurements of the open case, and they used to flank the screen in
-     two columns of small panels. All seven at once is seven things asking to
-     be read and no answer to which one you were meant to read first — and six
-     of them are a number and a word, laid out as though they were charts.
+     Seven measurements of the open case used to take turns in a deck under
+     the drawing, one tab at a time. They sit down the right of the page now,
+     as Linear lays out a project: its properties, its progress and its
+     graphs, all on show at once, and the drawing gets the whole of its
+     column. */
+  const statusWord = stats.overdue
+    ? `${stats.overdue} overdue`
+    : stats.open
+      ? 'In progress'
+      : stats.total
+        ? 'Complete'
+        : 'Empty'
 
-     So they take turns. One at a time, each at its own height, paged with the
-     wheel — the same deck the dashboard runs, from the same hook. What that
-     buys is the room: the entries take the left of the screen and the drawing
-     takes the right, and the measurements sit under the drawing rather than
-     having two columns cut out of both.
+  const rail = activeCase ? (
+    <Rail label={`Details of ${caseName}`}>
+      <RailSection title="Properties">
+        <RailProp label="Case" title={caseName}>
+          <span className="rail__dot" style={{ '--dot': caseColor(activeId) }} aria-hidden="true" />
+          <span className="truncate">{caseName}</span>
+        </RailProp>
+        <RailProp label="Status" tone={stats.overdue ? 'late' : !stats.open && stats.total ? 'done' : undefined}>
+          {statusWord}
+        </RailProp>
+        <RailProp label="Next due">
+          {stats.nextDue === null || stats.nextDue === undefined ? 'None' : shortDate(stats.nextDue)}
+        </RailProp>
+        <RailProp label="Due soon" tone={stats.dueSoon ? 'soon' : undefined}>{stats.dueSoon}</RailProp>
+        <RailProp label="Entries">{stats.total}</RailProp>
+        <RailProp label="Subtasks">{stats.subs}</RailProp>
+      </RailSection>
 
-     The order is the order you would ask them in: how far along, what is open,
-     what is late, what is nested under it, the shape of the last month, the
-     shape of the last few weeks, and last the one that is written rather than
-     counted. */
-  const readings = [
-    { key: 'completion', label: 'Completion', tab: 'Completion', node: (
-        <Card aria-label="Completion">
-          <CardHead
-            className="card__head"
-            title="Completion"
-            subtitle={caseName}
-            right={
-              <IconMenu
-                items={[
-                  { key: 'done', label: 'Show closed only', onClick: () => setFilter('done') },
-                  { key: 'open', label: 'Show open only', onClick: () => setFilter('open') },
-                  { key: 'all', label: 'Show everything', onClick: () => setFilter('all') },
-                ]}
-                label="Completion actions"
-              />
-            }
+      <RailSection title="Progress">
+        <div className="rail__progress">
+          <RailRing value={stats.completion} />
+          <div className="rail__progtext">
+            <span className="rail__big">{pct}%</span>
+            <span className="rail__sub">
+              {stats.done} of {stats.total} closed · {stats.open} open
+            </span>
+          </div>
+        </div>
+      </RailSection>
+
+      <RailSection title="Activity · 30 days">
+        <div className="rail__chart">
+          <span className="rail__chartlabel">Logged</span>
+          <RailBars data={series.opened} now={now} label={`Entries logged per day in ${caseName}, last 30 days`} />
+        </div>
+        <div className="rail__chart">
+          <span className="rail__chartlabel">Overdue</span>
+          <RailBars data={series.overdue} now={now} tone="late" label={`Entries overdue each day in ${caseName}, last 30 days`} />
+        </div>
+      </RailSection>
+
+      <RailSection
+        title="By weekday"
+        right={
+          <RailSeg
+            label="Weeks shown"
+            value={matrixDays}
+            onChange={setMatrixDays}
+            options={MATRIX_OPTIONS.map((o) => ({ value: o.value, label: `${o.value / 7}w` }))}
           />
-          <div className="card__body">
-            {/* The % rides inside the value so it hugs the digits. `unit` is
-                spaced off the number, which is right for a word and wrong
-                for a symbol. */}
-            <Metric
-              value={`${pct}%`}
-              sub={`${stats.done}/${stats.total} entries closed`}
-              tone="sage"
-            />
-            <div className="micro">
-              {stats.open} open · {stats.overdue} late
+        }
+      >
+        <DotMatrix
+          columns={matrixColumns}
+          rows={7}
+          labels={matrixLabels}
+          label={`Entries logged per day over the last ${matrixDays} days`}
+        />
+      </RailSection>
+
+      <RailSection title="Analysis">
+        {tip ? (
+          <>
+            <p className="rail__note">{tip.body}</p>
+            <div className="rail__meta">
+              <span>{tip.meta}</span>
+              {tip.note ? <span>{tip.note}</span> : null}
             </div>
-          </div>
-        </Card>
-      ) },
-
-    { key: 'open', label: 'Open', tab: 'Open', node: (
-        <Card aria-label="Open">
-          <CardHead
-            className="card__head"
-            title="Open"
-            subtitle={caseName}
-            right={
-              <HeadRight>
-                <Trend dir={seriesDir(series.opened)} />
-                <IconMenu items={filterMenu('open')} label="Open entries actions" />
-              </HeadRight>
-            }
-          />
-          <div className="card__body card__body--tight">
-            <Metric value={stats.open} unit="entries" sub={`${stats.total} logged`} />
-          </div>
-        </Card>
-      ) },
-
-    { key: 'overdue', label: 'Overdue', tab: 'Overdue', node: (
-        <Card aria-label="Overdue">
-          <CardHead
-            className="card__head"
-            title="Overdue"
-            subtitle={caseName}
-            right={
-              <HeadRight>
-                <Trend dir={seriesDir(series.overdue)} />
-                <IconMenu items={filterMenu('overdue')} label="Overdue actions" />
-              </HeadRight>
-            }
-          />
-          <div className="card__body card__body--tight">
-            <Metric
-              tone={stats.overdue > 0 ? 'hot' : undefined}
-              value={stats.overdue}
-              unit="entries"
-              sub={`${stats.dueSoon} due soon`}
-            />
-          </div>
-        </Card>
-      ) },
-
-    { key: 'subtasks', label: 'Subtasks', tab: 'Subtasks', node: (
-        <Card aria-label="Subtasks">
-          <CardHead
-            className="card__head"
-            title="Subtasks"
-            subtitle={caseName}
-            right={
-              <HeadRight>
-                <Trend dir={subDir} />
-                <IconMenu
-                  items={[
-                    { key: 'expand', label: 'Expand all subtasks', onClick: () => setCollapsed([]) },
-                    {
-                      key: 'collapse',
-                      label: 'Collapse all subtasks',
-                      onClick: () => setCollapsed(rows.map((r) => r.task.id)),
-                    },
-                  ]}
-                  label="Subtask actions"
-                />
-              </HeadRight>
-            }
-          />
-          <div className="card__body card__body--tight">
-            <Metric value={stats.subs} unit="nested" sub={`under ${rows.length} entries`} />
-          </div>
-        </Card>
-      ) },
-
-    { key: 'logged', label: 'Open entries', tab: 'Entries', node: (
-        <Card aria-label="Open entries">
-          <CardHead
-            className="card__head"
-            title="Open entries"
-            subtitle="Logged per day · 30d"
-            right={<Trend dir={seriesDir(series.opened)} />}
-          />
-          <div className="card__body card__body--tight">
-            <MiniBars
-              data={series.opened}
-              height={72}
-              label={`Entries logged per day over the last 30 days in ${caseName}`}
-            />
-            <Metric
-              value={stats.open}
-              unit="open"
-              sub={`${openedRange.label} logged per day`}
-            />
-          </div>
-        </Card>
-      ) },
-
-    { key: 'matrix', label: 'Entries / week', tab: 'Weekly', node: (
-        <Card aria-label="Entries per week">
-          <CardHead
-            className="card__head"
-            title="Entries / week"
-            subtitle="Logged per day"
-            right={
-              <PillSelect
-                value={matrixDays}
-                options={MATRIX_OPTIONS}
-                onChange={setMatrixDays}
-                label="Matrix window"
-                align="end"
-              />
-            }
-          />
-          <div className="card__body">
-            {/* Ten rows rather than the eight it had in a quarter-width
-                column: the block is as wide as the board above it now, and
-                eight rows across that width is a strip rather than a matrix.
-                DotMatrix places its columns proportionally, so this is the
-                only number that had to change. */}
-            <DotMatrix
-              columns={matrixColumns}
-              rows={10}
-              labels={matrixLabels}
-              label={`Entries logged per day over the last ${matrixDays} days`}
-            />
-          </div>
-        </Card>
-      ) },
-
-    { key: 'analysis', label: 'Analysis', tab: 'Analysis', node: (
-        <Card aria-label="Analysis">
-          <CardHead className="card__head" title="Analysis" subtitle="Read from this case" />
-          <div className="card__body">
-            {tip ? (
-              <div className="tip">
-                <div className="tip__body">{tip.body}</div>
-                <div className="tip__meta">
-                  <span>{tip.meta}</span>
-                  <span className="tip__note">{tip.note}</span>
-                </div>
-                {tip.ref ? <div className="tip__note truncate">{tip.ref}</div> : null}
-              </div>
-            ) : (
-              <EmptyState lead="Nothing to report." hint="Log an entry and the read updates." />
-            )}
-          </div>
-        </Card>
-      ) },
-  ]
-
-  /* A shorter throw than the dashboard's. That deck is a full-height panel and
-     62px of offset is a fraction of it; this frame is a third the height, and
-     the same number would have thrown the card behind clean out of the top. */
-  const reading = useDeck(readings.length, { shift: 34 })
+          </>
+        ) : (
+          <p className="rail__note">Nothing to report yet. Log an entry and the read updates.</p>
+        )}
+      </RailSection>
+    </Rail>
+  ) : null
 
   /* ---- render ------------------------------------------------------ */
 
   return (
-    <>
+    <WithRail rail={rail}>
       {folderForm ? (
         <div className="composer" style={{ margin: '0 0 12px' }}>
           <Field
@@ -2012,7 +1878,7 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
             </Card>
           </div>
 
-          {/* ---------------- right: the drawing, and one reading at a time ---- */}
+          {/* ---------------- right: the drawing ---------------------------- */}
           <div className="span-5 casework__side">
             {/* The board. A card now rather than a bare panel, which is what
                 lets it stand: the turn in section 2 is `.card:has(.flow)`, and
@@ -2077,52 +1943,10 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
                 </span>
               </div>
             </Card>
-
-            {/* The readings, one at a time. Built above; this is only the
-                frame they are paged in. */}
-            <section
-              className="readdeck"
-              ref={reading.frameRef}
-              onKeyDown={reading.onKeyDown}
-              tabIndex={0}
-              aria-roledescription="carousel"
-              aria-label="Readings from this case"
-            >
-              <div className="readdeck__stack" ref={reading.stackRef}>
-                {readings.map((r, i) => (
-                  <div
-                    key={r.key}
-                    className={cx('readdeck__slide', i === reading.index && 'is-on')}
-                    aria-hidden={i === reading.index ? undefined : true}
-                    /* Out of the tab order while it is behind, or the keyboard
-                       would walk into six cards nobody can see. */
-                    inert={i === reading.index ? undefined : true}
-                  >
-                    {r.node}
-                  </div>
-                ))}
-              </div>
-
-              {/* The readings by name, as view tabs, above the one on screen. */}
-              <nav className="readdeck__tabs" aria-label="Choose a reading">
-                {readings.map((r, i) => (
-                  <button
-                    key={r.key}
-                    type="button"
-                    className={cx('readdeck__tab', i === reading.index && 'is-on')}
-                    aria-current={i === reading.index ? 'true' : undefined}
-                    title={r.label}
-                    onClick={() => reading.goTo(i)}
-                  >
-                    {r.tab || r.label}
-                  </button>
-                ))}
-              </nav>
-            </section>
           </div>
         </div>
       )}
-    </>
+    </WithRail>
   )
 }
 

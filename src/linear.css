@@ -284,19 +284,6 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
   padding: 0 8px;
   flex: none;
 }
-.sb__mark {
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  flex: none;
-  border-radius: 6px;
-  background: linear-gradient(135deg, var(--accent), rgba(var(--accent-rgb), 0.55));
-  color: var(--accent-ink);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
 .sb__name { flex: 1 1 auto; font-size: 14px; font-weight: 600; letter-spacing: -0.015em; color: var(--text); }
 .sb__close { display: none; }
 
@@ -403,7 +390,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
 @media (min-width: 641px) and (max-width: 1023px) {
   :root { --sidebar-w: 60px; }
   .sb { padding: 10px 8px 12px; align-items: stretch; }
-  .sb__brand { justify-content: center; padding: 0; }
+  .sb__brand,
   .sb__name,
   .sb__label,
   .sb__kbd,
@@ -991,6 +978,9 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
   justify-content: stretch;
   align-items: start;
   gap: 12px;
+  /* The card sets its own height; the old fixed deck height (68vh under
+     1040px) cut it short and it spilled over the rail below. */
+  height: auto;
 }
 .dash__deck:focus-visible .dash__stack { outline: none; }
 .dash__deck:focus-visible .dash__tabs { box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.4); }

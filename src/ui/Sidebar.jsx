@@ -72,7 +72,6 @@ export default function Sidebar({ current, onGo, onOpenCase, activeCaseId, proje
       <div className={cx('sb-scrim', open && 'is-open')} onClick={onClose} aria-hidden="true" />
       <nav className={cx('sb', open && 'is-open')} aria-label="Main">
         <div className="sb__brand">
-          <span className="sb__mark" aria-hidden="true">C</span>
           <span className="sb__name">Case File</span>
           <button type="button" className="sb__close" onClick={onClose} aria-label="Close menu">
             <X size={16} strokeWidth={1.75} aria-hidden="true" />

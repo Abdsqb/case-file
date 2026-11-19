@@ -17,7 +17,6 @@ import Standby from './ui/Standby.jsx';
 import TodayWindow from './ui/TodayWindow.jsx';
 import CornerWheel from './ui/CornerWheel.jsx';
 import Sidebar from './ui/Sidebar.jsx';
-import PhoneBar from './ui/PhoneBar.jsx';
 import { ICONS, NAV } from './ui/nav.js';
 
 /* The dashboard is in the first bundle; the other five screens are chunks of
@@ -318,7 +317,6 @@ export default function App() {
         </main>
       </div>
 
-      <PhoneBar current={view} onGo={go} />
 
       {/* Outside <main> and outside the keyed BuildStage: the pad belongs to the
           app rather than to whichever screen is showing, so navigating must not

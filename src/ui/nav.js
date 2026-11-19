@@ -41,7 +41,3 @@ export function caseColor(id) {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
   return CASE_COLORS[Math.abs(h) % CASE_COLORS.length];
 }
-
-/* The phone's tab bar: the four screens a thumb wants most. The rest are a
-   hold of the to-do button away (the corner wheel), or in the drawer. */
-export const PHONE_TABS = ['dashboard', 'cases', 'calendar', 'plan'];

@@ -1,12 +1,14 @@
 /**
- * Plan — boards of steps, laid out left to right on a canvas.
+ * Plan — boards of steps, laid out top to bottom on a canvas.
  *
- * Each board is a set of chains. The first is the main line; every other
- * chain hangs off a card (its `from`) and runs on to the right one row
- * below, so a step can fork. Cards snap into place — there is nothing to
- * drag or line up — and the arrows are drawn from where the cards land.
+ * Each board is a set of chains. The first is the main line, running down;
+ * every other chain hangs off a card (its `from`) to that card's left or
+ * right (its `side`, right when unset) and runs down from there, so a step
+ * can fork either way. Cards snap into place — there is nothing to drag or
+ * line up — and the arrows are drawn from where the cards land.
  *
- *   data = { chains: [{ id, from: cardId | null, cards: [{ id, title, body }] }] }
+ *   data = { chains: [{ id, from: cardId | null, side?: 'left' | 'right',
+ *                       cards: [{ id, title, body }] }] }
  *
  * A card is a title and a body written in the same live markdown as the notes
  * pad. The canvas pans (drag the background, or scroll) and zooms (pinch, or
@@ -32,7 +34,7 @@ const blankCard = () => ({ id: uid(), title: '', body: '' })
 
 const CARD_W = 260
 const GAP_X = 72
-const GAP_Y = 44
+const GAP_Y = 52
 const ANCHOR = 27          // px down a card where arrows meet it: its title line
 const SAVE_AFTER_MS = 600
 const MIN_K = 0.3
@@ -50,40 +52,53 @@ const clampK = (k) => Math.min(MAX_K, Math.max(MIN_K, k))
    where every card lands
    -------------------------------------------------------------------------- */
 
-/* Columns and rows: the main line on row 0 from column 0; a branch starts one
-   column right of the card it hangs from, on the first row below that has
-   room for all of it (and its "+" slot). Parents are placed before branches. */
+/* Columns and rows: the main line down column 0 from row 0; a branch starts
+   in the column beside the card it hangs from (left or right), level with it
+   if that column has room for all of it (and its "+" slot) there, or on the
+   first row below that does. Parents are placed before branches; columns to
+   the left of the main line are shifted back to start at 0 at the end. */
 function layoutOf(chains) {
   const cardAt = new Map()
   for (const ch of chains) for (const c of ch.cards) cardAt.set(c.id, ch)
   const pos = new Map()
   const slots = new Map()
-  const rows = []
-  const free = (r, a, b) => { for (let c = a; c <= b; c++) if (rows[r]?.has(c)) return false; return true }
-  const take = (r, a, b) => { rows[r] = rows[r] || new Set(); for (let c = a; c <= b; c++) rows[r].add(c) }
+  const cells = new Map()
+  const free = (col, a, b) => {
+    const s = cells.get(col)
+    if (!s) return true
+    for (let r = a; r <= b; r++) if (s.has(r)) return false
+    return true
+  }
+  const take = (col, a, b) => {
+    if (!cells.has(col)) cells.set(col, new Set())
+    for (let r = a; r <= b; r++) cells.get(col).add(r)
+  }
 
   let pending = [...chains]
   for (let guard = 0; pending.length && guard < 500; guard++) {
     const next = []
     for (const ch of pending) {
-      let start = 0
+      let col = 0
       let minRow = 0
       if (ch.from && cardAt.has(ch.from)) {
         const p = pos.get(ch.from)
         if (!p) { next.push(ch); continue }
-        start = p.col + 1
-        minRow = p.row + 1
+        col = p.col + (ch.side === 'left' ? -1 : 1)
+        minRow = p.row
       }
-      const end = start + ch.cards.length       // the last column is the "+" slot
+      const len = ch.cards.length                 // the row after the last card is the "+" slot
       let r = minRow
-      while (!free(r, start, end)) r++
-      take(r, start, end)
-      ch.cards.forEach((c, i) => pos.set(c.id, { col: start + i, row: r }))
-      slots.set(ch.id, { col: end, row: r })
+      while (!free(col, r, r + len)) r++
+      take(col, r, r + len)
+      ch.cards.forEach((c, i) => pos.set(c.id, { col, row: r + i }))
+      slots.set(ch.id, { col, row: r + len })
     }
     if (next.length === pending.length) break   // a cycle in damaged data: leave the rest out
     pending = next
   }
+  let min = 0
+  for (const p of [...pos.values(), ...slots.values()]) min = Math.min(min, p.col)
+  if (min < 0) for (const p of [...pos.values(), ...slots.values()]) p.col -= min
   let cols = 1
   let nrows = 1
   for (const p of [...pos.values(), ...slots.values()]) {
@@ -396,7 +411,7 @@ export default function Plan() {
             <div className="card__body">
               <EmptyState
                 lead="No boards yet."
-                hint={error || 'A board is a line of steps, left to right, that can fork. Start one and write the first step.'}
+                hint={error || 'A board is a line of steps, top to bottom, that can branch left or right. Start one and write the first step.'}
                 action={form ? null : <Pill onClick={startNew} active>New board</Pill>}
               />
             </div>
@@ -602,9 +617,9 @@ function Board({ board, edit }) {
     })
     setFresh(card.id)
   }
-  const branch = (cardId) => {
+  const branch = (cardId, side = 'right') => {
     const card = blankCard()
-    change((d) => { d.chains.push({ id: uid(), from: cardId, cards: [card] }) })
+    change((d) => { d.chains.push({ id: uid(), from: cardId, side, cards: [card] }) })
     setFresh(card.id)
   }
   const move = (cardId, dir) => change((d) => {
@@ -635,30 +650,39 @@ function Board({ board, edit }) {
   const anchorOf = (b) => b.y + Math.min(ANCHOR, b.h / 2)
   for (const ch of chains) {
     const seq = [...ch.cards.map((c) => c.id), `+${ch.id}`]
+    /* A branch: out of the side of the card it hangs from, along its title
+       line; straight across when the branch sits level with it, otherwise
+       down the gap between the columns and in at the branch's title. */
     if (ch.from) {
       const p = boxes.get(ch.from)
       const q = boxes.get(seq[0])
       if (p && q) {
-        const x0 = p.x + p.w
+        const left = q.x < p.x
+        const sx = left ? -1 : 1
+        const x0 = left ? p.x : p.x + p.w
+        const x1 = left ? q.x + q.w + 4 : q.x - 4
         const y0 = anchorOf(p)
         const y1 = anchorOf(q)
-        const mx = x0 + GAP_X / 2
+        const mx = x0 + (sx * GAP_X) / 2
         const rr = Math.min(10, Math.abs(y1 - y0) / 2)
         links.push({
           key: `${ch.id}-from`,
-          d: `M${x0},${y0} H${mx - rr} Q${mx},${y0} ${mx},${y0 + rr} V${y1 - rr} Q${mx},${y1} ${mx + rr},${y1} H${q.x - 4}`,
+          d: Math.abs(y1 - y0) < 1
+            ? `M${x0},${y0} H${x1}`
+            : `M${x0},${y0} H${mx - sx * rr} Q${mx},${y0} ${mx},${y0 + rr} V${y1 - rr} Q${mx},${y1} ${mx + sx * rr},${y1} H${x1}`,
           faint: !ch.cards.length,
         })
       }
     }
+    /* Down the chain: from the foot of one card to the head of the next. */
     for (let i = 0; i < seq.length - 1; i++) {
       const a = boxes.get(seq[i])
       const b = boxes.get(seq[i + 1])
       if (!a || !b) continue
       const toSlot = i === seq.length - 2
-      const y = anchorOf(a)
-      links.push({ key: `${seq[i]}>${seq[i + 1]}`, d: `M${a.x + a.w},${y} H${b.x - 4}`, faint: toSlot })
-      if (!toSlot) inserts.push({ key: `${ch.id}:${i + 1}`, chainId: ch.id, index: i + 1, x: a.x + a.w + GAP_X / 2, y })
+      const x = a.x + a.w / 2
+      links.push({ key: `${seq[i]}>${seq[i + 1]}`, d: `M${x},${a.y + a.h} V${b.y - 4}`, faint: toSlot })
+      if (!toSlot) inserts.push({ key: `${ch.id}:${i + 1}`, chainId: ch.id, index: i + 1, x, y: (a.y + a.h + b.y) / 2 })
     }
   }
   const gridBox = boxes.get('#grid') || { w: 0, h: 0 }
@@ -714,6 +738,7 @@ function Board({ board, edit }) {
                 place={p}
                 number={numberOf.get(c.id)}
                 branchCard={chIndex > 0}
+                side={ch.side === 'left' ? 'left' : 'right'}
                 first={i === 0}
                 last={i === ch.cards.length - 1}
                 writing={writing === c.id}
@@ -723,7 +748,7 @@ function Board({ board, edit }) {
                 onWrite={() => setWriting(c.id)}
                 onDoneWriting={() => setWriting((w) => (w === c.id ? null : w))}
                 onAddAfter={() => insertAt(ch.id, i + 1)}
-                onBranch={() => branch(c.id)}
+                onBranch={(side) => branch(c.id, side)}
                 onMove={(dir) => move(c.id, dir)}
                 onDelete={() => remove(c)}
                 confirming={doomed === c.id}
@@ -789,7 +814,7 @@ function Board({ board, edit }) {
    -------------------------------------------------------------------------- */
 
 function PlanCard({
-  card, place, number, branchCard, first, last, writing, fresh,
+  card, place, number, branchCard, side, first, last, writing, fresh,
   onTitle, onBody, onWrite, onDoneWriting, onAddAfter, onBranch, onMove, onDelete,
   confirming, onKeep,
 }) {
@@ -807,7 +832,7 @@ function PlanCard({
       style={{ gridColumn: place.col + 1, gridRow: place.row + 1 }}
     >
       <header className="plan-card__head">
-        {number ? <span className="plan-card__n">{number}</span> : <span className="plan-card__n is-branch" aria-hidden="true">↳</span>}
+        {number ? <span className="plan-card__n">{number}</span> : <span className="plan-card__n is-branch" aria-hidden="true">{side === 'left' ? '↲' : '↳'}</span>}
         <input
           className="plan-card__title"
           value={card.title}
@@ -820,10 +845,11 @@ function PlanCard({
         <IconMenu
           label="Card options"
           items={[
-            { key: 'after', label: 'Add a step after', onClick: onAddAfter },
-            { key: 'branch', label: 'Branch from here', onClick: onBranch },
-            { key: 'left', label: 'Move left', disabled: first, onClick: () => onMove(-1) },
-            { key: 'right', label: 'Move right', disabled: last, onClick: () => onMove(1) },
+            { key: 'after', label: 'Add a step below', onClick: onAddAfter },
+            { key: 'branch-right', label: 'Branch to the right', onClick: () => onBranch('right') },
+            { key: 'branch-left', label: 'Branch to the left', onClick: () => onBranch('left') },
+            { key: 'up', label: 'Move up', disabled: first, onClick: () => onMove(-1) },
+            { key: 'down', label: 'Move down', disabled: last, onClick: () => onMove(1) },
             { key: 'delete', label: 'Delete card', danger: true, onClick: onDelete },
           ]}
         />
@@ -846,6 +872,24 @@ function PlanCard({
           <span className="plan-card__hint">Write…</span>
         )}
       </div>
+      <button
+        type="button"
+        className="plan-side is-left"
+        onClick={() => onBranch('left')}
+        aria-label="Branch to the left"
+        title="Branch to the left"
+      >
+        +
+      </button>
+      <button
+        type="button"
+        className="plan-side is-right"
+        onClick={() => onBranch('right')}
+        aria-label="Branch to the right"
+        title="Branch to the right"
+      >
+        +
+      </button>
       {confirming ? (
         <div className="plan-card__confirm" role="alert">
           <span className="micro plan-card__ask">delete step?</span>

@@ -2045,3 +2045,44 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
   .splist__title { flex: 0 1 auto; max-width: none; }
   .splist__by { display: none; }
 }
+
+/* --------------------------------------------------------------------------
+   18. THE PLAN CANVAS, TOP TO BOTTOM
+   Steps run down the board; a branch leaves a card from its left or right
+   edge. Each card carries a "+" on both edges, level with its title, for
+   that: shown on hover (or always, on a touch screen), like the "+"s
+   between steps.
+   -------------------------------------------------------------------------- */
+
+.plan-add { text-align: center; }
+.plan-side {
+  position: absolute;
+  top: 27px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: -10px;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.plan-side.is-left { left: -11px; }
+.plan-side.is-right { right: -11px; }
+.plan-card:hover .plan-side,
+.plan-card:focus-within .plan-side { opacity: 0.75; }
+.plan-side:hover,
+.plan-side:focus-visible { outline: none; opacity: 1; color: var(--accent); border-color: var(--accent-edge); }
+@media (hover: none) {
+  .plan-side { opacity: 0.55; }
+  .plan-insert { opacity: 0.6; }
+}

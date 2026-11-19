@@ -16,7 +16,7 @@
  * Boards are saved whole, a moment after the last change.
  */
 
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Card, EmptyState, Field, IconMenu, Pill } from '../ui/primitives.jsx'
 import { SegmentIsland } from '../ui/CaseIslands.jsx'
@@ -456,8 +456,6 @@ function Board({ board, edit }) {
     } catch { /* fall through */ }
     return { x: PAD, y: PAD, k: 1 }
   })
-  const viewRef = useRef(view)
-  viewRef.current = view
   useEffect(() => {
     const t = setTimeout(() => writeStore(viewKey(board.id), JSON.stringify(view)), 300)
     return () => clearTimeout(t)
@@ -465,13 +463,53 @@ function Board({ board, edit }) {
 
   const portRef = useRef(null)
   const gridRef = useRef(null)
+  const stageRef = useRef(null)
+  const dotsRef = useRef(null)
+
+  /* Moving the view never re-renders the board.
+     ----------------------------------------------------------------------
+     A pan or a pinch is a stream of events, and setting React state on each
+     one re-rendered every card (its markdown included) and re-measured them
+     all, per event: the lag, worst on a phone. So the live view lives in a
+     ref, and each frame writes it straight onto the stage's transform and
+     the dots' layer. While it moves the stage is one composited layer the
+     GPU slides and scales; a moment after it stops, the view is committed
+     to state once (the zoom readout, the saved position) and the layer is
+     let go, so the text is drawn sharp again at the new size. */
+  const viewRef = useRef(view)
+  const paintRaf = useRef(0)
+  const settleT = useRef(0)
+  const paint = useCallback(() => {
+    paintRaf.current = 0
+    const { x, y, k } = viewRef.current
+    if (stageRef.current) stageRef.current.style.transform = `translate(${x}px, ${y}px) scale(${k})`
+    const dots = dotsRef.current
+    if (dots) {
+      const g = 24 * k
+      const mod = (v) => (((v + 60) % g) + g) % g
+      dots.style.backgroundSize = `${g}px ${g}px`
+      dots.style.transform = `translate(${mod(x)}px, ${mod(y)}px)`
+    }
+  }, [])
+  const moveTo = useCallback((next) => {
+    viewRef.current = typeof next === 'function' ? next(viewRef.current) : next
+    if (!paintRaf.current) paintRaf.current = requestAnimationFrame(paint)
+    portRef.current?.classList.add('is-moving')
+    clearTimeout(settleT.current)
+    settleT.current = setTimeout(() => {
+      portRef.current?.classList.remove('is-moving')
+      setView(viewRef.current)
+    }, 160)
+  }, [paint])
+  useLayoutEffect(paint, [paint])
+  useEffect(() => () => { cancelAnimationFrame(paintRaf.current); clearTimeout(settleT.current) }, [])
 
   const zoomAt = useCallback((k, px, py) => {
-    setView((v) => {
+    moveTo((v) => {
       const nk = clampK(k)
       return { k: nk, x: px - (px - v.x) * (nk / v.k), y: py - (py - v.y) * (nk / v.k) }
     })
-  }, [])
+  }, [moveTo])
 
   const zoomBy = (f) => {
     const r = portRef.current.getBoundingClientRect()
@@ -487,8 +525,8 @@ function Board({ board, edit }) {
     const gw = grid.offsetWidth
     const gh = grid.offsetHeight
     const k = clampK(Math.min(1, (pw - PAD * 2) / gw, (ph - PAD * 2) / gh))
-    setView({ k, x: Math.max(PAD, (pw - gw * k) / 2), y: Math.max(PAD, (ph - gh * k) / 2) })
-  }, [])
+    moveTo({ k, x: Math.max(PAD, (pw - gw * k) / 2), y: Math.max(PAD, (ph - gh * k) / 2) })
+  }, [moveTo])
 
   /* Scroll pans; Ctrl or ⌘ with it (a trackpad pinch arrives that way) zooms
      at the pointer. Not passive, so the page itself does not scroll. Inside a
@@ -503,12 +541,12 @@ function Board({ board, edit }) {
       if (e.ctrlKey || e.metaKey) {
         zoomAt(viewRef.current.k * Math.exp(-e.deltaY * 0.0025), e.clientX - r.left, e.clientY - r.top)
       } else {
-        setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }))
+        moveTo((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }))
       }
     }
     port.addEventListener('wheel', onWheel, { passive: false })
     return () => port.removeEventListener('wheel', onWheel)
-  }, [zoomAt])
+  }, [zoomAt, moveTo])
 
   /* Dragging the background pans; two fingers pinch. A card, a button or a
      field keeps its own pointer. */
@@ -539,11 +577,11 @@ function Board({ board, edit }) {
     const g = gesture.current
     if (!g) return
     if (g.kind === 'pan') {
-      setView({ ...g.v, x: g.v.x + e.clientX - g.x0, y: g.v.y + e.clientY - g.y0 })
+      moveTo({ ...g.v, x: g.v.x + e.clientX - g.x0, y: g.v.y + e.clientY - g.y0 })
     } else {
       const [a, b] = [...pointers.current.values()]
       const k = clampK(g.v.k * (Math.hypot(a.x - b.x, a.y - b.y) / g.d0))
-      setView({ k, x: g.mx - (g.mx - g.v.x) * (k / g.v.k), y: g.my - (g.my - g.v.y) * (k / g.v.k) })
+      moveTo({ k, x: g.mx - (g.mx - g.v.x) * (k / g.v.k), y: g.my - (g.my - g.v.y) * (k / g.v.k) })
     }
   }
   const onPointerUp = (e) => {
@@ -588,8 +626,8 @@ function Board({ board, edit }) {
     if (left + dx < PAD) dx = PAD - left
     if (bottom > port.clientHeight - PAD) dy = port.clientHeight - PAD - bottom
     if (top + dy < PAD) dy = PAD - top
-    if (dx || dy) setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }))
-  }, [fresh, boxes])
+    if (dx || dy) moveTo((v) => ({ ...v, x: v.x + dx, y: v.y + dy }))
+  }, [fresh, boxes, moveTo])
   /* A card grows as it is written in; the arrows follow. */
   useEffect(() => {
     const grid = gridRef.current
@@ -697,16 +735,13 @@ function Board({ board, edit }) {
     <div
       ref={portRef}
       className="planboard__port"
-      style={{
-        backgroundSize: `${24 * view.k}px ${24 * view.k}px`,
-        backgroundPosition: `${view.x}px ${view.y}px`,
-      }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <div className="planboard__stage" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
+      <div ref={dotsRef} className="planboard__dots" aria-hidden="true" />
+      <div ref={stageRef} className="planboard__stage">
         <div
           ref={gridRef}
           className="plan-grid"
@@ -813,6 +848,10 @@ function Board({ board, edit }) {
    a card
    -------------------------------------------------------------------------- */
 
+const CardMarkdown = memo(function CardMarkdown({ text }) {
+  return <ChatMarkdown className="chat__text--md plan-card__md" text={text} />
+})
+
 function PlanCard({
   card, place, number, branchCard, side, first, last, writing, fresh,
   onTitle, onBody, onWrite, onDoneWriting, onAddAfter, onBranch, onMove, onDelete,
@@ -867,7 +906,7 @@ function PlanCard({
             <LiveMarkdown className="plan-card__editor" value={card.body} onChange={onBody} onBlur={onDoneWriting} autoFocus />
           </Suspense>
         ) : card.body.trim() ? (
-          <ChatMarkdown className="chat__text--md plan-card__md" text={card.body} />
+          <CardMarkdown text={card.body} />
         ) : (
           <span className="plan-card__hint">Write…</span>
         )}

@@ -2086,3 +2086,19 @@ textarea::placeholder { font-family: var(--font); color: var(--text-faint); }
   .plan-side { opacity: 0.55; }
   .plan-insert { opacity: 0.6; }
 }
+
+/* Moving the canvas: the dots are their own layer, slid by a transform (a
+   pan repaints nothing); the stage is held as one GPU layer only while it
+   moves, then let go so its text redraws sharp at the new zoom. Nothing on
+   the board answers the pointer mid-gesture. */
+.planboard__port { background-image: none; }
+.planboard__dots {
+  position: absolute;
+  inset: -60px;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 1px 1px, rgba(var(--ink-rgb), 0.07) 1px, transparent 0);
+  background-size: 24px 24px;
+  will-change: transform;
+}
+.planboard__port.is-moving .planboard__stage { will-change: transform; }
+.planboard__port.is-moving .plan-grid { pointer-events: none; }

@@ -17,7 +17,7 @@ import CaseFlow from '../ui/CaseFlow.jsx'
 import { CaseTabsIsland, FolderIsland, SegmentIsland } from '../ui/CaseIslands.jsx'
 import FlowFullscreen from '../ui/FlowFullscreen.jsx'
 import { Rail, RailLine, RailProp, RailRing, RailSection, RailSeg, WithRail } from '../ui/Rail.jsx'
-import { caseColor } from '../ui/nav.js'
+import { caseColor, FOLDERS_CHANGED } from '../ui/nav.js'
 import { buildGraph } from '../lib/graph.js'
 import api from '../lib/api.js'
 import { applyWalk, siblingWalk } from '../lib/reorder.js'
@@ -648,7 +648,10 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
   const list = useMemo(() => (Array.isArray(projects) ? projects.filter(Boolean) : []), [projects])
   const loadFolders = useCallback(async () => {
     try {
-      setFolders(await api.listCaseFolders())
+      const list = await api.listCaseFolders()
+      setFolders(list)
+      // The sidebar groups its cases by these folders too: keep it in step.
+      window.dispatchEvent(new CustomEvent(FOLDERS_CHANGED, { detail: list }))
     } catch {
       // A folder list that will not load must not take the whole screen with
       // it — the cases are the point, the grouping is a convenience.

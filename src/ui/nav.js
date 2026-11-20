@@ -41,3 +41,7 @@ export function caseColor(id) {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
   return CASE_COLORS[Math.abs(h) % CASE_COLORS.length];
 }
+
+/* Fired with the case folders whenever Case files (re)loads them, so the
+   sidebar can group its cases the same way. */
+export const FOLDERS_CHANGED = 'casefile:folders';

@@ -2118,3 +2118,7 @@ textarea.plan-card__title {
   overflow-wrap: anywhere;
 }
 textarea.plan-card__title:focus { outline: none; box-shadow: none; }
+
+/* Panning the canvas selects nothing, wherever the pointer sweeps. */
+.planboard__port.is-panning,
+.planboard__port.is-panning * { -webkit-user-select: none; user-select: none; }

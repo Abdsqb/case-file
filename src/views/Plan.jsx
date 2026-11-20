@@ -552,6 +552,12 @@ function Board({ board, edit }) {
   const gesture = useRef(null)
   const onPointerDown = (e) => {
     if (e.target.closest('.plan-card, .plan-add, .plan-insert, .plan-zoom, button, input, textarea')) return
+    /* A drag on the background is a pan, never a text selection: without
+       this the browser selected every card's words as the pointer swept. */
+    e.preventDefault()
+    document.getSelection()?.removeAllRanges()
+    if (portRef.current.contains(document.activeElement)) document.activeElement.blur()
+    portRef.current.classList.add('is-panning')
     portRef.current.setPointerCapture(e.pointerId)
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     const pts = [...pointers.current.values()]
@@ -586,6 +592,7 @@ function Board({ board, edit }) {
     pointers.current.delete(e.pointerId)
     const pts = [...pointers.current.values()]
     gesture.current = pts.length === 1 ? { kind: 'pan', x0: pts[0].x, y0: pts[0].y, v: viewRef.current } : null
+    if (!pts.length) portRef.current?.classList.remove('is-panning')
   }
 
   /* ---- where the cards landed, for the arrows ------------------------- */

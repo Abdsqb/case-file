@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import './styles.css';
 import './motion.css';
@@ -10,6 +10,7 @@ import './linear.css';
 import { Menu, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { KEY_RAIL, useSetting, writeSetting } from './lib/settings.js';
 import { listProjects } from './lib/api';
+import { onRemoteChange, startLive, typingSomewhere } from './lib/live.js';
 import Dashboard from './views/Dashboard';
 import NotesDrawer, { OPEN_NOTES } from './ui/NotesDrawer.jsx';
 import Streak from './ui/Streak.jsx';
@@ -159,20 +160,40 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  const refresh = useCallback(async () => {
+  /* Loads can overlap now (a change from another device lands while this one
+     is saving), so each is numbered and an older answer never replaces a
+     newer one. An answer identical to what is shown is not set at all, so a
+     reload that finds nothing new re-renders nothing. */
+  const loadSeq = useRef({ asked: 0, shown: 0, text: '' });
+  const refresh = useCallback(async ({ quiet = false } = {}) => {
+    const seq = ++loadSeq.current.asked;
     try {
       const data = await listProjects();
-      setProjects(Array.isArray(data) ? data : []);
+      if (seq < loadSeq.current.shown) return;
+      loadSeq.current.shown = seq;
+      const list = Array.isArray(data) ? data : [];
+      const text = JSON.stringify(list);
+      if (text !== loadSeq.current.text) {
+        loadSeq.current.text = text;
+        setProjects(list);
+      }
       setLoadError(null);
     } catch (err) {
       console.error('Failed to load case files', err);
-      setLoadError(err.message || 'could not reach the archive');
+      if (!quiet) setLoadError(err.message || 'could not reach the archive');
     } finally {
       setLoaded(true);
     }
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  /* Changes made on another device: reload the cases, though not under a
+     field being typed in (a rename half-done), which waits for it. */
+  useEffect(() => {
+    startLive();
+    return onRemoteChange(() => refresh({ quiet: true }), typingSomewhere);
+  }, [refresh]);
 
   // Once the browser is idle after the first screen, fetch the rest.
   useEffect(() => {

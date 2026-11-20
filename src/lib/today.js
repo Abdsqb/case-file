@@ -24,6 +24,7 @@
 
 import { useSyncExternalStore } from 'react'
 import { addTodayTask, getToday, saveToday, updateTodayTask } from './api.js'
+import { onRemoteChange } from './live.js'
 
 const listeners = new Set()
 let state = { day: dayKey(), order: [], loose: {}, taskIds: [], offer: null, loaded: false }
@@ -61,9 +62,17 @@ function take(day, res) {
 
 let loading = null
 /** Fetches today's list. Called on first use and whenever the day turns. */
-export function loadToday() {
+/* Writes still on their way. A reload from another device's change waits for
+   them, or it could put back what this device has just changed. */
+let pending = 0
+function track(promise) {
+  pending += 1
+  return promise.finally(() => { pending -= 1 })
+}
+
+export function loadToday(fresh = false) {
   const day = dayKey()
-  if (loading && loading.day === day) return loading.promise
+  if (!fresh && loading && loading.day === day) return loading.promise
   // A new day starts empty on screen too, not with yesterday's list showing.
   if (state.day !== day) set({ day, order: [], loose: {}, offer: null })
   const promise = getToday(day)
@@ -80,7 +89,7 @@ export function loadToday() {
 function write(order, decided = false, extra = {}) {
   const day = state.day
   set({ order, ...extra, ...(decided ? { offer: null } : {}) })
-  return saveToday(day, order, decided).catch((err) => {
+  return track(saveToday(day, order, decided)).catch((err) => {
     console.error('today: could not save', err)
     return loadToday()
   })
@@ -107,7 +116,7 @@ export function addOwnTask(title) {
   const day = state.day
   const text = String(title || '').trim()
   if (!text) return Promise.resolve()
-  return addTodayTask(day, text)
+  return track(addTodayTask(day, text))
     .then((res) => { if (state.day === day) take(day, res) })
     .catch((err) => {
       console.error('today: could not add the task', err)
@@ -120,7 +129,7 @@ export function setOwnTaskDone(id, completed) {
   const t = state.loose[id]
   if (!t) return Promise.resolve()
   set({ loose: { ...state.loose, [id]: { ...t, completed } } })
-  return updateTodayTask(id, { completed }).catch((err) => {
+  return track(updateTodayTask(id, { completed })).catch((err) => {
     console.error('today: could not tick the task', err)
     return loadToday()
   })
@@ -156,6 +165,9 @@ function watchDay() {
   window.addEventListener('focus', check)
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check() })
   setInterval(check, 60000)
+  // Changed on another device: load the list again, once this one's own
+  // writes have landed.
+  onRemoteChange(() => loadToday(true), () => pending > 0)
 }
 
 function subscribe(fn) {

@@ -20,6 +20,7 @@ import { Rail, RailLine, RailProp, RailRing, RailSection, RailSeg, WithRail } fr
 import { caseColor, FOLDERS_CHANGED } from '../ui/nav.js'
 import { buildGraph } from '../lib/graph.js'
 import api from '../lib/api.js'
+import { onRemoteChange } from '../lib/live.js'
 import { applyWalk, siblingWalk } from '../lib/reorder.js'
 import { toggleToday, useToday } from '../lib/today.js'
 import { usingMouse } from '../lib/pointer.js'
@@ -660,6 +661,8 @@ export function CaseFiles({ projects, now, activeCaseId, onSelectCase, onMutate 
   }, [])
 
   useEffect(() => { loadFolders() }, [loadFolders])
+  // A folder made, renamed or emptied on another device.
+  useEffect(() => onRemoteChange(loadFolders), [loadFolders])
 
   const ordered = useMemo(() => orderCases(list), [list])
 

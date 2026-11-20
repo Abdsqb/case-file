@@ -38,6 +38,49 @@ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).cat
 app.use(auth.guard);
 auth.mount(app, wrap);
 
+/* Live between devices.
+   ----------------------------------------------------------------------
+   Every write to the archive moves one number, `rev` in the meta table, and
+   GET /api/rev reads it. Each open copy of the app checks that number every
+   few seconds (src/lib/live.js) and reloads what it shows only when it has
+   moved, so ticking something off on the phone shows on the desktop without
+   a refresh. A number, not a push: Vercel's functions cannot hold a socket
+   open, and one row read every few seconds is nearly free.
+
+   The bump happens before the response is sent, never after it: a hosted
+   function may be frozen the moment its response is out. The new number goes
+   back in an X-Rev header, so the device that made the change knows it has
+   already seen it. Requests that only read (the clerk's filing proposals,
+   its chat and its brief) are not changes and do not move it. */
+const NOT_A_CHANGE = /^\/api\/(clerk\/(file|chat|brief)|headlines)/;
+async function bumpRev() {
+  const row = await get(
+    "INSERT INTO meta (key, value) VALUES ('rev', '1') "
+    + "ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1 RETURNING value",
+  );
+  return row ? String(row.value) : null;
+}
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || NOT_A_CHANGE.test(req.originalUrl)) return next();
+  const end = res.end;
+  let held = false;
+  res.end = function endAfterBump(...args) {
+    if (held || res.statusCode >= 400) return end.apply(this, args);
+    held = true;
+    bumpRev()
+      .then((rev) => { if (rev && !res.headersSent) res.setHeader('X-Rev', rev); })
+      .catch((err) => console.error('rev: could not bump', err))
+      .finally(() => end.apply(this, args));
+    return this;
+  };
+  next();
+});
+app.get('/api/rev', wrap(async (req, res) => {
+  const row = await get("SELECT value FROM meta WHERE key = 'rev'");
+  res.set('Cache-Control', 'no-store');
+  res.json({ rev: row ? String(row.value) : '0' });
+}));
+
 /* taskRowToJson / projectRowToJson / loadProjects now live in archive.js, so
    the clerk reads the archive in exactly the shape the browser does. Two
    definitions of "a case, as JSON" is one more than this app can keep true. */

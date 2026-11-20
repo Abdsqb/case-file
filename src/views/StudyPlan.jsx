@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Card, CardHead, EmptyState, IconMenu, MenuButton, Meter, Metric, Pill, PillSelect, Segmented } from '../ui/primitives.jsx'
 import { clearStudyPlan, getStudyPlan, saveStudyPlan } from '../lib/api.js'
+import { onRemoteChange } from '../lib/live.js'
 import { Rail, RailProp, RailSection, WithRail } from '../ui/Rail.jsx'
 
 function cx(...parts) {
@@ -274,6 +275,10 @@ export default function StudyPlan({ now }) {
 
   const planRef = useRef(plan)
   const timer = useRef(null)
+  const editingRef = useRef(editing)
+  editingRef.current = editing
+  const savingRef = useRef(saving)
+  savingRef.current = saving
 
   useEffect(() => {
     let live = true
@@ -285,7 +290,22 @@ export default function StudyPlan({ now }) {
         setPlan(p)
       })
       .catch(() => { if (live) setPlan(null) })
-    return () => { live = false }
+    /* Changed on another device: shown here too, unless this one is being
+       edited or has a save still to land, which always wins. */
+    const quiet = () => editingRef.current || timer.current || savingRef.current !== 'saved'
+    const off = onRemoteChange(
+      () => getStudyPlan()
+        .then((r) => {
+          if (!live || quiet()) return
+          const p = r?.plan ? normalize(r.plan) : null
+          if (JSON.stringify(p) === JSON.stringify(planRef.current)) return
+          planRef.current = p
+          setPlan(p)
+        })
+        .catch(() => { /* the next change will try again */ }),
+      quiet,
+    )
+    return () => { live = false; off() }
   }, [])
 
   /* Saved a moment after the last change, and at once on the way out. */

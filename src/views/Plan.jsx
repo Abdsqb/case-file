@@ -24,6 +24,7 @@ import { Trash2 } from 'lucide-react'
 import { Card, EmptyState, Field, IconMenu, Pill } from '../ui/primitives.jsx'
 import { SegmentIsland } from '../ui/CaseIslands.jsx'
 import { createBoard, deleteBoard, getBoards, orderBoards, saveBoard } from '../lib/api.js'
+import { onRemoteChange, typingSomewhere } from '../lib/live.js'
 
 function cx(...parts) {
   return parts.filter(Boolean).join(' ')
@@ -201,12 +202,27 @@ export default function Plan() {
   boardsRef.current = boards
   const timers = useRef(new Map())
 
+  const savingRef = useRef(saving)
+  savingRef.current = saving
+
   useEffect(() => {
     let live = true
     getBoards()
       .then((list) => { if (live) setBoards(Array.isArray(list) ? list : []) })
       .catch((err) => { if (live) { setBoards([]); setError(err?.message || 'The boards could not be loaded.') } })
-    return () => { live = false }
+    /* A board changed on another device. Loaded again only when everything
+       here is saved and nothing is being typed: an edit in hand, or one that
+       failed to save, is never written over. */
+    const off = onRemoteChange(
+      () => getBoards()
+        .then((list) => {
+          if (!live || !Array.isArray(list) || timers.current.size || savingRef.current !== 'saved') return
+          if (JSON.stringify(list) !== JSON.stringify(boardsRef.current)) setBoards(list)
+        })
+        .catch(() => { /* the next change will try again */ }),
+      () => timers.current.size > 0 || savingRef.current !== 'saved' || typingSomewhere(),
+    )
+    return () => { live = false; off() }
   }, [])
 
   const active = boards?.find((b) => b.id === activeId) || boards?.[0] || null

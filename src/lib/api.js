@@ -26,6 +26,8 @@
  * Express server that serves the built app, with no configuration.
  */
 
+import { noteRev } from './live.js';
+
 const BASE = '/api';
 
 export class ApiError extends Error {
@@ -64,6 +66,11 @@ async function request(method, path, payload) {
   /* Hosted, a session can run out or be signed out from another device. Any
      401 puts the sign-in screen back up (see ui/SignIn.jsx). */
   if (res.status === 401) signedOut();
+
+  /* A write says which change it was, so this device does not reload for
+     its own change (see live.js). */
+  const rev = res.headers.get('X-Rev');
+  if (rev) noteRev(rev);
 
   if (res.status === 204) return null;
 

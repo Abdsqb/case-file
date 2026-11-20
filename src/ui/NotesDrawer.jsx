@@ -20,6 +20,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react';
 
 import api from '../lib/api.js';
+import { onRemoteChange, typingSomewhere } from '../lib/live.js';
 import { useSheetDrag } from './sheet.js';
 import * as clerk from '../lib/clerk.js';
 import Filing from './Filing.jsx';
@@ -148,6 +149,23 @@ export default function NotesDrawer({ projects = [], now = Date.now(), onFiled }
   }, [flush]);
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  /* The pad changed on another device. Once it has been loaded here, it is
+     loaded again, but only while nothing typed here is unsaved and the
+     caret is not in it; otherwise it waits, and what is typed here wins. */
+  useEffect(() => onRemoteChange(
+    async () => {
+      if (!loaded || timer.current || bodyRef.current !== saved.current) return;
+      try {
+        const res = await api.getNotes();
+        const text = res && typeof res.body === 'string' ? res.body : '';
+        if (timer.current || bodyRef.current !== saved.current || text === saved.current) return;
+        saved.current = text;
+        setBody(text);
+      } catch { /* the next change will try again */ }
+    },
+    () => !!timer.current || bodyRef.current !== saved.current || typingSomewhere(),
+  ), [loaded]);
 
   const close = useCallback(() => { flush(); setOpen(false); }, [flush]);
 

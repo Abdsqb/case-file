@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Folder, X } from 'lucide-react';
 import { caseColor, FOLDERS_CHANGED, ICONS, NAV } from './nav.js';
 import api from '../lib/api.js';
+import { onRemoteChange } from '../lib/live.js';
 import { OPEN_TODAY } from './TodayWindow.jsx';
 import { OPEN_NOTES } from './NotesDrawer.jsx';
 
@@ -75,12 +76,14 @@ export default function Sidebar({ current, onGo, onOpenCase, activeCaseId, proje
   const [folders, setFolders] = useState([]);
   useEffect(() => {
     let live = true;
-    api.listCaseFolders()
+    const load = () => api.listCaseFolders()
       .then((list) => { if (live && Array.isArray(list)) setFolders(list); })
       .catch(() => { /* no folders: the cases show as one list */ });
+    load();
+    const offRemote = onRemoteChange(load);
     const onFolders = (e) => { if (Array.isArray(e.detail)) setFolders(e.detail); };
     window.addEventListener(FOLDERS_CHANGED, onFolders);
-    return () => { live = false; window.removeEventListener(FOLDERS_CHANGED, onFolders); };
+    return () => { live = false; offRemote(); window.removeEventListener(FOLDERS_CHANGED, onFolders); };
   }, []);
 
   const groups = useMemo(() => {

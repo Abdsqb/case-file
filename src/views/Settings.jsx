@@ -44,7 +44,6 @@ import {
   KEY_PARALLAX,
   KEY_RADIUS,
   KEY_CARD_GLASS,
-  KEY_CORNERS,
   KEY_REDUCED_MOTION,
   KEY_WEEK_START,
   KEY_THEME,
@@ -816,7 +815,6 @@ export function Settings({ projects, now }) {
   useSetting(KEY_RADIUS, '')
   const radius = readRadius()
   const cardGlass = useSetting(KEY_CARD_GLASS, true)
-  const corners = useSetting(KEY_CORNERS, false)
 
   const stats = useMemo(() => globalStats(cases, clock), [cases, clock])
   /* Asked once. The answer is a function of .env, which cannot change without
@@ -881,23 +879,12 @@ export function Settings({ projects, now }) {
 
               <SettingRow
                 title="Card backgrounds"
-                hint="The frosted glass behind each card and the to-do window. Off, each is just its contents and its corner marks."
+                hint="The frosted glass behind each card and the to-do window. Off, each is just its contents."
               >
                 <Toggle
                   checked={cardGlass}
                   onChange={(next) => writeSetting(KEY_CARD_GLASS, next ? null : false)}
                   label={<SwitchState name="Card backgrounds" on={cardGlass} />}
-                />
-              </SettingRow>
-
-              <SettingRow
-                title="Corner marks"
-                hint="The bright strokes at the four corners of every card. Off, a card's edge is only its glass."
-              >
-                <Toggle
-                  checked={corners}
-                  onChange={(next) => writeSetting(KEY_CORNERS, next ? null : false)}
-                  label={<SwitchState name="Corner marks" on={corners} />}
                 />
               </SettingRow>
 
